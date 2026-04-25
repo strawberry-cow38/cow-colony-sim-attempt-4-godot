@@ -1,0 +1,18 @@
+; Engine configuration file.
+; Generated for Godot 4.6.2.stable.mono.
+
+config_version=5
+
+[application]
+
+config/name="Cow Colony Sim (Attempt 4)"
+config/features=PackedStringArray("4.6", "C#", "Forward Plus")
+run/main_scene="res://scenes/Bootstrap.tscn"
+
+[dotnet]
+
+project/assembly_name="CowColonySim"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"

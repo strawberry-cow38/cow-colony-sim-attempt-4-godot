@@ -1,3 +1,4 @@
+using CowColonySim.Game.CameraRig;
 using CowColonySim.Game.Terrain;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Logging;
@@ -61,7 +62,7 @@ public partial class Bootstrap : Node3D
     private void AddCamera()
     {
         var halfMap = (256 * SimConstants.GodotUnitsPerTile) * 0.5f;
-        var cam = new Camera3D
+        var cam = new FlyCamera
         {
             Name = "Camera",
             Fov = 60f,

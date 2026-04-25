@@ -12,9 +12,10 @@ public partial class TerrainRenderer : MeshInstance3D
         {
             AlbedoColor = Colors.White,
             AlbedoTexture = GrassTexture.Build(),
-            Roughness = 0.85f,
+            Roughness = 0.95f,
             Metallic = 0.0f,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            DiffuseMode = BaseMaterial3D.DiffuseModeEnum.LambertWrap,
             TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
             Uv1Triplanar = true,
             Uv1Scale = new Vector3(0.5f, 0.5f, 0.5f),

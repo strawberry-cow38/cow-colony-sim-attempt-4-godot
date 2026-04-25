@@ -50,7 +50,8 @@ public partial class Bootstrap : Node3D
             BackgroundMode = Godot.Environment.BGMode.Sky,
             Sky = sky,
             AmbientLightSource = Godot.Environment.AmbientSource.Sky,
-            AmbientLightSkyContribution = 0.7f,
+            AmbientLightSkyContribution = 1.0f,
+            AmbientLightEnergy = 2.0f,
             TonemapMode = Godot.Environment.ToneMapper.Filmic,
             TonemapExposure = 1.0f,
         };
@@ -64,7 +65,7 @@ public partial class Bootstrap : Node3D
         {
             Name = "Sun",
             ShadowEnabled = true,
-            LightEnergy = 1.0f,
+            LightEnergy = 0.8f,
             SkyMode = DirectionalLight3D.SkyModeEnum.LightAndSky,
         };
         sun.Rotation = new Vector3(Mathf.DegToRad(-55f), Mathf.DegToRad(35f), 0f);

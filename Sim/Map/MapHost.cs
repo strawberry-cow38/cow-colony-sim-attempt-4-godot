@@ -1,5 +1,6 @@
 using CowColonySim.Sim.Climate;
 using CowColonySim.Sim.Lighting;
+using CowColonySim.Sim.Terrain;
 using Friflo.Engine.ECS;
 
 namespace CowColonySim.Sim.Map;
@@ -14,6 +15,7 @@ public sealed class MapHost
     public LightingTickSystem LightingTick { get; }
     public ClimateState Climate { get; }
     public ClimateTickSystem ClimateTick { get; }
+    public Heightfield Terrain { get; }
 
     public MapHost(MapSettings settings, EntityStore store)
     {
@@ -25,6 +27,8 @@ public sealed class MapHost
         LightingTick = new LightingTickSystem(settings, Lighting, SkyExposure, ArtificialLight);
         Climate = new ClimateState();
         ClimateTick = new ClimateTickSystem(settings, Climate);
+        Terrain = new Heightfield(settings.Width, settings.Height);
+        HeightfieldGenerator.Generate(Terrain, settings.Seed, GenerationSettings.GentleHills);
         SkyExposure.RebuildAll();
     }
 }

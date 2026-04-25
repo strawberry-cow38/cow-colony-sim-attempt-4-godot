@@ -14,5 +14,8 @@
     <Compile Remove="Tests/**" />
     <None Remove="Tests/**" />
     <EmbeddedResource Remove="Tests/**" />
+    <Compile Remove="Launcher/**" />
+    <None Remove="Launcher/**" />
+    <EmbeddedResource Remove="Launcher/**" />
   </ItemGroup>
 </Project>

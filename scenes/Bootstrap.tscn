@@ -2,5 +2,5 @@
 
 [ext_resource type="Script" path="res://Game/Bootstrap.cs" id="1_boot"]
 
-[node name="Bootstrap" type="Node"]
+[node name="Bootstrap" type="Node3D"]
 script = ExtResource("1_boot")

@@ -97,8 +97,8 @@ public partial class GimbalCamera : Node3D
         }
 
         var dir = Vector2.Zero;
-        if (Input.IsKeyPressed(Key.W)) dir.Y -= 1f;
-        if (Input.IsKeyPressed(Key.S)) dir.Y += 1f;
+        if (Input.IsKeyPressed(Key.W)) dir.Y += 1f;
+        if (Input.IsKeyPressed(Key.S)) dir.Y -= 1f;
         if (Input.IsKeyPressed(Key.A)) dir.X -= 1f;
         if (Input.IsKeyPressed(Key.D)) dir.X += 1f;
 

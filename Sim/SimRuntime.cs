@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using CowColonySim.Sim.Climate;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Systems;
 using CowColonySim.Sim.Time;
@@ -20,6 +21,7 @@ public sealed class SimRuntime : IDisposable
     public SpeedController Speed => _speed;
     public SimSnapshot LatestSnapshot => _latest;
     public bool IsRunning { get; private set; }
+    public ClimateState? Climate { get; set; }
 
     public SimRuntime()
     {
@@ -85,7 +87,8 @@ public sealed class SimRuntime : IDisposable
             }
 
             _scheduler.TickOnce();
-            _latest = SimSnapshot.FromTick(_scheduler.CurrentTick, speed);
+            var climate = Climate?.Current ?? ClimateSnapshot.Empty;
+            _latest = SimSnapshot.FromTick(_scheduler.CurrentTick, speed, climate);
 
             nextTickTicks += ticksPerStep;
 

@@ -1,3 +1,5 @@
+using CowColonySim.Sim.Climate;
+
 namespace CowColonySim.Sim.Map;
 
 public sealed record MapSettings(
@@ -8,6 +10,7 @@ public sealed record MapSettings(
     double Latitude = 45.0,
     double Longitude = 0.0,
     int Seed = 0,
+    Biome Biome = Biome.TemperateForest,
     DayLightWindow DayLight = default)
 {
     public int Depth => MaxZ - MinZ;

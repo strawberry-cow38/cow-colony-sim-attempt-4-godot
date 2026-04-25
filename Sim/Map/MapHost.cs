@@ -1,3 +1,4 @@
+using CowColonySim.Sim.Climate;
 using CowColonySim.Sim.Lighting;
 using Friflo.Engine.ECS;
 
@@ -11,6 +12,8 @@ public sealed class MapHost
     public ArtificialLightSystem ArtificialLight { get; }
     public TileLightingApi Lighting { get; }
     public LightingTickSystem LightingTick { get; }
+    public ClimateState Climate { get; }
+    public ClimateTickSystem ClimateTick { get; }
 
     public MapHost(MapSettings settings, EntityStore store)
     {
@@ -20,6 +23,8 @@ public sealed class MapHost
         ArtificialLight = new ArtificialLightSystem(Grid, store);
         Lighting = new TileLightingApi(Grid);
         LightingTick = new LightingTickSystem(settings, Lighting, SkyExposure, ArtificialLight);
+        Climate = new ClimateState();
+        ClimateTick = new ClimateTickSystem(settings, Climate);
         SkyExposure.RebuildAll();
     }
 }

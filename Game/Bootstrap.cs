@@ -15,6 +15,8 @@ public partial class Bootstrap : Node
         SimLog.Configure();
         _runtime = new SimRuntime();
         _map = new MapHost(new MapSettings(), _runtime.World.Store);
+        _runtime.Climate = _map.Climate;
+        _runtime.Scheduler.Register(_map.ClimateTick);
         _runtime.Scheduler.Register(_map.LightingTick);
         _runtime.Start();
         SimLog.Logger.Information(

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Systems;
+using CowColonySim.Sim.Time;
 using CowColonySim.Sim.World;
 
 namespace CowColonySim.Sim;
@@ -9,12 +10,14 @@ public sealed class SimRuntime : IDisposable
 {
     private readonly Scheduler _scheduler;
     private readonly SimWorld _world;
+    private readonly SpeedController _speed;
     private readonly Thread _thread;
     private readonly CancellationTokenSource _cts = new();
     private volatile SimSnapshot _latest = SimSnapshot.Empty;
 
     public SimWorld World => _world;
     public Scheduler Scheduler => _scheduler;
+    public SpeedController Speed => _speed;
     public SimSnapshot LatestSnapshot => _latest;
     public bool IsRunning { get; private set; }
 
@@ -22,6 +25,7 @@ public sealed class SimRuntime : IDisposable
     {
         _world = new SimWorld();
         _scheduler = new Scheduler();
+        _speed = new SpeedController();
         _thread = new Thread(Loop) { Name = "SimThread", IsBackground = true };
     }
 
@@ -51,10 +55,19 @@ public sealed class SimRuntime : IDisposable
         var token = _cts.Token;
         var sw = Stopwatch.StartNew();
         var nextTickTicks = sw.ElapsedTicks;
-        var ticksPerStep = (long)(Stopwatch.Frequency * SimConstants.FixedDeltaSeconds);
 
         while (!token.IsCancellationRequested)
         {
+            var speed = _speed.Current;
+
+            if (speed == SimSpeed.Paused)
+            {
+                Thread.Sleep(8);
+                nextTickTicks = sw.ElapsedTicks;
+                continue;
+            }
+
+            var ticksPerStep = Stopwatch.Frequency / _speed.TargetTicksPerSecond;
             var now = sw.ElapsedTicks;
             if (now < nextTickTicks)
             {
@@ -71,10 +84,8 @@ public sealed class SimRuntime : IDisposable
                 continue;
             }
 
-            var report = _scheduler.TickOnce();
-            _latest = new SimSnapshot(
-                report.TickNumber,
-                report.TickNumber * SimConstants.FixedDeltaSeconds);
+            _scheduler.TickOnce();
+            _latest = SimSnapshot.FromTick(_scheduler.CurrentTick, speed);
 
             nextTickTicks += ticksPerStep;
 

@@ -13,6 +13,11 @@ run/main_scene="res://scenes/Bootstrap.tscn"
 
 project/assembly_name="CowColonySim"
 
+[display]
+
+window/vsync/vsync_mode=0
+
 [rendering]
 
 renderer/rendering_method="forward_plus"
+anti_aliasing/quality/use_taa=true

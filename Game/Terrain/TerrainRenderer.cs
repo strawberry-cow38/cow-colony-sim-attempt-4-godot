@@ -8,6 +8,10 @@ public partial class TerrainRenderer : MeshInstance3D
     public void Build(Heightfield field)
     {
         Mesh = TerrainMeshBuilder.Build(field);
+        // Terrain receives shadows but does not cast: faceted per-tile normals
+        // alias whole quads into shadow when the depth test fails at grazing,
+        // and the per-tile look is locked, so we let only props cast.
+        CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
         var mat = new StandardMaterial3D
         {
             AlbedoColor = Colors.White,

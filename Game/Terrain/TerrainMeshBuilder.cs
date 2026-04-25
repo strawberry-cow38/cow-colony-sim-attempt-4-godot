@@ -4,52 +4,63 @@ using Godot;
 
 namespace CowColonySim.Game.Terrain;
 
-// Shared-corner heightfield mesh: one vertex per grid corner, area-weighted
-// smoothed normals so each vertex's normal blends adjacent face normals.
-// This gives directional-shadow self-shadowing room to breathe — flat-shaded
-// per-tile normals make whole quads alias into shadow at grazing angles.
+// One quad per tile, unshared corners (4 verts per tile, 2 tris per tile).
+// Each tile gets its own flat normal, which gives crisp per-tile shading
+// instead of a smoothed continuous surface. Winding is clockwise viewed
+// from above so the upward face is the front face.
 public static class TerrainMeshBuilder
 {
     public static ArrayMesh Build(Heightfield field)
     {
-        var vw = field.VertWidth;
-        var vh = field.VertHeight;
-        var tilesX = vw - 1;
-        var tilesY = vh - 1;
+        var tilesX = field.VertWidth - 1;
+        var tilesY = field.VertHeight - 1;
+        var tileCount = tilesX * tilesY;
+        var vertCount = tileCount * 4;
+        var indexCount = tileCount * 6;
+
+        var verts = new Vector3[vertCount];
+        var normals = new Vector3[vertCount];
+        var uvs = new Vector2[vertCount];
+        var indices = new int[indexCount];
 
         var unitsPerTile = SimConstants.GodotUnitsPerTile;
         var unitsPerQuanta = TerrainConstants.VerticalQuantumMetres
                            * (SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile);
 
-        var vertCount = vw * vh;
-        var verts = new Vector3[vertCount];
-        var normals = new Vector3[vertCount];
-        var uvs = new Vector2[vertCount];
-
-        for (var y = 0; y < vh; y++)
-        {
-            for (var x = 0; x < vw; x++)
-            {
-                var i = y * vw + x;
-                verts[i] = new Vector3(
-                    x * unitsPerTile,
-                    field.Get(x, y) * unitsPerQuanta,
-                    y * unitsPerTile);
-                uvs[i] = new Vector2(x, y);
-            }
-        }
-
-        var indices = new int[tilesX * tilesY * 6];
+        var vi = 0;
         var ii = 0;
-
         for (var ty = 0; ty < tilesY; ty++)
         {
             for (var tx = 0; tx < tilesX; tx++)
             {
-                var iTL = ty * vw + tx;
-                var iTR = iTL + 1;
-                var iBL = (ty + 1) * vw + tx;
-                var iBR = iBL + 1;
+                var hTL = field.Get(tx, ty) * unitsPerQuanta;
+                var hTR = field.Get(tx + 1, ty) * unitsPerQuanta;
+                var hBL = field.Get(tx, ty + 1) * unitsPerQuanta;
+                var hBR = field.Get(tx + 1, ty + 1) * unitsPerQuanta;
+
+                var x0 = tx * unitsPerTile;
+                var x1 = (tx + 1) * unitsPerTile;
+                var z0 = ty * unitsPerTile;
+                var z1 = (ty + 1) * unitsPerTile;
+
+                var pTL = new Vector3(x0, hTL, z0);
+                var pTR = new Vector3(x1, hTR, z0);
+                var pBL = new Vector3(x0, hBL, z1);
+                var pBR = new Vector3(x1, hBR, z1);
+
+                var n1 = (pBL - pTL).Cross(pTR - pTL).Normalized();
+                var n2 = (pBR - pTR).Cross(pBL - pTR).Normalized();
+                var n = (n1 + n2).Normalized();
+
+                var iTL = vi;
+                var iTR = vi + 1;
+                var iBL = vi + 2;
+                var iBR = vi + 3;
+
+                verts[iTL] = pTL; normals[iTL] = n; uvs[iTL] = new Vector2(0f, 0f);
+                verts[iTR] = pTR; normals[iTR] = n; uvs[iTR] = new Vector2(1f, 0f);
+                verts[iBL] = pBL; normals[iBL] = n; uvs[iBL] = new Vector2(0f, 1f);
+                verts[iBR] = pBR; normals[iBR] = n; uvs[iBR] = new Vector2(1f, 1f);
 
                 indices[ii++] = iTL;
                 indices[ii++] = iBL;
@@ -58,21 +69,8 @@ public static class TerrainMeshBuilder
                 indices[ii++] = iBL;
                 indices[ii++] = iBR;
 
-                // Unnormalized face normals: |cross| = 2*area, so accumulating
-                // raw crosses gives area-weighted vertex normals for free.
-                var fn1 = (verts[iBL] - verts[iTL]).Cross(verts[iTR] - verts[iTL]);
-                var fn2 = (verts[iBR] - verts[iTR]).Cross(verts[iBL] - verts[iTR]);
-
-                normals[iTL] += fn1;
-                normals[iBL] += fn1 + fn2;
-                normals[iTR] += fn1 + fn2;
-                normals[iBR] += fn2;
+                vi += 4;
             }
-        }
-
-        for (var i = 0; i < vertCount; i++)
-        {
-            normals[i] = normals[i].Normalized();
         }
 
         var arrays = new Godot.Collections.Array();

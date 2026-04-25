@@ -20,6 +20,7 @@ public static class TerrainMeshBuilder
 
         var verts = new Vector3[vertCount];
         var normals = new Vector3[vertCount];
+        var uvs = new Vector2[vertCount];
         var indices = new int[indexCount];
 
         var unitsPerTile = SimConstants.GodotUnitsPerTile;
@@ -56,10 +57,10 @@ public static class TerrainMeshBuilder
                 var iBL = vi + 2;
                 var iBR = vi + 3;
 
-                verts[iTL] = pTL; normals[iTL] = n;
-                verts[iTR] = pTR; normals[iTR] = n;
-                verts[iBL] = pBL; normals[iBL] = n;
-                verts[iBR] = pBR; normals[iBR] = n;
+                verts[iTL] = pTL; normals[iTL] = n; uvs[iTL] = new Vector2(0f, 0f);
+                verts[iTR] = pTR; normals[iTR] = n; uvs[iTR] = new Vector2(1f, 0f);
+                verts[iBL] = pBL; normals[iBL] = n; uvs[iBL] = new Vector2(0f, 1f);
+                verts[iBR] = pBR; normals[iBR] = n; uvs[iBR] = new Vector2(1f, 1f);
 
                 indices[ii++] = iTL;
                 indices[ii++] = iBL;
@@ -76,6 +77,7 @@ public static class TerrainMeshBuilder
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = verts;
         arrays[(int)Mesh.ArrayType.Normal] = normals;
+        arrays[(int)Mesh.ArrayType.TexUV] = uvs;
         arrays[(int)Mesh.ArrayType.Index] = indices;
 
         var mesh = new ArrayMesh();

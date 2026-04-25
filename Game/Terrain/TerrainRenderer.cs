@@ -10,10 +10,12 @@ public partial class TerrainRenderer : MeshInstance3D
         Mesh = TerrainMeshBuilder.Build(field);
         var mat = new StandardMaterial3D
         {
-            AlbedoColor = new Color(0.227f, 0.478f, 0.227f), // grass green
+            AlbedoColor = Colors.White,
+            AlbedoTexture = GrassTexture.Build(),
             Roughness = 0.85f,
             Metallic = 0.0f,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.NearestWithMipmaps,
         };
         MaterialOverride = mat;
     }

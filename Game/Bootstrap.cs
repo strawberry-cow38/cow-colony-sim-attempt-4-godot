@@ -1,5 +1,6 @@
 using CowColonySim.Game.CameraRig;
 using CowColonySim.Game.Terrain;
+using CowColonySim.Game.UI;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Logging;
 using CowColonySim.Sim.Map;
@@ -26,6 +27,7 @@ public partial class Bootstrap : Node3D
         AddMoon();
         AddCamera();
         AddTerrain(_map);
+        AddChild(new FpsLabel { Name = "FpsHud" });
 
         _runtime.Start();
         SimLog.Logger.Information(

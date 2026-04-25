@@ -4,18 +4,19 @@ using Godot;
 
 namespace CowColonySim.Game.Terrain;
 
-// Builds an ArrayMesh from a sim Heightfield. Vertices snap to the tile-corner
-// lattice horizontally and to 0.75m steps vertically. Normals computed from
-// per-vertex height neighbours. One surface, no chunking yet.
+// One quad per tile, unshared corners (4 verts per tile, 2 tris per tile).
+// Each tile gets its own flat normal, which gives crisp per-tile shading
+// instead of a smoothed continuous surface. Winding is clockwise viewed
+// from above so the upward face is the front face.
 public static class TerrainMeshBuilder
 {
     public static ArrayMesh Build(Heightfield field)
     {
-        var w = field.VertWidth;
-        var h = field.VertHeight;
-        var vertCount = w * h;
-        var quadCount = (w - 1) * (h - 1);
-        var indexCount = quadCount * 6;
+        var tilesX = field.VertWidth - 1;
+        var tilesY = field.VertHeight - 1;
+        var tileCount = tilesX * tilesY;
+        var vertCount = tileCount * 4;
+        var indexCount = tileCount * 6;
 
         var verts = new Vector3[vertCount];
         var normals = new Vector3[vertCount];
@@ -25,48 +26,51 @@ public static class TerrainMeshBuilder
         var unitsPerQuanta = TerrainConstants.VerticalQuantumMetres
                            * (SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile);
 
-        for (var vy = 0; vy < h; vy++)
+        var vi = 0;
+        var ii = 0;
+        for (var ty = 0; ty < tilesY; ty++)
         {
-            for (var vx = 0; vx < w; vx++)
+            for (var tx = 0; tx < tilesX; tx++)
             {
-                var idx = vy * w + vx;
-                var heightUnits = field.Get(vx, vy) * unitsPerQuanta;
-                verts[idx] = new Vector3(vx * unitsPerTile, heightUnits, vy * unitsPerTile);
-            }
-        }
+                var hTL = field.Get(tx, ty) * unitsPerQuanta;
+                var hTR = field.Get(tx + 1, ty) * unitsPerQuanta;
+                var hBL = field.Get(tx, ty + 1) * unitsPerQuanta;
+                var hBR = field.Get(tx + 1, ty + 1) * unitsPerQuanta;
 
-        for (var vy = 0; vy < h; vy++)
-        {
-            for (var vx = 0; vx < w; vx++)
-            {
-                var hl = field.Get(Math.Max(vx - 1, 0), vy);
-                var hr = field.Get(Math.Min(vx + 1, w - 1), vy);
-                var hd = field.Get(vx, Math.Max(vy - 1, 0));
-                var hu = field.Get(vx, Math.Min(vy + 1, h - 1));
-                var dx = (hr - hl) * unitsPerQuanta;
-                var dz = (hu - hd) * unitsPerQuanta;
-                var spanX = (vx == 0 || vx == w - 1) ? unitsPerTile : 2f * unitsPerTile;
-                var spanZ = (vy == 0 || vy == h - 1) ? unitsPerTile : 2f * unitsPerTile;
-                var n = new Vector3(-dx / spanX, 1f, -dz / spanZ).Normalized();
-                normals[vy * w + vx] = n;
-            }
-        }
+                var x0 = tx * unitsPerTile;
+                var x1 = (tx + 1) * unitsPerTile;
+                var z0 = ty * unitsPerTile;
+                var z1 = (ty + 1) * unitsPerTile;
 
-        var i = 0;
-        for (var vy = 0; vy < h - 1; vy++)
-        {
-            for (var vx = 0; vx < w - 1; vx++)
-            {
-                var i00 = vy * w + vx;
-                var i10 = i00 + 1;
-                var i01 = i00 + w;
-                var i11 = i01 + 1;
-                indices[i++] = i00;
-                indices[i++] = i01;
-                indices[i++] = i10;
-                indices[i++] = i10;
-                indices[i++] = i01;
-                indices[i++] = i11;
+                var pTL = new Vector3(x0, hTL, z0);
+                var pTR = new Vector3(x1, hTR, z0);
+                var pBL = new Vector3(x0, hBL, z1);
+                var pBR = new Vector3(x1, hBR, z1);
+
+                // Flat per-tile normal: average of the two triangle normals.
+                var n1 = (pBL - pTL).Cross(pTR - pTL).Normalized();
+                var n2 = (pBR - pTR).Cross(pBL - pTR).Normalized();
+                var n = (n1 + n2).Normalized();
+
+                var iTL = vi;
+                var iTR = vi + 1;
+                var iBL = vi + 2;
+                var iBR = vi + 3;
+
+                verts[iTL] = pTL; normals[iTL] = n;
+                verts[iTR] = pTR; normals[iTR] = n;
+                verts[iBL] = pBL; normals[iBL] = n;
+                verts[iBR] = pBR; normals[iBR] = n;
+
+                // Clockwise from above so the +Y face is the front face.
+                indices[ii++] = iTL;
+                indices[ii++] = iBL;
+                indices[ii++] = iTR;
+                indices[ii++] = iTR;
+                indices[ii++] = iBL;
+                indices[ii++] = iBR;
+
+                vi += 4;
             }
         }
 

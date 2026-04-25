@@ -67,6 +67,11 @@ public partial class Bootstrap : Node3D
             ShadowEnabled = true,
             LightEnergy = 0.8f,
             SkyMode = DirectionalLight3D.SkyModeEnum.LightAndSky,
+            ShadowBias = 0.5f,
+            ShadowNormalBias = 2.5f,
+            ShadowBlur = 1.5f,
+            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Orthogonal,
+            DirectionalShadowMaxDistance = 200f,
         };
         sun.Rotation = new Vector3(Mathf.DegToRad(-55f), Mathf.DegToRad(35f), 0f);
         AddChild(sun);

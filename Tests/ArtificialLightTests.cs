@@ -78,6 +78,47 @@ public class ArtificialLightTests
     }
 
     [Fact]
+    public void Roof_blocks_vertical_propagation()
+    {
+        var (grid, store, sys) = MakeFixture();
+        // ceiling at z=2 across the entire light footprint
+        for (var x = 0; x < 16; x++)
+        {
+            for (var y = 0; y < 16; y++)
+            {
+                grid.SetFlag(x, y, 2, TileFlags.HasRoof, true);
+            }
+        }
+        Place(store, 8, 8, 1, intensity: 100, radius: 5);
+        sys.Rebuild();
+
+        var aboveRoof = grid.ArtificialLight[grid.Index(8, 8, 3)];
+        var belowRoof = grid.ArtificialLight[grid.Index(8, 8, 1)];
+        Assert.True(belowRoof > 0, "source level should be lit");
+        Assert.Equal(0, aboveRoof);
+    }
+
+    [Fact]
+    public void Floor_blocks_downward_propagation()
+    {
+        var (grid, store, sys) = MakeFixture();
+        for (var x = 0; x < 16; x++)
+        {
+            for (var y = 0; y < 16; y++)
+            {
+                grid.SetFlag(x, y, 1, TileFlags.HasFloor, true);
+            }
+        }
+        Place(store, 8, 8, 2, intensity: 100, radius: 5);
+        sys.Rebuild();
+
+        var sourceLayer = grid.ArtificialLight[grid.Index(8, 8, 2)];
+        var belowFloor = grid.ArtificialLight[grid.Index(8, 8, 0)];
+        Assert.True(sourceLayer > 0);
+        Assert.Equal(0, belowFloor);
+    }
+
+    [Fact]
     public void Dirty_flag_skips_unnecessary_rebuilds()
     {
         var (_, store, sys) = MakeFixture();

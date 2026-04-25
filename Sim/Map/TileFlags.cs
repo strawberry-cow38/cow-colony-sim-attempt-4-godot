@@ -19,9 +19,15 @@ public static class TileFlagsExtensions
     public const TileFlags HorizontalLightBlockerMask =
         TileFlags.HasWall | TileFlags.IsSolidGround;
 
+    public const TileFlags AnyLightBlockerMask =
+        TileFlags.HasFloor | TileFlags.HasWall | TileFlags.HasRoof | TileFlags.IsSolidGround;
+
     public static bool BlocksVerticalLight(this TileFlags flags) =>
         (flags & VerticalLightBlockerMask) != 0;
 
     public static bool BlocksHorizontalLight(this TileFlags flags) =>
         (flags & HorizontalLightBlockerMask) != 0;
+
+    public static bool BlocksAnyLight(this TileFlags flags) =>
+        (flags & AnyLightBlockerMask) != 0;
 }

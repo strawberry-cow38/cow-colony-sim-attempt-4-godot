@@ -84,7 +84,7 @@ public sealed class ArtificialLightSystem
                 continue;
             }
 
-            if (d > 0 && _grid.Flags[idx].BlocksHorizontalLight())
+            if (d > 0 && _grid.Flags[idx].BlocksAnyLight())
             {
                 continue;
             }

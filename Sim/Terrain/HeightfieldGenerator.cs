@@ -5,10 +5,11 @@ namespace CowColonySim.Sim.Terrain;
 // hash is the same one Sim tests can pin against to get stable output.
 public static class HeightfieldGenerator
 {
-    // BaseFrequency 0.05 → fundamental wavelength ≈ 20 tiles, so a 256-tile
-    // world gets ~12 hill peaks in each direction (visibly hilly, not "one
-    // giant slope"). Amplitude 60 quanta = 45 m, plenty above colonist
-    // scale. SmoothingPasses 3 keeps the silhouettes round.
+    // Test-zone defaults — gentle rolling for the pre-game preview. Heights
+    // are stored in 0.75 m quanta (the Heightfield's native resolution), so
+    // the per-vertex output is automatically snapped to that step. Amplitude
+    // 5 q ⇒ ±3.75 m peak-to-trough, ~10 distinct vertical levels across the
+    // map. BaseFrequency 0.04 ⇒ ~25-tile wavelength = ~10 features per side.
     //
     // Property-init style — `new Settings()` and `new Settings { ... }` both
     // pick up these defaults. (Positional record-struct primary-ctor defaults
@@ -17,15 +18,15 @@ public static class HeightfieldGenerator
     public readonly record struct Settings
     {
         public int Seed { get; init; } = 1337;
-        public float BaseFrequency { get; init; } = 0.05f;
-        public int Octaves { get; init; } = 4;
+        public float BaseFrequency { get; init; } = 0.04f;
+        public int Octaves { get; init; } = 2;
         public float Lacunarity { get; init; } = 2.0f;
         public float Persistence { get; init; } = 0.5f;
-        public short Amplitude { get; init; } = 60;
+        public short Amplitude { get; init; } = 5;
         public float OriginTilesX { get; init; } = 0f;
         public float OriginTilesY { get; init; } = 0f;
         public float TileSpacing { get; init; } = 1f;
-        public int SmoothingPasses { get; init; } = 3;
+        public int SmoothingPasses { get; init; } = 2;
 
         public Settings() { }
     }

@@ -58,7 +58,7 @@ public class HeightfieldGeneratorTests
             if (h < min) min = h;
             if (h > max) max = h;
         }
-        Assert.True(max - min > 20,
+        Assert.True(max - min > 2,
             $"default settings produced flat plane: range {min}..{max}. " +
             $"Probably hit the record-struct parameterless-ctor trap again.");
     }

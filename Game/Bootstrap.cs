@@ -1,3 +1,4 @@
+using CowColonySim.Game.Audio;
 using CowColonySim.Game.Camera;
 using CowColonySim.Game.Colonists;
 using CowColonySim.Game.Debug;
@@ -65,6 +66,7 @@ public partial class Bootstrap : Node3D
         AddDesignations(_runtime, _heightfield);
         AddBlueprintGhosts(_runtime, _heightfield);
         AddTrees(_runtime, _heightfield);
+        AddChopAudio(_runtime, _heightfield);
         AddItems(_runtime, _heightfield);
         AddPathOverlay(_runtime, _heightfield);
         var selection = AddSelectionService(_runtime, _heightfield);
@@ -156,6 +158,13 @@ public partial class Bootstrap : Node3D
         var renderer = new TreesRenderer { Name = "Trees" };
         renderer.Configure(runtime.Publisher, field);
         AddChild(renderer);
+    }
+
+    private void AddChopAudio(SimRuntime runtime, Heightfield field)
+    {
+        var audio = new ChopAudio { Name = "ChopAudio" };
+        audio.Configure(runtime.Publisher, field);
+        AddChild(audio);
     }
 
     private void AddItems(SimRuntime runtime, Heightfield field)

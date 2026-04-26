@@ -5,17 +5,21 @@ namespace CowColonySim.Sim.Terrain;
 // hash is the same one Sim tests can pin against to get stable output.
 public static class HeightfieldGenerator
 {
+    // BaseFrequency 0.05 → fundamental wavelength ≈ 20 tiles, so a 256-tile
+    // world gets ~12 hill peaks in each direction (visibly hilly, not "one
+    // giant slope"). Amplitude 60 quanta = 45 m, plenty above colonist
+    // scale. SmoothingPasses 3 keeps the silhouettes round.
     public readonly record struct Settings(
         int Seed = 1337,
-        float BaseFrequency = 0.008f,
-        int Octaves = 5,
+        float BaseFrequency = 0.05f,
+        int Octaves = 4,
         float Lacunarity = 2.0f,
         float Persistence = 0.5f,
         short Amplitude = 60,
         float OriginTilesX = 0f,
         float OriginTilesY = 0f,
         float TileSpacing = 1f,
-        int SmoothingPasses = 1);
+        int SmoothingPasses = 3);
 
     public static void Generate(Heightfield field, Settings settings)
     {

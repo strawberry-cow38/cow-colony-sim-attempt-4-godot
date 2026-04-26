@@ -80,7 +80,10 @@ public sealed class SimRuntime : IDisposable
                 EntityCount: _world.EntityCount,
                 Colonists: BuildColonistViews(),
                 Spots: BuildSpotViews(),
-                Paths: BuildPathViews()));
+                Paths: BuildPathViews(),
+                Zones: BuildZoneViews(),
+                Designations: BuildDesignationViews(),
+                BlueprintGhosts: BuildBlueprintGhostViews()));
 
             nextTick += stepTicks;
             var now = Stopwatch.GetTimestamp();
@@ -155,6 +158,51 @@ public sealed class SimRuntime : IDisposable
             ref var s = ref entity.GetComponent<NeedSpot>();
             ref var p = ref entity.GetComponent<TilePosition>();
             views[i++] = new SpotView(s.Kind, p.TileX, p.TileY);
+        }
+        return views;
+    }
+
+    private ZoneView[] BuildZoneViews()
+    {
+        var query = _world.Store.Query<Zone>();
+        var views = new ZoneView[query.Count];
+        var i = 0;
+        foreach (var entity in query.Entities)
+        {
+            ref var z = ref entity.GetComponent<Zone>();
+            views[i++] = new ZoneView(
+                z.ZoneId, z.Type,
+                z.Rect.MinX, z.Rect.MinY, z.Rect.MaxX, z.Rect.MaxY,
+                z.Name);
+        }
+        return views;
+    }
+
+    private DesignationView[] BuildDesignationViews()
+    {
+        var query = _world.Store.Query<Designation, TilePosition>();
+        var views = new DesignationView[query.Count];
+        var i = 0;
+        foreach (var entity in query.Entities)
+        {
+            ref var d = ref entity.GetComponent<Designation>();
+            ref var p = ref entity.GetComponent<TilePosition>();
+            views[i++] = new DesignationView(entity.Id, d.Kind, p.TileX, p.TileY);
+        }
+        return views;
+    }
+
+    private BlueprintGhostView[] BuildBlueprintGhostViews()
+    {
+        var query = _world.Store.Query<BlueprintGhost>();
+        var views = new BlueprintGhostView[query.Count];
+        var i = 0;
+        foreach (var entity in query.Entities)
+        {
+            ref var g = ref entity.GetComponent<BlueprintGhost>();
+            views[i++] = new BlueprintGhostView(
+                entity.Id, g.DefId, g.OriginTileX, g.OriginTileY,
+                g.Rotation, g.BuildProgress);
         }
         return views;
     }

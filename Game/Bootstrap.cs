@@ -7,11 +7,13 @@ using CowColonySim.Game.Terrain;
 using CowColonySim.Game.Time;
 using CowColonySim.Game.UI;
 using CowColonySim.Sim;
+using CowColonySim.Sim.Designations;
 using CowColonySim.Sim.Logging;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.Systems;
 using CowColonySim.Sim.Terrain;
 using CowColonySim.Sim.World.Components;
+using CowColonySim.Sim.Zones;
 using Godot;
 
 namespace CowColonySim.Game;
@@ -43,6 +45,7 @@ public partial class Bootstrap : Node3D
         _runtime.Scheduler.Register(new WanderSystem(_runtime.World, planner, grid));
         SpawnColonists(_runtime);
         SpawnNeedSpots(_runtime);
+        SpawnDummyFrameworkObjects(_runtime);
         _runtime.Start();
 
         var env = AddEnvironment();
@@ -55,6 +58,9 @@ public partial class Bootstrap : Node3D
         AddVertexOverlay(_heightfield);
         AddColonists(_runtime, _heightfield);
         AddSpots(_runtime, _heightfield);
+        AddZones(_runtime, _heightfield);
+        AddDesignations(_runtime, _heightfield);
+        AddBlueprintGhosts(_runtime, _heightfield);
         AddPathOverlay(_runtime, _heightfield);
         var selection = AddSelectionService(_runtime, _heightfield);
         AddSelectionRing(selection, _runtime, _heightfield);
@@ -84,6 +90,31 @@ public partial class Bootstrap : Node3D
         runtime.World.SpawnNeedSpot(NeedKind.Hunger, center - 6, center);
         runtime.World.SpawnNeedSpot(NeedKind.Thirst, center + 6, center);
         runtime.World.SpawnNeedSpot(NeedKind.Energy, center, center + 6);
+    }
+
+    // One of each framework type so the renderers + snapshots have something
+    // visible to bind to before tools/UI land.
+    private static void SpawnDummyFrameworkObjects(SimRuntime runtime)
+    {
+        var center = PreviewTileCount / 2;
+
+        runtime.World.SpawnZone(
+            zoneId: 1, ZoneType.Stockpile,
+            new TileRect(center - 14, center - 4, center - 10, center),
+            "Dummy Stockpile");
+        runtime.World.SpawnZone(
+            zoneId: 2, ZoneType.Farm,
+            new TileRect(center + 10, center - 4, center + 14, center),
+            "Dummy Farm");
+
+        runtime.World.SpawnDesignation(center - 8, center + 8, DesignationKind.ChopTree);
+        runtime.World.SpawnDesignation(center - 6, center + 8, DesignationKind.Mine);
+        runtime.World.SpawnDesignation(center - 4, center + 8, DesignationKind.Harvest);
+
+        runtime.World.SpawnBlueprintGhost("structure.wall", center - 2, center - 10);
+        runtime.World.SpawnBlueprintGhost("structure.door", center, center - 10);
+        runtime.World.SpawnBlueprintGhost("workstation.crafting_table", center + 2, center - 10);
+        runtime.World.SpawnBlueprintGhost("utility.ac_unit", center + 5, center - 10);
     }
 
     // Sky-driven ambient so faceted-terrain backsides aren't pitch-black.
@@ -219,6 +250,27 @@ public partial class Bootstrap : Node3D
         var overlay = new PathOverlay { Name = "PathOverlay" };
         overlay.Configure(runtime.Publisher, field);
         AddChild(overlay);
+    }
+
+    private void AddZones(SimRuntime runtime, Heightfield field)
+    {
+        var renderer = new ZonesRenderer { Name = "Zones" };
+        renderer.Configure(runtime.Publisher, field);
+        AddChild(renderer);
+    }
+
+    private void AddDesignations(SimRuntime runtime, Heightfield field)
+    {
+        var renderer = new DesignationsRenderer { Name = "Designations" };
+        renderer.Configure(runtime.Publisher, field);
+        AddChild(renderer);
+    }
+
+    private void AddBlueprintGhosts(SimRuntime runtime, Heightfield field)
+    {
+        var renderer = new BlueprintGhostsRenderer { Name = "BlueprintGhosts" };
+        renderer.Configure(runtime.Publisher, field);
+        AddChild(renderer);
     }
 
     private SelectionService AddSelectionService(SimRuntime runtime, Heightfield field)

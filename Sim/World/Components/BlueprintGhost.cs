@@ -8,9 +8,11 @@ namespace CowColonySim.Sim.World.Components;
 // progress hits 1 a system swaps this for the real built entity.
 public struct BlueprintGhost : IComponent
 {
-    public string DefId;
+    public string DefId = string.Empty;
     public int OriginTileX;
     public int OriginTileY;
     public int Rotation;
     public float BuildProgress;
+
+    public BlueprintGhost() { }
 }

@@ -12,5 +12,7 @@ public struct Zone : IComponent
     public int ZoneId;
     public ZoneType Type;
     public TileRect Rect;
-    public string Name;
+    public string Name = string.Empty;
+
+    public Zone() { }
 }

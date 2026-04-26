@@ -16,7 +16,7 @@ public class SnapshotPublisherTests
     public void Publish_replaces_current()
     {
         var pub = new SnapshotPublisher();
-        var snap = new SimSnapshot(5, 5.0 / 60.0, 0, Array.Empty<ColonistView>(), Array.Empty<SpotView>(), Array.Empty<PathView>());
+        var snap = new SimSnapshot(5, 5.0 / 60.0, 0, Array.Empty<ColonistView>(), Array.Empty<SpotView>(), Array.Empty<PathView>(), Array.Empty<ZoneView>(), Array.Empty<DesignationView>(), Array.Empty<BlueprintGhostView>());
         pub.Publish(snap);
         Assert.Same(snap, pub.Current);
     }

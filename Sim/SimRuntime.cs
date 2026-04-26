@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using CowColonySim.Sim.Commands;
+using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Systems;
 using CowColonySim.Sim.Time;
@@ -58,7 +59,8 @@ public sealed class SimRuntime : IDisposable
                 ElapsedSeconds: GameClock.SecondsAt(current),
                 EntityCount: _world.EntityCount,
                 Colonists: BuildColonistViews(),
-                Spots: BuildSpotViews()));
+                Spots: BuildSpotViews(),
+                Paths: BuildPathViews()));
 
             var now = Stopwatch.GetTimestamp();
             var remaining = nextTick - now;
@@ -97,6 +99,24 @@ public sealed class SimRuntime : IDisposable
                 j.Active, j.NeedKind);
         }
         return views;
+    }
+
+    private PathView[] BuildPathViews()
+    {
+        var query = _world.Store.Query<Colonist, PathFollower>();
+        var list = new List<PathView>(query.Count);
+        foreach (var entity in query.Entities)
+        {
+            ref var pf = ref entity.GetComponent<PathFollower>();
+            if (!pf.PlayerForced) continue;
+            if (pf.Tiles is null) continue;
+            var remaining = pf.Tiles.Length - pf.Index;
+            if (remaining <= 0) continue;
+            var slice = new TileCoord[remaining];
+            Array.Copy(pf.Tiles, pf.Index, slice, 0, remaining);
+            list.Add(new PathView(entity.Id, slice));
+        }
+        return list.ToArray();
     }
 
     private SpotView[] BuildSpotViews()

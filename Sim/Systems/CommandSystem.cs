@@ -53,6 +53,7 @@ public sealed class CommandSystem : ITickSystem
         pf.Tiles = null;
         pf.Index = 0;
         pf.PendingRequest = true;
+        pf.PlayerForced = true;
         _planner.Request(entity.Id, start, move.Target);
     }
 }

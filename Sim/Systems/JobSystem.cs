@@ -128,6 +128,7 @@ public sealed class JobSystem : ITickSystem
         pf.Tiles = null;
         pf.Index = 0;
         pf.PendingRequest = true;
+        pf.PlayerForced = false;
         _planner.Request(entity.Id, start, goal);
     }
 

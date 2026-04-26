@@ -50,6 +50,7 @@ public partial class Bootstrap : Node3D
         AddVertexOverlay(_heightfield);
         AddColonists(_runtime, _heightfield);
         AddSpots(_runtime, _heightfield);
+        AddPathOverlay(_runtime, _heightfield);
         var selection = AddSelectionService(_runtime, _heightfield);
         AddSelectionRing(selection, _runtime, _heightfield);
         AddInfoPanel(selection, _runtime);
@@ -142,6 +143,13 @@ public partial class Bootstrap : Node3D
         var renderer = new SpotsRenderer { Name = "Spots" };
         renderer.Configure(runtime.Publisher, field);
         AddChild(renderer);
+    }
+
+    private void AddPathOverlay(SimRuntime runtime, Heightfield field)
+    {
+        var overlay = new PathOverlay { Name = "PathOverlay" };
+        overlay.Configure(runtime.Publisher, field);
+        AddChild(overlay);
     }
 
     private SelectionService AddSelectionService(SimRuntime runtime, Heightfield field)

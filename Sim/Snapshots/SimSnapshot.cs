@@ -7,8 +7,12 @@ public sealed record SimSnapshot(
     double ElapsedSeconds,
     int EntityCount,
     IReadOnlyList<ColonistView> Colonists,
-    IReadOnlyList<SpotView> Spots)
+    IReadOnlyList<SpotView> Spots,
+    IReadOnlyList<PathView> Paths)
 {
     public static SimSnapshot Empty { get; } =
-        new(0, 0.0, 0, Array.Empty<ColonistView>(), Array.Empty<SpotView>());
+        new(0, 0.0, 0,
+            Array.Empty<ColonistView>(),
+            Array.Empty<SpotView>(),
+            Array.Empty<PathView>());
 }

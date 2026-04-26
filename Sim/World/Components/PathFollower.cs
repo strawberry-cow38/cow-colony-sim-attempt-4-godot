@@ -11,4 +11,8 @@ public struct PathFollower : IComponent
     public TileCoord[]? Tiles;
     public int Index;
     public bool PendingRequest;
+    // True while the active path was issued by a player MoveCommand.
+    // Wander/Job paths leave this false. Path overlay only renders
+    // player-forced paths.
+    public bool PlayerForced;
 }

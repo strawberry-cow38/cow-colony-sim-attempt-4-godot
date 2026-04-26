@@ -59,10 +59,13 @@ public sealed class WanderSystem : ITickSystem
 
             if (pf.Tiles is null || pf.Index >= pf.Tiles.Length)
             {
+                pf.Tiles = null;
+                pf.PlayerForced = false;
                 if (!pf.PendingRequest && !job.Active)
                 {
                     RequestRandomPath(entity, pos);
                     pf.PendingRequest = true;
+                    pf.PlayerForced = false;
                 }
                 continue;
             }

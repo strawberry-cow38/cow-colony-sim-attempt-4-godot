@@ -47,13 +47,14 @@ public sealed class CommandSystem : ITickSystem
 
         ref var pos = ref entity.GetComponent<TilePosition>();
         ref var pf = ref entity.GetComponent<PathFollower>();
-        var start = new TileCoord(
+        var start = _grid.At(
             Math.Clamp(pos.TileX, 0, _grid.Width - 1),
             Math.Clamp(pos.TileY, 0, _grid.Height - 1));
+        var goal = _grid.At(move.Target.X, move.Target.Y);
         pf.Tiles = null;
         pf.Index = 0;
         pf.PendingRequest = true;
         pf.PlayerForced = true;
-        _planner.Request(entity.Id, start, move.Target);
+        _planner.Request(entity.Id, start, goal);
     }
 }

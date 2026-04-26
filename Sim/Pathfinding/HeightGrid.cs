@@ -8,6 +8,11 @@ namespace CowColonySim.Sim.Pathfinding;
 // and (for diagonals) both cardinal neighbours are also walkable, so we
 // don't squeeze through impassable cliff corners.
 //
+// Z (floor layer) is derived from the heightfield: Z = round(centerQuanta/2)
+// so a 1.5 m vertical step = 1 layer = 2 quanta. On a single-floor world
+// every (x, y) maps to one Z; later phases will allow multiple Z per (x, y)
+// for stairs/ramps and the A* graph will expand across the new transitions.
+//
 // Pure-data immutable view: thread-safe to share across A* workers as long
 // as the underlying Heightfield isn't being mutated concurrently.
 public sealed class HeightGrid
@@ -30,6 +35,12 @@ public sealed class HeightGrid
     public bool InBounds(TileCoord t) =>
         (uint)t.X < (uint)Width && (uint)t.Y < (uint)Height;
 
+    // Build a 3D coord at (x, y) with floor Z derived from the heightfield.
+    public TileCoord At(int x, int y) => new(x, y, FloorLayer(x, y));
+
+    public int FloorLayer(int x, int y) =>
+        (int)MathF.Round(CenterQuanta(x, y) * 0.5f);
+
     public bool CanStep(TileCoord from, TileCoord to)
     {
         if (!InBounds(from) || !InBounds(to)) return false;
@@ -37,15 +48,13 @@ public sealed class HeightGrid
         var dy = to.Y - from.Y;
         if (Math.Abs(dx) > 1 || Math.Abs(dy) > 1 || (dx == 0 && dy == 0)) return false;
 
-        var dh = Math.Abs(CenterQuanta(to) - CenterQuanta(from));
+        var dh = Math.Abs(CenterQuanta(to.X, to.Y) - CenterQuanta(from.X, from.Y));
         if (dh > MaxStepQuanta) return false;
 
         if (dx != 0 && dy != 0)
         {
-            var sideA = new TileCoord(from.X + dx, from.Y);
-            var sideB = new TileCoord(from.X, from.Y + dy);
-            if (Math.Abs(CenterQuanta(sideA) - CenterQuanta(from)) > MaxStepQuanta) return false;
-            if (Math.Abs(CenterQuanta(sideB) - CenterQuanta(from)) > MaxStepQuanta) return false;
+            if (Math.Abs(CenterQuanta(from.X + dx, from.Y) - CenterQuanta(from.X, from.Y)) > MaxStepQuanta) return false;
+            if (Math.Abs(CenterQuanta(from.X, from.Y + dy) - CenterQuanta(from.X, from.Y)) > MaxStepQuanta) return false;
         }
         return true;
     }
@@ -55,7 +64,7 @@ public sealed class HeightGrid
         var dx = to.X - from.X;
         var dy = to.Y - from.Y;
         var planar = (dx != 0 && dy != 0) ? MathF.Sqrt(2f) : 1f;
-        var slope = Math.Abs(CenterQuanta(to) - CenterQuanta(from));
+        var slope = Math.Abs(CenterQuanta(to.X, to.Y) - CenterQuanta(from.X, from.Y));
         return planar + slope * SlopeCostPerQuanta;
     }
 
@@ -68,12 +77,12 @@ public sealed class HeightGrid
         return (max - min) + min * MathF.Sqrt(2f);
     }
 
-    private float CenterQuanta(TileCoord t)
+    private float CenterQuanta(int x, int y)
     {
-        var a = _field.Get(t.X, t.Y);
-        var b = _field.Get(t.X + 1, t.Y);
-        var c = _field.Get(t.X, t.Y + 1);
-        var d = _field.Get(t.X + 1, t.Y + 1);
+        var a = _field.Get(x, y);
+        var b = _field.Get(x + 1, y);
+        var c = _field.Get(x, y + 1);
+        var d = _field.Get(x + 1, y + 1);
         return (a + b + c + d) * 0.25f;
     }
 }

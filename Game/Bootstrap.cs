@@ -4,6 +4,7 @@ using CowColonySim.Game.Debug;
 using CowColonySim.Game.Render;
 using CowColonySim.Game.Selection;
 using CowColonySim.Game.Terrain;
+using CowColonySim.Game.Time;
 using CowColonySim.Game.UI;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Logging;
@@ -55,6 +56,7 @@ public partial class Bootstrap : Node3D
         AddSelectionRing(selection, _runtime, _heightfield);
         AddInfoPanel(selection, _runtime);
         AddPerfHud(_runtime);
+        AddTimeHud(_runtime);
 
         SimLog.Logger.Information(
             "Bootstrap ready. SimThread at {Hz} Hz. World has {Count} entities. " +
@@ -127,6 +129,13 @@ public partial class Bootstrap : Node3D
     private void AddPerfHud(SimRuntime runtime)
     {
         var hud = new PerfHud { Name = "PerfHud" };
+        hud.Configure(runtime);
+        AddChild(hud);
+    }
+
+    private void AddTimeHud(SimRuntime runtime)
+    {
+        var hud = new TimeHud { Name = "TimeHud" };
         hud.Configure(runtime);
         AddChild(hud);
     }

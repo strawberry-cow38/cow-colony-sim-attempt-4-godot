@@ -79,6 +79,7 @@ public sealed class WanderSystem : ITickSystem
 
             if (dist <= WaypointReachedMeters)
             {
+                pos.TileZ = target.Z;
                 pf.Index++;
                 continue;
             }
@@ -87,6 +88,7 @@ public sealed class WanderSystem : ITickSystem
             if (step >= dist)
             {
                 WriteMetersXY(ref pos, targetMx, targetMy);
+                pos.TileZ = target.Z;
                 pf.Index++;
             }
             else
@@ -100,15 +102,15 @@ public sealed class WanderSystem : ITickSystem
 
     private void RequestRandomPath(Entity entity, TilePosition pos)
     {
-        var start = new TileCoord(
+        var start = _grid.At(
             Math.Clamp(pos.TileX, 0, _grid.Width - 1),
             Math.Clamp(pos.TileY, 0, _grid.Height - 1));
-        var goal = new TileCoord(
+        var goal = _grid.At(
             (int)(NextU32() % (uint)_grid.Width),
             (int)(NextU32() % (uint)_grid.Height));
-        if (goal == start)
+        if (goal.X == start.X && goal.Y == start.Y)
         {
-            goal = new TileCoord((goal.X + 1) % _grid.Width, goal.Y);
+            goal = _grid.At((goal.X + 1) % _grid.Width, goal.Y);
         }
         _planner.Request(entity.Id, start, goal);
     }

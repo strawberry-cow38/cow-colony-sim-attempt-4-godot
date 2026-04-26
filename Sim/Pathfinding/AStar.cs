@@ -50,7 +50,10 @@ public static class AStar
             for (var i = 0; i < Neighbours.Length; i++)
             {
                 var (dx, dy) = Neighbours[i];
-                var next = new TileCoord(current.X + dx, current.Y + dy);
+                var nx = current.X + dx;
+                var ny = current.Y + dy;
+                if ((uint)nx >= (uint)grid.Width || (uint)ny >= (uint)grid.Height) continue;
+                var next = grid.At(nx, ny);
                 if (!grid.CanStep(current, next)) continue;
                 var nextIdx = Index(grid, next);
                 if (visited[nextIdx]) continue;
@@ -70,7 +73,7 @@ public static class AStar
     private static int Index(HeightGrid grid, TileCoord t) => t.Y * grid.Width + t.X;
 
     private static TileCoord FromIndex(HeightGrid grid, int idx) =>
-        new(idx % grid.Width, idx / grid.Width);
+        grid.At(idx % grid.Width, idx / grid.Width);
 
     private static void Reconstruct(
         int[] came, int goalIdx, int startIdx, HeightGrid grid, List<TileCoord> outPath)

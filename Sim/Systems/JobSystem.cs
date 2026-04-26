@@ -120,10 +120,10 @@ public sealed class JobSystem : ITickSystem
         job.TargetTileX = spot.TileX;
         job.TargetTileY = spot.TileY;
 
-        var start = new TileCoord(
+        var start = _grid.At(
             Math.Clamp(pos.TileX, 0, _grid.Width - 1),
             Math.Clamp(pos.TileY, 0, _grid.Height - 1));
-        var goal = new TileCoord(spot.TileX, spot.TileY);
+        var goal = _grid.At(spot.TileX, spot.TileY);
         if (start == goal) return;
         pf.Tiles = null;
         pf.Index = 0;

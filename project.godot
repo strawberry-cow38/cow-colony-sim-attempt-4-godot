@@ -12,6 +12,9 @@ run/main_scene="res://scenes/Bootstrap.tscn"
 config/features=PackedStringArray("4.6", "C#", "Forward Plus")
 config/icon="res://icon.svg"
 
+boot_splash/show_image=false
+boot_splash/bg_color=Color(0, 0, 0, 1)
+
 [dotnet]
 
 project/assembly_name="CowColonySim"

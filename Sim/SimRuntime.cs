@@ -21,6 +21,7 @@ public sealed class SimRuntime : IDisposable
     private readonly CancellationTokenSource _cts = new();
     private Thread? _thread;
     private long _tick;
+    private int _speed = 1;
     private bool _disposed;
 
     public Scheduler Scheduler => _scheduler;
@@ -28,6 +29,14 @@ public sealed class SimRuntime : IDisposable
     public SnapshotPublisher Publisher => _publisher;
     public CommandBus Commands => _commands;
     public long TickNumber => Interlocked.Read(ref _tick);
+
+    // 0 = paused, otherwise tick-rate multiplier. Loop reads this each tick
+    // so it can change live from the main thread.
+    public int Speed
+    {
+        get => Volatile.Read(ref _speed);
+        set => Volatile.Write(ref _speed, Math.Clamp(value, 0, 16));
+    }
 
     public void Start()
     {
@@ -46,11 +55,22 @@ public sealed class SimRuntime : IDisposable
     private void Loop()
     {
         var token = _cts.Token;
-        var stepTicks = Stopwatch.Frequency / SimConstants.TickRateHz;
-        var nextTick = Stopwatch.GetTimestamp() + stepTicks;
+        var nextTick = Stopwatch.GetTimestamp();
 
         while (!token.IsCancellationRequested)
         {
+            var speed = Speed;
+            if (speed <= 0)
+            {
+                if (token.WaitHandle.WaitOne(20))
+                {
+                    return;
+                }
+                nextTick = Stopwatch.GetTimestamp();
+                continue;
+            }
+
+            var stepTicks = Stopwatch.Frequency / (SimConstants.TickRateHz * speed);
             var current = Interlocked.Increment(ref _tick);
             var ctx = new TickContext(current, SimConstants.FixedDeltaSeconds);
             _scheduler.Tick(ctx);
@@ -62,6 +82,7 @@ public sealed class SimRuntime : IDisposable
                 Spots: BuildSpotViews(),
                 Paths: BuildPathViews()));
 
+            nextTick += stepTicks;
             var now = Stopwatch.GetTimestamp();
             var remaining = nextTick - now;
             if (remaining > 0)
@@ -79,7 +100,12 @@ public sealed class SimRuntime : IDisposable
                     Thread.SpinWait(64);
                 }
             }
-            nextTick += stepTicks;
+            else if (-remaining > stepTicks * 4)
+            {
+                // Fell far behind (paused for a while or stalled). Resync to
+                // wall clock instead of running a catch-up storm.
+                nextTick = now;
+            }
         }
     }
 

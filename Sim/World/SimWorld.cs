@@ -1,6 +1,7 @@
 using CowColonySim.Sim.Blueprints;
 using CowColonySim.Sim.Designations;
 using CowColonySim.Sim.Items;
+using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.World.Components;
 using CowColonySim.Sim.Zones;
 using Friflo.Engine.ECS;
@@ -15,6 +16,22 @@ public sealed class SimWorld
     public EntityStore Store { get; } = new();
 
     public int EntityCount => Store.Count;
+
+    private readonly List<TileCoord> _pendingTreeFalls = new();
+
+    // ChopJobSystem appends here when a tree is felled; SimRuntime drains the
+    // list once per tick into the published snapshot so Game-side audio can
+    // fire a one-shot at each fall position.
+    public void RecordTreeFall(int tileX, int tileY) =>
+        _pendingTreeFalls.Add(new TileCoord(tileX, tileY, 0));
+
+    public TileCoord[] DrainTreeFalls()
+    {
+        if (_pendingTreeFalls.Count == 0) return Array.Empty<TileCoord>();
+        var arr = _pendingTreeFalls.ToArray();
+        _pendingTreeFalls.Clear();
+        return arr;
+    }
 
     public Entity CreateEntity() => Store.CreateEntity();
 

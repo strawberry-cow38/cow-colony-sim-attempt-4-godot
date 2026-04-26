@@ -49,6 +49,42 @@ public partial class SelectionService : Node
         _unitsPerMeter = SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile;
     }
 
+    public override void _Process(double delta)
+    {
+        DropStaleTreeSelection();
+        DropStaleItemSelection();
+    }
+
+    // When a tree is felled (or an item is consumed) the snapshot stops
+    // including its EntityId, so the InfoPanel + context menu would otherwise
+    // hang on a dead reference. Clear the selection one tick after the entity
+    // disappears so panels close the moment it falls.
+    private void DropStaleTreeSelection()
+    {
+        if (SelectedTreeId is not int id) return;
+        var trees = _publisher.Current.Trees;
+        for (var i = 0; i < trees.Count; i++)
+        {
+            if (trees[i].EntityId == id) return;
+        }
+        SelectedTreeId = null;
+        _contextMenu?.CloseIfOpen();
+        SelectionChanged?.Invoke();
+    }
+
+    private void DropStaleItemSelection()
+    {
+        if (SelectedItemId is not int id) return;
+        var items = _publisher.Current.Items;
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (items[i].EntityId == id) return;
+        }
+        SelectedItemId = null;
+        _contextMenu?.CloseIfOpen();
+        SelectionChanged?.Invoke();
+    }
+
     public override void _UnhandledInput(InputEvent ev)
     {
         if (ev is not InputEventMouseButton mb || !mb.Pressed) return;

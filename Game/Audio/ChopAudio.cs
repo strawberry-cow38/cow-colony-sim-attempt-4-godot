@@ -35,16 +35,7 @@ public partial class ChopAudio : Node3D
         _unitsPerMeter = SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile;
         _rng.Randomize();
 
-        var path = ProjectSettings.GlobalizePath("res://assets/audio/axe_chop_hit.wav");
-        if (System.IO.File.Exists(path))
-        {
-            var bytes = System.IO.File.ReadAllBytes(path);
-            _stream = LoadWav(bytes);
-        }
-        else
-        {
-            GD.PushWarning($"ChopAudio: missing {path}");
-        }
+        _stream = WavLoader.LoadFromFile("res://assets/audio/axe_chop_hit.wav");
     }
 
     public override void _Process(double delta)
@@ -118,53 +109,4 @@ public partial class ChopAudio : Node3D
         return p;
     }
 
-    private static AudioStream? LoadWav(byte[] bytes)
-    {
-        var stream = new AudioStreamWav { Data = bytes };
-        ParseWavHeader(bytes, stream);
-        return stream;
-    }
-
-    private static void ParseWavHeader(byte[] bytes, AudioStreamWav stream)
-    {
-        // Minimal WAV header parse: locate fmt chunk for sample rate + format,
-        // and data chunk so AudioStreamWav.Data points at PCM samples only.
-        if (bytes.Length < 44) return;
-        if (bytes[0] != 'R' || bytes[1] != 'I' || bytes[2] != 'F' || bytes[3] != 'F') return;
-        var pos = 12;
-        var sampleRate = 44100;
-        var channels = 1;
-        var bitsPerSample = 16;
-        var dataOffset = -1;
-        var dataSize = 0;
-        while (pos + 8 <= bytes.Length)
-        {
-            var id = System.Text.Encoding.ASCII.GetString(bytes, pos, 4);
-            var size = BitConverter.ToInt32(bytes, pos + 4);
-            if (id == "fmt ")
-            {
-                channels = BitConverter.ToInt16(bytes, pos + 10);
-                sampleRate = BitConverter.ToInt32(bytes, pos + 12);
-                bitsPerSample = BitConverter.ToInt16(bytes, pos + 22);
-            }
-            else if (id == "data")
-            {
-                dataOffset = pos + 8;
-                dataSize = size;
-                break;
-            }
-            pos += 8 + size + (size & 1);
-        }
-        stream.MixRate = sampleRate;
-        stream.Stereo = channels >= 2;
-        stream.Format = bitsPerSample == 8
-            ? AudioStreamWav.FormatEnum.Format8Bits
-            : AudioStreamWav.FormatEnum.Format16Bits;
-        if (dataOffset > 0 && dataSize > 0)
-        {
-            var pcm = new byte[dataSize];
-            Buffer.BlockCopy(bytes, dataOffset, pcm, 0, dataSize);
-            stream.Data = pcm;
-        }
-    }
 }

@@ -144,6 +144,11 @@ public partial class ContextMenu : CanvasLayer
 
     private void Close() => _root.Visible = false;
 
+    public void CloseIfOpen()
+    {
+        if (_root.Visible) _root.Visible = false;
+    }
+
     private void ClearItems()
     {
         foreach (var child in _items.GetChildren())

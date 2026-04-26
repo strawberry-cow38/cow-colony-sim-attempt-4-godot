@@ -1,3 +1,5 @@
+using CowColonySim.Sim.Pathfinding;
+
 namespace CowColonySim.Sim.Snapshots;
 
 // Immutable end-of-tick view of the simulation. Game-side code only ever
@@ -13,7 +15,8 @@ public sealed record SimSnapshot(
     IReadOnlyList<DesignationView> Designations,
     IReadOnlyList<BlueprintGhostView> BlueprintGhosts,
     IReadOnlyList<TreeView> Trees,
-    IReadOnlyList<ItemView> Items)
+    IReadOnlyList<ItemView> Items,
+    IReadOnlyList<TileCoord> TreeFalls)
 {
     public static SimSnapshot Empty { get; } =
         new(0, 0.0, 0,
@@ -24,5 +27,6 @@ public sealed record SimSnapshot(
             Array.Empty<DesignationView>(),
             Array.Empty<BlueprintGhostView>(),
             Array.Empty<TreeView>(),
-            Array.Empty<ItemView>());
+            Array.Empty<ItemView>(),
+            Array.Empty<TileCoord>());
 }

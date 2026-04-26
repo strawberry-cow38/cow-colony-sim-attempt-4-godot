@@ -99,6 +99,7 @@ public sealed class ChopJobSystem : ITickSystem
             if (tree != default) tree.DeleteEntity();
             var designation = _world.Store.GetEntityById(f.DesignationId);
             if (designation != default) designation.DeleteEntity();
+            _world.RecordTreeFall(f.TileX, f.TileY);
         }
     }
 
@@ -153,7 +154,7 @@ public sealed class ChopJobSystem : ITickSystem
         if (work.Progress >= ChopIntervalSec)
         {
             work.Progress -= ChopIntervalSec;
-            t.Health -= DamagePerChop;
+            t.Health = Math.Max(0, t.Health - DamagePerChop);
             t.HitCount++;
         }
         if (t.Health <= 0)

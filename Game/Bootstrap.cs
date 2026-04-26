@@ -67,6 +67,7 @@ public partial class Bootstrap : Node3D
         AddBlueprintGhosts(_runtime, _heightfield);
         AddTrees(_runtime, _heightfield);
         AddChopAudio(_runtime, _heightfield);
+        AddTreeFallAudio(_runtime, _heightfield);
         AddItems(_runtime, _heightfield);
         AddPathOverlay(_runtime, _heightfield);
         var selection = AddSelectionService(_runtime, _heightfield);
@@ -163,6 +164,13 @@ public partial class Bootstrap : Node3D
     private void AddChopAudio(SimRuntime runtime, Heightfield field)
     {
         var audio = new ChopAudio { Name = "ChopAudio" };
+        audio.Configure(runtime.Publisher, field);
+        AddChild(audio);
+    }
+
+    private void AddTreeFallAudio(SimRuntime runtime, Heightfield field)
+    {
+        var audio = new TreeFallAudio { Name = "TreeFallAudio" };
         audio.Configure(runtime.Publisher, field);
         AddChild(audio);
     }
@@ -366,7 +374,7 @@ public partial class Bootstrap : Node3D
     private void AddItemHoverLabel(SimRuntime runtime, Heightfield heightfield)
     {
         var hover = new ItemHoverLabel { Name = "ItemHoverLabel" };
-        hover.Configure(runtime.Publisher, heightfield);
+        hover.Configure(runtime.Publisher, heightfield, _cameraRig);
         AddChild(hover);
     }
 

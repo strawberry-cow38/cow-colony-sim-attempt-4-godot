@@ -91,7 +91,8 @@ public sealed class SimRuntime : IDisposable
                     Designations: BuildDesignationViews(),
                     BlueprintGhosts: BuildBlueprintGhostViews(),
                     Trees: BuildTreeViews(),
-                    Items: BuildItemViews()));
+                    Items: BuildItemViews(),
+                    TreeFalls: _world.DrainTreeFalls()));
             }
             catch (Exception ex)
             {

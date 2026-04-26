@@ -7,15 +7,15 @@ public static class HeightfieldGenerator
 {
     public readonly record struct Settings(
         int Seed = 1337,
-        float BaseFrequency = 0.018f,
-        int Octaves = 3,
+        float BaseFrequency = 0.008f,
+        int Octaves = 5,
         float Lacunarity = 2.0f,
-        float Persistence = 0.4f,
-        short Amplitude = 18,
+        float Persistence = 0.5f,
+        short Amplitude = 60,
         float OriginTilesX = 0f,
         float OriginTilesY = 0f,
         float TileSpacing = 1f,
-        int SmoothingPasses = 2);
+        int SmoothingPasses = 1);
 
     public static void Generate(Heightfield field, Settings settings)
     {

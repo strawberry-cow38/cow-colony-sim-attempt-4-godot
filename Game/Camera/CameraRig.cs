@@ -15,7 +15,7 @@ public partial class CameraRig : Node3D
     private const float PitchDeg = -50f;
     private const float Distance = 120f;
     private const float MinDistance = 30f;
-    private const float MaxDistance = 600f;
+    private const float MaxDistance = 900f;
     private const float ZoomStep = 1.18f;
     private const float ZoomLerp = 12f;
     private const float OrbitYawDegPerPx = 0.3f;

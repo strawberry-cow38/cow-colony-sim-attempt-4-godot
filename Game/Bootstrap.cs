@@ -44,8 +44,9 @@ public partial class Bootstrap : Node3D
         SpawnNeedSpots(_runtime);
         _runtime.Start();
 
-        AddEnvironment();
-        AddSun();
+        var env = AddEnvironment();
+        var sun = AddSun();
+        AddDayNightCycle(_runtime, sun, env);
         AddCameraRig();
         AddTerrain(_heightfield);
         AddBorderWall();
@@ -88,9 +89,18 @@ public partial class Bootstrap : Node3D
     // has 1 low + 3 high corners the flat normal points away from the sun
     // and gets nothing without an ambient term. Don't fix that by welding
     // verts. Fix it by giving the sky a real contribution.
-    private void AddEnvironment()
+    private Godot.Environment AddEnvironment()
     {
-        var sky = new Sky { SkyMaterial = new ProceduralSkyMaterial() };
+        var skyMat = new ProceduralSkyMaterial
+        {
+            SkyTopColor = new Color(0.18f, 0.42f, 0.82f),
+            SkyHorizonColor = new Color(0.70f, 0.82f, 0.95f),
+            GroundHorizonColor = new Color(0.70f, 0.78f, 0.85f),
+            GroundBottomColor = new Color(0.18f, 0.22f, 0.20f),
+            SunAngleMax = 12f,
+            SunCurve = 0.15f,
+        };
+        var sky = new Sky { SkyMaterial = skyMat };
         var env = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Sky,
@@ -105,9 +115,10 @@ public partial class Bootstrap : Node3D
         };
         var node = new WorldEnvironment { Name = "World", Environment = env };
         AddChild(node);
+        return env;
     }
 
-    private void AddSun()
+    private DirectionalLight3D AddSun()
     {
         var sun = new DirectionalLight3D
         {
@@ -123,6 +134,14 @@ public partial class Bootstrap : Node3D
         };
         sun.Rotation = new Vector3(Mathf.DegToRad(-55f), Mathf.DegToRad(35f), 0f);
         AddChild(sun);
+        return sun;
+    }
+
+    private void AddDayNightCycle(SimRuntime runtime, DirectionalLight3D sun, Godot.Environment env)
+    {
+        var cycle = new DayNightCycle { Name = "DayNightCycle" };
+        cycle.Configure(runtime, sun, env);
+        AddChild(cycle);
     }
 
     private void AddCameraRig()

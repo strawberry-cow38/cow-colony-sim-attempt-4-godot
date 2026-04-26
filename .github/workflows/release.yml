@@ -1,23 +1,14 @@
-name: Build & Release
+name: CI
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
-concurrency:
-  group: release-latest
-  cancel-in-progress: true
-
-env:
-  GODOT_VERSION: 4.6.2
-
 jobs:
-  windows:
-    runs-on: windows-latest
+  build-test:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -33,134 +24,11 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
-      - name: Cache Godot
-        id: cache-godot
-        uses: actions/cache@v4
-        with:
-          path: |
-            godot
-            templates
-          key: godot-${{ env.GODOT_VERSION }}-mono-win
+      - name: Restore
+        run: dotnet restore Tests/CowColonySim.Tests.csproj
 
-      - name: Cache .godot import
-        uses: actions/cache@v4
-        with:
-          path: .godot
-          key: godot-import-${{ env.GODOT_VERSION }}-${{ hashFiles('project.godot','**/*.import','**/*.tscn','**/*.tres','assets/**') }}
-          restore-keys: |
-            godot-import-${{ env.GODOT_VERSION }}-
+      - name: Build (Sim + Tests)
+        run: dotnet build Tests/CowColonySim.Tests.csproj -c Release --no-restore
 
-      - name: Download Godot + export templates
-        if: steps.cache-godot.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          $ver = "${{ env.GODOT_VERSION }}"
-          $editor = "https://github.com/godotengine/godot/releases/download/$ver-stable/Godot_v$ver-stable_mono_win64.zip"
-          $tpz    = "https://github.com/godotengine/godot/releases/download/$ver-stable/Godot_v$ver-stable_mono_export_templates.tpz"
-
-          New-Item -ItemType Directory -Force -Path godot,templates | Out-Null
-          Invoke-WebRequest -Uri $editor -OutFile godot.zip
-          Expand-Archive godot.zip -DestinationPath godot -Force
-
-          Invoke-WebRequest -Uri $tpz -OutFile templates.zip
-          Expand-Archive templates.zip -DestinationPath templates -Force
-
-      - name: Stage export templates
-        shell: pwsh
-        run: |
-          $ver = "${{ env.GODOT_VERSION }}"
-          $dst = Join-Path $env:APPDATA "Godot\export_templates\$ver.stable.mono"
-          New-Item -ItemType Directory -Force -Path $dst | Out-Null
-          Get-ChildItem templates/templates | Copy-Item -Destination $dst -Recurse -Force
-
-      - name: Resolve godot exe
-        id: gd
-        shell: pwsh
-        run: |
-          $exe = (Get-ChildItem -Path godot -Recurse -Filter 'Godot_v*_mono_win64.exe' |
-                  Where-Object { $_.Name -notmatch '_console' } | Select-Object -First 1).FullName
-          if (-not $exe) { throw "Godot exe not found" }
-          "exe=$exe" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Import project (build .godot/)
-        shell: pwsh
-        run: |
-          & "${{ steps.gd.outputs.exe }}" --headless --import --path . 2>&1 | Out-Host
-          if (-not (Test-Path .godot)) { throw "Godot import failed" }
-
-      - name: Export Windows Desktop
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Continue'
-          New-Item -ItemType Directory -Force -Path build/win | Out-Null
-          $out = "$((Resolve-Path build/win).Path)\CowColonySim.exe"
-          & "${{ steps.gd.outputs.exe }}" --headless --verbose --path . --export-release "Windows Desktop" $out 2>&1 | Tee-Object -Variable godotLog | Out-Host
-          $code = $LASTEXITCODE
-          Write-Host "godot exit code: $code"
-          if (-not (Test-Path $out)) {
-            Write-Host "===== last 200 lines of godot output ====="
-            $godotLog | Select-Object -Last 200 | ForEach-Object { Write-Host $_ }
-            throw "Export missing CowColonySim.exe (godot exit $code)"
-          }
-
-      - name: Build manifest + per-file blobs
-        shell: pwsh
-        run: |
-          $src = Resolve-Path build/win
-          $blobsDir = "release-blobs"
-          New-Item -ItemType Directory -Force -Path $blobsDir | Out-Null
-          $entries = New-Object System.Collections.Generic.List[object]
-          $seen = @{}
-          Get-ChildItem -Path $src -Recurse -File | ForEach-Object {
-            $rel = [IO.Path]::GetRelativePath($src, $_.FullName) -replace '\\','/'
-            $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant()
-            $entries.Add([pscustomobject]@{
-              path   = $rel
-              size   = $_.Length
-              sha256 = $hash
-            })
-            if (-not $seen.ContainsKey($hash)) {
-              Copy-Item $_.FullName -Destination (Join-Path $blobsDir "blob-$hash.bin") -Force
-              $seen[$hash] = $true
-            }
-          }
-          $manifest = [pscustomobject]@{
-            version       = "${{ github.sha }}"
-            built         = "${{ github.run_started_at }}"
-            blob_prefix   = "blob-"
-            blob_suffix   = ".bin"
-            files         = $entries
-          }
-          $manifest | ConvertTo-Json -Depth 6 | Out-File manifest.json -Encoding utf8
-          Write-Host "manifest entries: $($entries.Count); unique blobs: $($seen.Count)"
-
-      - name: Package zip (fast)
-        shell: pwsh
-        run: |
-          $zip = "CowColonySim-windows.zip"
-          if (Test-Path $zip) { Remove-Item $zip }
-          # 7z preinstalled on windows-latest. -mx1 = fast deflate, multithreaded.
-          7z a -tzip -mx1 -mmt=on $zip ./build/win/* | Out-Host
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: CowColonySim-windows
-          path: |
-            CowColonySim-windows.zip
-            manifest.json
-
-      - name: Publish "latest" release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: latest
-          body: |
-            Auto-build from ${{ github.sha }}
-            Built: ${{ github.run_started_at }}
-          files: |
-            CowColonySim-windows.zip
-            manifest.json
-            release-blobs/blob-*.bin
-          prerelease: false
-          make_latest: 'true'
+      - name: Test
+        run: dotnet test Tests/CowColonySim.Tests.csproj -c Release --no-build --nologo

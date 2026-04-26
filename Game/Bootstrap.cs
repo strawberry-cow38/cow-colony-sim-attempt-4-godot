@@ -1,4 +1,5 @@
 using CowColonySim.Game.Camera;
+using CowColonySim.Game.Debug;
 using CowColonySim.Game.Terrain;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Logging;
@@ -26,6 +27,8 @@ public partial class Bootstrap : Node3D
         AddSun();
         AddCameraRig();
         AddTerrain(_heightfield);
+        AddVertexOverlay(_heightfield);
+        AddPerfHud(_runtime);
 
         SimLog.Logger.Information(
             "Bootstrap ready. SimThread at {Hz} Hz. World has {Count} entities. " +
@@ -62,6 +65,20 @@ public partial class Bootstrap : Node3D
         var terrain = new TerrainRenderer { Name = "Terrain" };
         AddChild(terrain);
         terrain.Build(field);
+    }
+
+    private void AddVertexOverlay(Heightfield field)
+    {
+        var overlay = new TerrainVertexOverlay { Name = "VertexOverlay" };
+        AddChild(overlay);
+        overlay.Build(field);
+    }
+
+    private void AddPerfHud(SimRuntime runtime)
+    {
+        var hud = new PerfHud { Name = "PerfHud" };
+        hud.Configure(runtime);
+        AddChild(hud);
     }
 
     public override void _ExitTree()

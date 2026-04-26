@@ -16,7 +16,7 @@ public class SnapshotPublisherTests
     public void Publish_replaces_current()
     {
         var pub = new SnapshotPublisher();
-        var snap = new SimSnapshot(5, 5.0 / 60.0, 0, Array.Empty<ColonistView>(), Array.Empty<SpotView>(), Array.Empty<PathView>(), Array.Empty<ZoneView>(), Array.Empty<DesignationView>(), Array.Empty<BlueprintGhostView>());
+        var snap = new SimSnapshot(5, 5.0 / 60.0, 0, Array.Empty<ColonistView>(), Array.Empty<SpotView>(), Array.Empty<PathView>(), Array.Empty<ZoneView>(), Array.Empty<DesignationView>(), Array.Empty<BlueprintGhostView>(), Array.Empty<TreeView>());
         pub.Publish(snap);
         Assert.Same(snap, pub.Current);
     }
@@ -31,7 +31,7 @@ public class SnapshotPublisherTests
         {
             for (var i = 1; i <= 10_000; i++)
             {
-                pub.Publish(new SimSnapshot(i, i / 60.0, 0, Array.Empty<ColonistView>(), Array.Empty<SpotView>(), Array.Empty<PathView>(), Array.Empty<ZoneView>(), Array.Empty<DesignationView>(), Array.Empty<BlueprintGhostView>()));
+                pub.Publish(new SimSnapshot(i, i / 60.0, 0, Array.Empty<ColonistView>(), Array.Empty<SpotView>(), Array.Empty<PathView>(), Array.Empty<ZoneView>(), Array.Empty<DesignationView>(), Array.Empty<BlueprintGhostView>(), Array.Empty<TreeView>()));
             }
             done.Set();
         });

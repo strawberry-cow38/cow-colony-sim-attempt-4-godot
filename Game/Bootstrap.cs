@@ -46,6 +46,7 @@ public partial class Bootstrap : Node3D
         SpawnColonists(_runtime);
         SpawnNeedSpots(_runtime);
         SpawnDummyFrameworkObjects(_runtime);
+        SpawnTrees(_runtime, _heightfield);
         _runtime.Start();
 
         var env = AddEnvironment();
@@ -61,6 +62,7 @@ public partial class Bootstrap : Node3D
         AddZones(_runtime, _heightfield);
         AddDesignations(_runtime, _heightfield);
         AddBlueprintGhosts(_runtime, _heightfield);
+        AddTrees(_runtime, _heightfield);
         AddPathOverlay(_runtime, _heightfield);
         var selection = AddSelectionService(_runtime, _heightfield);
         AddSelectionRing(selection, _runtime, _heightfield);
@@ -116,6 +118,37 @@ public partial class Bootstrap : Node3D
         runtime.World.SpawnBlueprintGhost("structure.door", center, center - 10);
         runtime.World.SpawnBlueprintGhost("workstation.crafting_table", center + 2, center - 10);
         runtime.World.SpawnBlueprintGhost("utility.ac_unit", center + 5, center - 10);
+    }
+
+    // Scatter pines deterministically across the map. Avoid a radius around
+    // the colonist/zone cluster so the play area stays uncluttered while we
+    // still get a forest backdrop for chop testing.
+    private static void SpawnTrees(SimRuntime runtime, Heightfield field)
+    {
+        const int target = 250;
+        const int clearRadius = 16;
+        var center = PreviewTileCount / 2;
+        var rng = new Random(unchecked((int)0xCAFEBABEu));
+        var placed = 0;
+        var attempts = 0;
+        while (placed < target && attempts < target * 8)
+        {
+            attempts++;
+            var tx = rng.Next(2, field.VertWidth - 2);
+            var ty = rng.Next(2, field.VertHeight - 2);
+            var dx = tx - center;
+            var dy = ty - center;
+            if (dx * dx + dy * dy < clearRadius * clearRadius) continue;
+            runtime.World.SpawnTree(tx, ty, unchecked((uint)rng.Next()));
+            placed++;
+        }
+    }
+
+    private void AddTrees(SimRuntime runtime, Heightfield field)
+    {
+        var renderer = new TreesRenderer { Name = "Trees" };
+        renderer.Configure(runtime.Publisher, field);
+        AddChild(renderer);
     }
 
     // Sky-driven ambient so faceted-terrain backsides aren't pitch-black.

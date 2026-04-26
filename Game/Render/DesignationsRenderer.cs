@@ -73,13 +73,20 @@ public partial class DesignationsRenderer : Node3D
     {
         var snap = _publisher.Current;
         var ds = snap.Designations;
+        var trees = snap.Trees;
+
+        var treeTiles = new HashSet<(int, int)>(trees.Count);
+        for (var i = 0; i < trees.Count; i++) treeTiles.Add((trees[i].TileX, trees[i].TileY));
 
         var chopN = 0; var mineN = 0; var harvestN = 0;
         for (var i = 0; i < ds.Count; i++)
         {
-            switch (ds[i].Kind)
+            var d = ds[i];
+            switch (d.Kind)
             {
-                case DesignationKind.ChopTree: chopN++; break;
+                case DesignationKind.ChopTree:
+                    if (treeTiles.Contains((d.TileX, d.TileY))) chopN++;
+                    break;
                 case DesignationKind.Mine: mineN++; break;
                 case DesignationKind.Harvest: harvestN++; break;
             }
@@ -93,6 +100,8 @@ public partial class DesignationsRenderer : Node3D
         for (var i = 0; i < ds.Count; i++)
         {
             var d = ds[i];
+            if (d.Kind == DesignationKind.ChopTree && !treeTiles.Contains((d.TileX, d.TileY))) continue;
+
             var metersX = (d.TileX + 0.5f) * SimConstants.MetersPerTile;
             var metersY = (d.TileY + 0.5f) * SimConstants.MetersPerTile;
             var x = metersX * _unitsPerMeter;

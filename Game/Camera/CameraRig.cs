@@ -14,6 +14,10 @@ public partial class CameraRig : Node3D
     private const float SnapStepRad = Mathf.Pi / 2f;
     private const float PitchDeg = -50f;
     private const float Distance = 120f;
+    private const float MinDistance = 30f;
+    private const float MaxDistance = 600f;
+    private const float ZoomStep = 1.18f;
+    private const float ZoomLerp = 12f;
 
     private Camera3D _camera = null!;
     private Node3D _pitchPivot = null!;
@@ -23,6 +27,8 @@ public partial class CameraRig : Node3D
     private float _yawTweenT;
     private bool _yawTweening;
     private bool _middleHeld;
+    private float _distance = Distance;
+    private float _distanceTarget = Distance;
     private Vector2 _boundsMax = new(2048f, 2048f);
 
     public void Configure(Vector2 boundsMax, Vector2 startCenter)
@@ -40,7 +46,7 @@ public partial class CameraRig : Node3D
         _camera = new Camera3D
         {
             Name = "Camera",
-            Position = new Vector3(0f, 0f, Distance),
+            Position = new Vector3(0f, 0f, _distance),
             Far = 20_000f,
         };
         _pitchPivot.AddChild(_camera);
@@ -75,6 +81,12 @@ public partial class CameraRig : Node3D
             }
             Rotation = new Vector3(0f, _yaw, 0f);
         }
+
+        if (!Mathf.IsEqualApprox(_distance, _distanceTarget))
+        {
+            _distance = Mathf.Lerp(_distance, _distanceTarget, 1f - Mathf.Exp(-ZoomLerp * dt));
+            _camera.Position = new Vector3(0f, 0f, _distance);
+        }
     }
 
     public override void _Input(InputEvent ev)
@@ -88,6 +100,14 @@ public partial class CameraRig : Node3D
 
             case InputEventMouseButton mb when mb.ButtonIndex == MouseButton.Middle:
                 _middleHeld = mb.Pressed;
+                break;
+
+            case InputEventMouseButton wheel when wheel.Pressed && wheel.ButtonIndex == MouseButton.WheelUp:
+                _distanceTarget = Mathf.Clamp(_distanceTarget / ZoomStep, MinDistance, MaxDistance);
+                break;
+
+            case InputEventMouseButton wheel when wheel.Pressed && wheel.ButtonIndex == MouseButton.WheelDown:
+                _distanceTarget = Mathf.Clamp(_distanceTarget * ZoomStep, MinDistance, MaxDistance);
                 break;
 
             case InputEventMouseMotion mm when _middleHeld:

@@ -311,10 +311,43 @@ public sealed class CommandSystem : ITickSystem
     {
         var rect = ClampRect(cmd.Rect);
         if (rect.Width <= 0 || rect.Height <= 0) return;
-        var entity = _world.SpawnZone(0, cmd.Type, rect, cmd.Name);
-        ref var z = ref entity.GetComponent<Zone>();
-        z.ZoneId = entity.Id;
+
+        // Merge any same-type zones that overlap the new rect (and any
+        // zones the expanded bounding box pulls in transitively) into a
+        // single zone whose rect is the union AABB. Different zone types
+        // (stockpile vs farm) never merge — they coexist.
+        var merged = rect;
+        var toDelete = new List<int>();
+        bool grew;
+        do
+        {
+            grew = false;
+            foreach (var entity in _world.Store.Query<Zone>().Entities)
+            {
+                if (toDelete.Contains(entity.Id)) continue;
+                ref var z = ref entity.GetComponent<Zone>();
+                if (z.Type != cmd.Type) continue;
+                if (!RectsOverlap(z.Rect, merged)) continue;
+                merged = UnionRect(merged, z.Rect);
+                toDelete.Add(entity.Id);
+                grew = true;
+            }
+        } while (grew);
+
+        foreach (var id in toDelete)
+        {
+            var e = _world.Store.GetEntityById(id);
+            if (e != default) e.DeleteEntity();
+        }
+
+        var spawned = _world.SpawnZone(0, cmd.Type, merged, cmd.Name);
+        ref var sz = ref spawned.GetComponent<Zone>();
+        sz.ZoneId = spawned.Id;
     }
+
+    private static TileRect UnionRect(TileRect a, TileRect b)
+        => new(Math.Min(a.MinX, b.MinX), Math.Min(a.MinY, b.MinY),
+               Math.Max(a.MaxX, b.MaxX), Math.Max(a.MaxY, b.MaxY));
 
     private void Apply(StampDesignationsCommand cmd)
     {

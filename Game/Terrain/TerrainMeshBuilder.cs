@@ -4,11 +4,14 @@ using Godot;
 
 namespace CowColonySim.Game.Terrain;
 
-// Per-tile mesh: 4 unshared corners per tile, ONE flat normal per tile
-// (the average of the two triangle normals). This is the faceted look
-// CLAUDE.md locks — crisp per-tile shading, no smooth interpolation
-// across tile borders. Smooth normals were tried 2026-04-26 and rebuked
-// for looking soft at distance; reverted to flat per-tile.
+// Per-tile mesh: 4 unshared corners per tile (so per-tile albedo / decals
+// can stay discrete later if we want), but each corner carries a SMOOTH
+// normal computed from heightfield central differences. Lighting
+// interpolates smoothly across each tile and across tile borders — no
+// "knife edge" facets on 1-low-3-high or 3-low-1-high configurations.
+//
+// (CLAUDE.md previously locked the faceted look. The user explicitly
+// asked for smooth render-side lighting on 2026-04-26 — see git log.)
 public static class TerrainMeshBuilder
 {
     public static ArrayMesh Build(Heightfield field, float? unitsPerTileOverride = null)
@@ -27,6 +30,9 @@ public static class TerrainMeshBuilder
         var unitsPerTile = unitsPerTileOverride ?? SimConstants.GodotUnitsPerTile;
         var unitsPerQuanta = TerrainConstants.VerticalQuantumMetres
                            * (SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile);
+
+        // Pre-compute smooth normal per (vx, vy) on the vertex grid.
+        var smoothNormals = BuildSmoothNormals(field, unitsPerTile, unitsPerQuanta);
 
         var vi = 0;
         var ii = 0;
@@ -49,26 +55,15 @@ public static class TerrainMeshBuilder
                 var iBL = vi + 2;
                 var iBR = vi + 3;
 
-                var pTL = new Vector3(x0, hTL, z0);
-                var pTR = new Vector3(x1, hTR, z0);
-                var pBL = new Vector3(x0, hBL, z1);
-                var pBR = new Vector3(x1, hBR, z1);
+                verts[iTL] = new Vector3(x0, hTL, z0);
+                verts[iTR] = new Vector3(x1, hTR, z0);
+                verts[iBL] = new Vector3(x0, hBL, z1);
+                verts[iBR] = new Vector3(x1, hBR, z1);
 
-                verts[iTL] = pTL;
-                verts[iTR] = pTR;
-                verts[iBL] = pBL;
-                verts[iBR] = pBR;
-
-                // One flat normal per tile = average of the two triangle
-                // normals (TL-TR-BL and TR-BR-BL, CCW from above).
-                var n1 = (pTR - pTL).Cross(pBL - pTL);
-                var n2 = (pBR - pTR).Cross(pBL - pTR);
-                var nFlat = (n1 + n2).Normalized();
-
-                normals[iTL] = nFlat;
-                normals[iTR] = nFlat;
-                normals[iBL] = nFlat;
-                normals[iBR] = nFlat;
+                normals[iTL] = smoothNormals[(ty)     * field.VertWidth + tx];
+                normals[iTR] = smoothNormals[(ty)     * field.VertWidth + tx + 1];
+                normals[iBL] = smoothNormals[(ty + 1) * field.VertWidth + tx];
+                normals[iBR] = smoothNormals[(ty + 1) * field.VertWidth + tx + 1];
 
                 uvs[iTL] = new Vector2(0f, 0f);
                 uvs[iTR] = new Vector2(1f, 0f);
@@ -98,4 +93,32 @@ public static class TerrainMeshBuilder
         return mesh;
     }
 
+    // Central-difference normal at every vertex of the heightfield grid.
+    // Edge verts clamp the neighbor lookup to in-bounds (forward/backward
+    // difference falls out naturally — the divisor stays 2*unitsPerTile so
+    // edges look slightly flatter, which is fine).
+    private static Vector3[] BuildSmoothNormals(Heightfield field, float unitsPerTile, float unitsPerQuanta)
+    {
+        var w = field.VertWidth;
+        var h = field.VertHeight;
+        var result = new Vector3[w * h];
+        for (var y = 0; y < h; y++)
+        {
+            var ym = y > 0 ? y - 1 : y;
+            var yp = y < h - 1 ? y + 1 : y;
+            for (var x = 0; x < w; x++)
+            {
+                var xm = x > 0 ? x - 1 : x;
+                var xp = x < w - 1 ? x + 1 : x;
+                var hL = field.Get(xm, y) * unitsPerQuanta;
+                var hR = field.Get(xp, y) * unitsPerQuanta;
+                var hD = field.Get(x, ym) * unitsPerQuanta;
+                var hU = field.Get(x, yp) * unitsPerQuanta;
+                var dHx = (hR - hL) / (2f * unitsPerTile);
+                var dHz = (hU - hD) / (2f * unitsPerTile);
+                result[y * w + x] = new Vector3(-dHx, 1f, -dHz).Normalized();
+            }
+        }
+        return result;
+    }
 }

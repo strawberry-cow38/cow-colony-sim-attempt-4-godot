@@ -30,6 +30,15 @@ public readonly record struct PlaceBlueprintGhostCommand(string DefId, int Origi
 // need spots, and other gameplay entities are untouched.
 public readonly record struct EraseInRectCommand(TileRect Rect) : ISimCommand;
 
+// Update a zone's editable fields. Sim re-reads the zone by id and
+// rewrites Name + the relevant per-type settings struct. Fields that
+// don't apply for the zone's type are ignored.
+public readonly record struct SetZoneSettingsCommand(
+    int ZoneId,
+    string Name,
+    int Priority,
+    int CropDefId) : ISimCommand;
+
 public sealed class CommandBus
 {
     private readonly ConcurrentQueue<ISimCommand> _queue = new();

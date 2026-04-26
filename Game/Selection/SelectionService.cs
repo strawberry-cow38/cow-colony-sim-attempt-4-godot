@@ -25,6 +25,7 @@ public partial class SelectionService : Node
     private float _unitsPerMeter;
 
     public int? SelectedEntityId { get; private set; }
+    public int? SelectedZoneId { get; private set; }
     public Vector2? SelectedGroundXZUnits { get; private set; }
 
     public event System.Action? SelectionChanged;
@@ -57,7 +58,13 @@ public partial class SelectionService : Node
 
         if (mb.ButtonIndex == MouseButton.Left)
         {
-            SelectColonistNearRay(camera, mb.Position);
+            var picked = SelectColonistNearRay(camera, mb.Position);
+            if (!picked)
+            {
+                var tx = (int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile);
+                var ty = (int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile);
+                SelectZoneAtTile(tx, ty);
+            }
         }
         else if (mb.ButtonIndex == MouseButton.Right && SelectedEntityId is int id)
         {
@@ -70,7 +77,26 @@ public partial class SelectionService : Node
         }
     }
 
-    private void SelectColonistNearRay(Camera3D camera, Vector2 mousePos)
+    private void SelectZoneAtTile(int tx, int ty)
+    {
+        var snap = _publisher.Current;
+        for (var i = 0; i < snap.Zones.Count; i++)
+        {
+            var z = snap.Zones[i];
+            if (tx < z.MinTileX || tx > z.MaxTileX) continue;
+            if (ty < z.MinTileY || ty > z.MaxTileY) continue;
+            if (SelectedEntityId is not null) SelectedEntityId = null;
+            if (SelectedZoneId == z.ZoneId) return;
+            SelectedZoneId = z.ZoneId;
+            SelectionChanged?.Invoke();
+            return;
+        }
+        if (SelectedZoneId is null) return;
+        SelectedZoneId = null;
+        SelectionChanged?.Invoke();
+    }
+
+    private bool SelectColonistNearRay(Camera3D camera, Vector2 mousePos)
     {
         var origin = camera.ProjectRayOrigin(mousePos);
         var dir = camera.ProjectRayNormal(mousePos).Normalized();
@@ -98,15 +124,11 @@ public partial class SelectionService : Node
             }
         }
 
-        if (best == -1)
-        {
-            if (SelectedEntityId is null) return;
-            SelectedEntityId = null;
-            SelectionChanged?.Invoke();
-            return;
-        }
+        if (best == -1) return false;
         SelectedEntityId = best;
+        if (SelectedZoneId is not null) SelectedZoneId = null;
         SelectionChanged?.Invoke();
+        return true;
     }
 
     private float SampleGroundUnits(float metersX, float metersY)

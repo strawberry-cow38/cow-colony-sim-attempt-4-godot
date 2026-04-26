@@ -50,6 +50,9 @@ public sealed class CommandSystem : ITickSystem
                 case EraseInRectCommand er:
                     Apply(er);
                     break;
+                case SetZoneSettingsCommand szs:
+                    Apply(szs);
+                    break;
             }
         }
     }
@@ -110,8 +113,66 @@ public sealed class CommandSystem : ITickSystem
     private void Apply(PlaceBlueprintGhostCommand cmd)
     {
         if (!BlueprintCatalog.TryGet(cmd.DefId, out var def) || def is null) return;
-        if (!_grid.InBounds(new TileCoord(cmd.OriginTileX, cmd.OriginTileY, 0))) return;
+        var (footW, footH) = (cmd.Rotation & 1) == 0
+            ? (def.FootprintW, def.FootprintH)
+            : (def.FootprintH, def.FootprintW);
+        if (!FootprintInBounds(cmd.OriginTileX, cmd.OriginTileY, footW, footH)) return;
+        if (!FootprintLevel(cmd.OriginTileX, cmd.OriginTileY, footW, footH)) return;
+        if (FootprintObstructed(cmd.OriginTileX, cmd.OriginTileY, footW, footH)) return;
         _world.SpawnBlueprintGhost(cmd.DefId, cmd.OriginTileX, cmd.OriginTileY, cmd.Rotation);
+    }
+
+    private bool FootprintInBounds(int ox, int oy, int w, int h)
+        => ox >= 0 && oy >= 0 && ox + w <= _grid.Width && oy + h <= _grid.Height;
+
+    // All vertex corners spanning the footprint must share one quantum value
+    // — the 4-unshared-corners-per-tile rendering means a footprint over a
+    // sloped tile would visibly hover, and pathing on top of it would lie.
+    private bool FootprintLevel(int ox, int oy, int w, int h)
+    {
+        var anchor = _grid.CornerQuanta(ox, oy);
+        for (var vy = oy; vy <= oy + h; vy++)
+        {
+            for (var vx = ox; vx <= ox + w; vx++)
+            {
+                if (_grid.CornerQuanta(vx, vy) != anchor) return false;
+            }
+        }
+        return true;
+    }
+
+    private bool FootprintObstructed(int ox, int oy, int w, int h)
+    {
+        var foot = new TileRect(ox, oy, ox + w - 1, oy + h - 1);
+        foreach (var entity in _world.Store.Query<BlueprintGhost>().Entities)
+        {
+            ref var g = ref entity.GetComponent<BlueprintGhost>();
+            if (!BlueprintCatalog.TryGet(g.DefId, out var od) || od is null) continue;
+            var (ow, oh) = (g.Rotation & 1) == 0
+                ? (od.FootprintW, od.FootprintH)
+                : (od.FootprintH, od.FootprintW);
+            var other = new TileRect(g.OriginTileX, g.OriginTileY, g.OriginTileX + ow - 1, g.OriginTileY + oh - 1);
+            if (RectsOverlap(foot, other)) return true;
+        }
+        return false;
+    }
+
+    private void Apply(SetZoneSettingsCommand cmd)
+    {
+        var entity = _world.Store.GetEntityById(cmd.ZoneId);
+        if (entity == default || !entity.HasComponent<Zone>()) return;
+        ref var z = ref entity.GetComponent<Zone>();
+        z.Name = cmd.Name ?? string.Empty;
+        if (entity.HasComponent<StockpileSettings>())
+        {
+            ref var s = ref entity.GetComponent<StockpileSettings>();
+            s.Priority = cmd.Priority;
+        }
+        if (entity.HasComponent<FarmSettings>())
+        {
+            ref var f = ref entity.GetComponent<FarmSettings>();
+            f.CropDefId = cmd.CropDefId;
+        }
     }
 
     private TileRect ClampRect(TileRect rect)

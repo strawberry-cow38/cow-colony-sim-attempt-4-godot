@@ -42,6 +42,10 @@ public sealed class HeightGrid
     public bool InBounds(TileCoord t) =>
         (uint)t.X < (uint)Width && (uint)t.Y < (uint)Height;
 
+    // Raw vertex sample in 0.75 m quanta. Used by build/placement validation
+    // (level-footprint checks). Bounds check is on the caller.
+    public short CornerQuanta(int vx, int vy) => _field.Get(vx, vy);
+
     // Build a 3D coord at (x, y) with floor Z derived from the heightfield.
     public TileCoord At(int x, int y) => new(x, y, FloorLayer(x, y));
 

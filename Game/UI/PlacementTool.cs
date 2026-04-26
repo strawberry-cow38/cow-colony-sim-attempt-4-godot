@@ -3,6 +3,7 @@ using CowColonySim.Sim;
 using CowColonySim.Sim.Blueprints;
 using CowColonySim.Sim.Commands;
 using CowColonySim.Sim.Designations;
+using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Terrain;
 using CowColonySim.Sim.Zones;
 using Godot;
@@ -27,6 +28,7 @@ public partial class PlacementTool : Node
     private BlueprintGhostPreview _ghostPreview = null!;
     private Heightfield _field = null!;
     private CommandBus _commands = null!;
+    private SnapshotPublisher _publisher = null!;
 
     private Vector2I? _dragStart;
     private int _blueprintRotation;
@@ -36,13 +38,15 @@ public partial class PlacementTool : Node
         RectDragOverlay rectOverlay,
         BlueprintGhostPreview ghostPreview,
         Heightfield field,
-        CommandBus commands)
+        CommandBus commands,
+        SnapshotPublisher publisher)
     {
         _tools = tools;
         _rectOverlay = rectOverlay;
         _ghostPreview = ghostPreview;
         _field = field;
         _commands = commands;
+        _publisher = publisher;
     }
 
     public override void _Ready()
@@ -124,7 +128,7 @@ public partial class PlacementTool : Node
             _ghostPreview.OriginTileX = origin.X;
             _ghostPreview.OriginTileY = origin.Y;
             _ghostPreview.RotationSteps = _blueprintRotation;
-            _ghostPreview.Valid = IsFootprintInBounds(def, _blueprintRotation, origin);
+            _ghostPreview.Valid = IsFootprintPlaceable(def, _blueprintRotation, origin);
         }
     }
 
@@ -231,7 +235,7 @@ public partial class PlacementTool : Node
         if (def.Placement == PlacementMode.LineDrag) return;
 
         var origin = OriginForFootprintCenter(def, _blueprintRotation, tile);
-        if (!IsFootprintInBounds(def, _blueprintRotation, origin)) return;
+        if (!IsFootprintPlaceable(def, _blueprintRotation, origin)) return;
 
         _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, origin.X, origin.Y, _blueprintRotation));
     }
@@ -267,6 +271,45 @@ public partial class PlacementTool : Node
         if (origin.X + w > _field.VertWidth - 1) return false;
         if (origin.Y + h > _field.VertHeight - 1) return false;
         return true;
+    }
+
+    private bool IsFootprintPlaceable(BlueprintDef def, int rotation, Vector2I origin)
+    {
+        if (!IsFootprintInBounds(def, rotation, origin)) return false;
+        var (w, h) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+        if (!IsFootprintLevel(origin.X, origin.Y, w, h)) return false;
+        if (IsFootprintObstructed(origin.X, origin.Y, w, h)) return false;
+        return true;
+    }
+
+    private bool IsFootprintLevel(int ox, int oy, int w, int h)
+    {
+        var anchor = _field.Get(ox, oy);
+        for (var vy = oy; vy <= oy + h; vy++)
+        {
+            for (var vx = ox; vx <= ox + w; vx++)
+            {
+                if (_field.Get(vx, vy) != anchor) return false;
+            }
+        }
+        return true;
+    }
+
+    private bool IsFootprintObstructed(int ox, int oy, int w, int h)
+    {
+        var minX = ox; var minY = oy;
+        var maxX = ox + w - 1; var maxY = oy + h - 1;
+        var snap = _publisher.Current;
+        for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+        {
+            var g = snap.BlueprintGhosts[i];
+            if (!BlueprintCatalog.TryGet(g.DefId, out var od) || od is null) continue;
+            var (ow, oh) = (g.Rotation & 1) == 0 ? (od.FootprintW, od.FootprintH) : (od.FootprintH, od.FootprintW);
+            var omx = g.OriginTileX + ow - 1;
+            var omy = g.OriginTileY + oh - 1;
+            if (minX <= omx && maxX >= g.OriginTileX && minY <= omy && maxY >= g.OriginTileY) return true;
+        }
+        return false;
     }
 
     private Vector2I? ProjectMouseToTile(Vector2 mousePos)

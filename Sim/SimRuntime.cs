@@ -6,6 +6,7 @@ using CowColonySim.Sim.Systems;
 using CowColonySim.Sim.Time;
 using CowColonySim.Sim.World;
 using CowColonySim.Sim.World.Components;
+using CowColonySim.Sim.Zones;
 
 namespace CowColonySim.Sim;
 
@@ -170,10 +171,14 @@ public sealed class SimRuntime : IDisposable
         foreach (var entity in query.Entities)
         {
             ref var z = ref entity.GetComponent<Zone>();
+            var priority = entity.HasComponent<StockpileSettings>()
+                ? entity.GetComponent<StockpileSettings>().Priority : 0;
+            var cropDefId = entity.HasComponent<FarmSettings>()
+                ? entity.GetComponent<FarmSettings>().CropDefId : 0;
             views[i++] = new ZoneView(
                 z.ZoneId, z.Type,
                 z.Rect.MinX, z.Rect.MinY, z.Rect.MaxX, z.Rect.MaxY,
-                z.Name);
+                z.Name, priority, cropDefId);
         }
         return views;
     }

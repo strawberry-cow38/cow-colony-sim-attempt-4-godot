@@ -65,6 +65,7 @@ public partial class Bootstrap : Node3D
         var selection = AddSelectionService(_runtime, _heightfield);
         AddSelectionRing(selection, _runtime, _heightfield);
         AddInfoPanel(selection, _runtime);
+        AddZoneSettingsPanel(selection, _runtime);
         AddPerfHud(_runtime);
         AddTimeHud(_runtime);
         AddBuildBar(selection);
@@ -295,6 +296,13 @@ public partial class Bootstrap : Node3D
         AddChild(panel);
     }
 
+    private void AddZoneSettingsPanel(SelectionService selection, SimRuntime runtime)
+    {
+        var panel = new ZoneSettingsPanel { Name = "ZoneSettingsPanel" };
+        panel.Configure(selection, runtime.Publisher, runtime.Commands);
+        AddChild(panel);
+    }
+
     private void AddBuildBar(SelectionService selection)
     {
         var tools = new BuildToolService { Name = "BuildTools" };
@@ -322,7 +330,7 @@ public partial class Bootstrap : Node3D
         AddChild(ghostPreview);
 
         var placement = new PlacementTool { Name = "PlacementTool" };
-        placement.Configure(tools, rectOverlay, ghostPreview, _heightfield!, _runtime!.Commands);
+        placement.Configure(tools, rectOverlay, ghostPreview, _heightfield!, _runtime!.Commands, _runtime!.Publisher);
         AddChild(placement);
     }
 

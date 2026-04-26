@@ -9,17 +9,26 @@ public static class HeightfieldGenerator
     // world gets ~12 hill peaks in each direction (visibly hilly, not "one
     // giant slope"). Amplitude 60 quanta = 45 m, plenty above colonist
     // scale. SmoothingPasses 3 keeps the silhouettes round.
-    public readonly record struct Settings(
-        int Seed = 1337,
-        float BaseFrequency = 0.05f,
-        int Octaves = 4,
-        float Lacunarity = 2.0f,
-        float Persistence = 0.5f,
-        short Amplitude = 60,
-        float OriginTilesX = 0f,
-        float OriginTilesY = 0f,
-        float TileSpacing = 1f,
-        int SmoothingPasses = 3);
+    //
+    // Property-init style — `new Settings()` and `new Settings { ... }` both
+    // pick up these defaults. (Positional record-struct primary-ctor defaults
+    // are silently bypassed by the implicit parameterless constructor, which
+    // returns default(T) with every field zero — flat plane in our case.)
+    public readonly record struct Settings
+    {
+        public int Seed { get; init; } = 1337;
+        public float BaseFrequency { get; init; } = 0.05f;
+        public int Octaves { get; init; } = 4;
+        public float Lacunarity { get; init; } = 2.0f;
+        public float Persistence { get; init; } = 0.5f;
+        public short Amplitude { get; init; } = 60;
+        public float OriginTilesX { get; init; } = 0f;
+        public float OriginTilesY { get; init; } = 0f;
+        public float TileSpacing { get; init; } = 1f;
+        public int SmoothingPasses { get; init; } = 3;
+
+        public Settings() { }
+    }
 
     public static void Generate(Heightfield field, Settings settings)
     {

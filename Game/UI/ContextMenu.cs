@@ -142,7 +142,7 @@ public partial class ContextMenu : CanvasLayer
         _panel.ResetSize();
     }
 
-    private void Hide() => _root.Visible = false;
+    private void Close() => _root.Visible = false;
 
     private void ClearItems()
     {
@@ -169,7 +169,7 @@ public partial class ContextMenu : CanvasLayer
             if (mb.ButtonIndex != MouseButton.Left && mb.ButtonIndex != MouseButton.Right) return;
             _root.GetViewport().SetInputAsHandled();
             action.Invoke();
-            Hide();
+            Close();
         };
         _items.AddChild(btn);
     }
@@ -177,7 +177,7 @@ public partial class ContextMenu : CanvasLayer
     private void OnDismissInput(InputEvent ev)
     {
         if (ev is not InputEventMouseButton mb || !mb.Pressed) return;
-        Hide();
+        Close();
     }
 
     private static bool HasChopDesignation(SimSnapshot snap, int tx, int ty)

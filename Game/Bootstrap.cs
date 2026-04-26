@@ -139,8 +139,9 @@ public partial class Bootstrap : Node3D
 
     private void AddDayNightCycle(SimRuntime runtime, DirectionalLight3D sun, Godot.Environment env)
     {
+        var sky = (ProceduralSkyMaterial)env.Sky.SkyMaterial;
         var cycle = new DayNightCycle { Name = "DayNightCycle" };
-        cycle.Configure(runtime, sun, env);
+        cycle.Configure(runtime, sun, env, sky);
         AddChild(cycle);
     }
 

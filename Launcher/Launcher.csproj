@@ -8,8 +8,7 @@
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <PublishSingleFile>true</PublishSingleFile>
     <PublishTrimmed>false</PublishTrimmed>
-    <SelfContained>true</SelfContained>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <SelfContained>false</SelfContained>
     <DebugType>embedded</DebugType>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>

@@ -34,6 +34,11 @@ public sealed class SimRuntime : IDisposable
     public CommandBus Commands => _commands;
     public long TickNumber => Interlocked.Read(ref _tick);
 
+    // Bootstrap registers the LightingSystem then assigns it here so the
+    // snapshot loop can clone its grid + sun fraction each tick. Null
+    // until set; LightingView falls back to Empty in that case.
+    public LightingSystem? Lighting { get; set; }
+
     // 0 = paused, otherwise tick-rate multiplier. Loop reads this each tick
     // so it can change live from the main thread.
     public int Speed
@@ -92,7 +97,8 @@ public sealed class SimRuntime : IDisposable
                     BlueprintGhosts: BuildBlueprintGhostViews(),
                     Trees: BuildTreeViews(),
                     Items: BuildItemViews(),
-                    TreeFalls: _world.DrainTreeFalls()));
+                    TreeFalls: _world.DrainTreeFalls(),
+                    Lighting: BuildLightingView()));
             }
             catch (Exception ex)
             {
@@ -256,6 +262,14 @@ public sealed class SimRuntime : IDisposable
             views[i++] = new ItemView(entity.Id, it.Kind, it.Count, it.Capacity, p.TileX, p.TileY, it.Forbidden);
         }
         return views;
+    }
+
+    private LightingView BuildLightingView()
+    {
+        if (Lighting is null) return LightingView.Empty;
+        return new LightingView(
+            Lighting.Grid.Width, Lighting.Grid.Height,
+            Lighting.Grid.Clone(), Lighting.SunFraction);
     }
 
     private BlueprintGhostView[] BuildBlueprintGhostViews()

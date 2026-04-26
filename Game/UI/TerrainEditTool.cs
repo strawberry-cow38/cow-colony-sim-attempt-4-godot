@@ -16,6 +16,9 @@ public partial class TerrainEditTool : Node
     private Heightfield _field = null!;
     private TerrainRenderer _terrain = null!;
 
+    private Vector2I? _flattenStart;
+    private short _flattenHeight;
+
     public void Configure(
         BuildToolService tools,
         TerrainEditOverlay overlay,
@@ -31,13 +34,22 @@ public partial class TerrainEditTool : Node
     public override void _UnhandledInput(InputEvent ev)
     {
         if (string.IsNullOrEmpty(_tools.ActiveToolId)) return;
-        if (ev is not InputEventMouseButton mb || !mb.Pressed) return;
+        if (ev is not InputEventMouseButton mb) return;
         if (mb.ButtonIndex != MouseButton.Left) return;
 
         var v = _overlay.SnappedVertex;
+        var tool = _tools.ActiveToolId;
+
+        if (tool == "debug_terrain.flatten_rect")
+        {
+            HandleFlatten(mb.Pressed, v);
+            return;
+        }
+
+        if (!mb.Pressed) return;
         if (v is null) return;
 
-        var delta = _tools.ActiveToolId switch
+        var delta = tool switch
         {
             "debug_terrain.raise_vertex" => +1,
             "debug_terrain.lower_vertex" => -1,
@@ -51,11 +63,54 @@ public partial class TerrainEditTool : Node
         GetViewport().SetInputAsHandled();
     }
 
+    private void HandleFlatten(bool pressed, Vector2I? snapped)
+    {
+        if (pressed)
+        {
+            if (snapped is null) return;
+            _flattenStart = snapped;
+            _flattenHeight = _field.Get(snapped.Value.X, snapped.Value.Y);
+            _overlay.SetRectPreview(snapped, snapped);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (_flattenStart is null) return;
+        var start = _flattenStart.Value;
+        _flattenStart = null;
+        _overlay.SetRectPreview(null, null);
+
+        if (snapped is null) return;
+        var end = snapped.Value;
+        var minX = Math.Min(start.X, end.X);
+        var maxX = Math.Max(start.X, end.X);
+        var minY = Math.Min(start.Y, end.Y);
+        var maxY = Math.Max(start.Y, end.Y);
+        for (var y = minY; y <= maxY; y++)
+        {
+            for (var x = minX; x <= maxX; x++)
+            {
+                _field.Set(x, y, _flattenHeight);
+            }
+        }
+        GetViewport().SetInputAsHandled();
+    }
+
     public override void _Process(double delta)
+    {
+        if (_flattenStart is not null)
+        {
+            _overlay.SetRectPreview(_flattenStart, _overlay.SnappedVertex);
+        }
+        DrainDirtyAndRebuild();
+    }
+
+    private void DrainDirtyAndRebuild()
     {
         if (!_field.HasDirtyRegion) return;
         _field.TryConsumeDirtyRegion(out _, out _, out _, out _);
         // TODO: chunked partial rebuild. For now full rebuild every edit.
         _terrain.Build(_field);
     }
+
 }

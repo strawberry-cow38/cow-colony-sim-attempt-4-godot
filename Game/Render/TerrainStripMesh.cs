@@ -43,8 +43,12 @@ internal static class TerrainStripMesh
                 var p01 = new Vector3(x0, h01, y1);
                 var p11 = new Vector3(x1, h11, y1);
 
-                verts[v++] = p00; verts[v++] = p10; verts[v++] = p11;
-                verts[v++] = p00; verts[v++] = p11; verts[v++] = p01;
+                // Match TerrainMeshBuilder diagonal (TR→BL) so the strip lies
+                // exactly on the terrain plane on non-coplanar quads — the
+                // opposite diagonal would dip below at hill corners and the
+                // hover offset wouldn't be enough to clear it.
+                verts[v++] = p00; verts[v++] = p10; verts[v++] = p01;
+                verts[v++] = p10; verts[v++] = p11; verts[v++] = p01;
             }
         }
 

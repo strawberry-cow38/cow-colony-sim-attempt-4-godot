@@ -1,3 +1,4 @@
+using CowColonySim.Sim.Logging;
 using Godot;
 
 namespace CowColonySim.Game.Camera;
@@ -48,8 +49,14 @@ public partial class CameraRig : Node3D
             Name = "Camera",
             Position = new Vector3(0f, 0f, _distance),
             Far = 20_000f,
+            Current = true,
         };
         _pitchPivot.AddChild(_camera);
+        _camera.MakeCurrent();
+
+        SimLog.Logger.Information(
+            "CameraRig ready. Pivot at {Pos}, bounds {Bounds}, distance {Dist}.",
+            Position, _boundsMax, _distance);
     }
 
     public override void _Process(double delta)

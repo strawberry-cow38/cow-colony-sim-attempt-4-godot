@@ -1,19 +1,23 @@
 using System.Diagnostics;
 using CowColonySim.Sim.Systems;
+using CowColonySim.Sim.World;
 
 namespace CowColonySim.Sim;
 
-// Owns the dedicated SimThread and the scheduler. Pre-pre-game: no entities
-// yet, just a fixed-step tick loop other systems can hook into.
+// Owns the dedicated SimThread, the scheduler, and the world. Pre-pre-game:
+// no real systems yet, just a fixed-step tick loop other systems can hook
+// into and a Friflo EntityStore behind SimWorld.
 public sealed class SimRuntime : IDisposable
 {
     private readonly Scheduler _scheduler = new();
+    private readonly SimWorld _world = new();
     private readonly CancellationTokenSource _cts = new();
     private Thread? _thread;
     private long _tick;
     private bool _disposed;
 
     public Scheduler Scheduler => _scheduler;
+    public SimWorld World => _world;
     public long TickNumber => Interlocked.Read(ref _tick);
 
     public void Start()

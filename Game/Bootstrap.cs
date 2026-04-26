@@ -11,7 +11,9 @@ public partial class Bootstrap : Node3D
     {
         _runtime = new SimRuntime();
         _runtime.Start();
-        GD.Print($"Bootstrap ready. SimThread running at {SimConstants.TickRateHz} Hz.");
+        GD.Print(
+            $"Bootstrap ready. SimThread running at {SimConstants.TickRateHz} Hz. " +
+            $"World has {_runtime.World.EntityCount} entities.");
     }
 
     public override void _ExitTree()

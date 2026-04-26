@@ -4,4 +4,7 @@
     <RootNamespace>CowColonySim.Sim</RootNamespace>
     <AssemblyName>CowColonySim.Sim</AssemblyName>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Friflo.Engine.ECS" Version="3.4.0" />
+  </ItemGroup>
 </Project>

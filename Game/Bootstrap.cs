@@ -48,6 +48,7 @@ public partial class Bootstrap : Node3D
         AddSun();
         AddCameraRig();
         AddTerrain(_heightfield);
+        AddBorderWall();
         AddBackground(_genSettings);
         AddVertexOverlay(_heightfield);
         AddColonists(_runtime, _heightfield);
@@ -146,6 +147,13 @@ public partial class Bootstrap : Node3D
         var terrain = new TerrainRenderer { Name = "Terrain" };
         AddChild(terrain);
         terrain.Build(field);
+    }
+
+    private void AddBorderWall()
+    {
+        var wall = new BorderWall { Name = "BorderWall" };
+        AddChild(wall);
+        wall.Build(PreviewTileCount);
     }
 
     private void AddVertexOverlay(Heightfield field)

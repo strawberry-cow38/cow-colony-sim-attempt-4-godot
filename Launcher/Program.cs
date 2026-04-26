@@ -36,12 +36,11 @@ internal static class Program
             await using var apiStream = await resp.Content.ReadAsStreamAsync();
             using var doc = await JsonDocument.ParseAsync(apiStream);
             var root = doc.RootElement;
-            var publishedAt = root.TryGetProperty("published_at", out var p) ? p.GetString() ?? "" : "";
-            var sha = root.TryGetProperty("target_commitish", out var t) ? t.GetString() ?? "" : "";
-            var remoteVersion = $"{publishedAt}|{sha}";
 
             string? zipUrl = null;
             string? zipName = null;
+            string assetUpdatedAt = "";
+            long assetSize = 0;
             if (root.TryGetProperty("assets", out var assets))
             {
                 foreach (var asset in assets.EnumerateArray())
@@ -51,9 +50,15 @@ internal static class Program
                     if (!name.Contains("windows", StringComparison.OrdinalIgnoreCase)) continue;
                     zipName = name;
                     zipUrl = asset.GetProperty("browser_download_url").GetString();
+                    assetUpdatedAt = asset.TryGetProperty("updated_at", out var u) ? u.GetString() ?? "" : "";
+                    assetSize = asset.TryGetProperty("size", out var s) ? s.GetInt64() : 0;
                     break;
                 }
             }
+            // Use asset.updated_at + size as the version key. release.published_at
+            // does NOT change when softprops/action-gh-release@v2 replaces assets
+            // on an existing tag, so it can't be used to detect new builds.
+            var remoteVersion = $"{assetUpdatedAt}|{assetSize}";
             if (zipUrl is null)
             {
                 Console.Error.WriteLine("No Windows zip asset on the 'latest' release yet.");

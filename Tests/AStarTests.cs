@@ -75,6 +75,33 @@ public class AStarTests
     }
 
     [Fact]
+    public void Path_z_components_match_floor_layer_on_sloped_terrain()
+    {
+        var field = new Heightfield(8, 8);
+        // Plateau on the right half: vertices x=4..7 raised by 2 quanta.
+        for (var vy = 0; vy < 8; vy++)
+        {
+            for (var vx = 4; vx < 8; vx++)
+            {
+                field.Set(vx, vy, 2);
+            }
+        }
+        var grid = new HeightGrid(field);
+        var path = new List<TileCoord>();
+
+        var start = grid.At(0, 0);
+        var goal = grid.At(6, 0);
+        var ok = AStar.TryFind(grid, start, goal, path);
+
+        Assert.True(ok);
+        foreach (var t in path)
+        {
+            Assert.Equal(grid.FloorLayer(t.X, t.Y), t.Z);
+        }
+        Assert.Contains(path, t => t.Z > 0);
+    }
+
+    [Fact]
     public void Returns_false_when_goal_unreachable()
     {
         var field = new Heightfield(6, 6);

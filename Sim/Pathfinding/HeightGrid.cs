@@ -9,9 +9,11 @@ namespace CowColonySim.Sim.Pathfinding;
 // don't squeeze through impassable cliff corners.
 //
 // Z (floor layer) is derived from the heightfield: Z = round(centerQuanta/2)
-// so a 1.5 m vertical step = 1 layer = 2 quanta. On a single-floor world
-// every (x, y) maps to one Z; later phases will allow multiple Z per (x, y)
-// for stairs/ramps and the A* graph will expand across the new transitions.
+// so a 1.5 m vertical step = 1 layer = 2 quanta. The graph is queried
+// through LayerCountAt(x, y) + LayerAt(x, y, idx) so that A* can enumerate
+// every walkable surface at a tile. Today each (x, y) reports exactly one
+// layer (the terrain floor); ramps and stairs will plug in by reporting
+// extra layers without changing AStar.
 //
 // Pure-data immutable view: thread-safe to share across A* workers as long
 // as the underlying Heightfield isn't being mutated concurrently.
@@ -40,6 +42,17 @@ public sealed class HeightGrid
 
     public int FloorLayer(int x, int y) =>
         (int)MathF.Round(CenterQuanta(x, y) * 0.5f);
+
+    // How many distinct walkable surfaces exist at this tile. Today: 1 (the
+    // terrain floor). Ramps/stairs will return >1.
+    public int LayerCountAt(int x, int y) => 1;
+
+    // The Z value of the idx-th walkable surface at (x, y). idx must be in
+    // [0, LayerCountAt(x, y)).
+    public int LayerAt(int x, int y, int idx) => FloorLayer(x, y);
+
+    // Convenience: build a TileCoord for the idx-th walkable surface at (x, y).
+    public TileCoord NodeAt(int x, int y, int idx) => new(x, y, LayerAt(x, y, idx));
 
     public bool CanStep(TileCoord from, TileCoord to)
     {

@@ -1,9 +1,15 @@
 namespace CowColonySim.Sim.Pathfinding;
 
-// Plain 8-connected A* over a HeightGrid. Each call allocates its own
-// scratch buffers, so the function is thread-safe — multiple workers can
-// run TryFind in parallel against a shared HeightGrid as long as the
-// underlying Heightfield isn't being mutated.
+// 8-connected 3D A* over a HeightGrid. Each call allocates its own scratch
+// dictionaries, so the function is thread-safe — multiple workers can run
+// TryFind in parallel against a shared HeightGrid as long as the underlying
+// Heightfield isn't being mutated.
+//
+// Nodes are full TileCoords (X, Y, Z); neighbours are enumerated via
+// HeightGrid.LayerCountAt + LayerAt so a tile that exposes multiple
+// walkable surfaces (a ramp or stair) lights up extra edges without any
+// change here. Sparse Dictionary scratch — cost scales with explored
+// frontier, not Width*Height*LayerRange.
 public static class AStar
 {
     private static readonly (int dx, int dy)[] Neighbours =
@@ -23,68 +29,64 @@ public static class AStar
             return true;
         }
 
-        var size = grid.Width * grid.Height;
-        var gScore = new float[size];
-        var came = new int[size];
-        var visited = new bool[size];
-        Array.Fill(gScore, float.PositiveInfinity);
-        Array.Fill(came, -1);
+        var gScore = new Dictionary<TileCoord, float>();
+        var came = new Dictionary<TileCoord, TileCoord>();
+        var visited = new HashSet<TileCoord>();
+        var open = new PriorityQueue<TileCoord, float>();
 
-        var open = new PriorityQueue<int, float>();
-        var startIdx = Index(grid, start);
-        var goalIdx = Index(grid, goal);
-        gScore[startIdx] = 0f;
-        open.Enqueue(startIdx, HeightGrid.OctileHeuristic(start, goal));
+        gScore[start] = 0f;
+        open.Enqueue(start, HeightGrid.OctileHeuristic(start, goal));
 
-        while (open.TryDequeue(out var currentIdx, out _))
+        while (open.TryDequeue(out var current, out _))
         {
-            if (visited[currentIdx]) continue;
-            visited[currentIdx] = true;
-            if (currentIdx == goalIdx)
+            if (!visited.Add(current)) continue;
+            if (current == goal)
             {
-                Reconstruct(came, currentIdx, startIdx, grid, outPath);
+                Reconstruct(came, current, start, outPath);
                 return true;
             }
 
-            var current = FromIndex(grid, currentIdx);
+            var currentG = gScore[current];
             for (var i = 0; i < Neighbours.Length; i++)
             {
                 var (dx, dy) = Neighbours[i];
                 var nx = current.X + dx;
                 var ny = current.Y + dy;
                 if ((uint)nx >= (uint)grid.Width || (uint)ny >= (uint)grid.Height) continue;
-                var next = grid.At(nx, ny);
-                if (!grid.CanStep(current, next)) continue;
-                var nextIdx = Index(grid, next);
-                if (visited[nextIdx]) continue;
-                var tentative = gScore[currentIdx] + grid.StepCost(current, next);
-                if (tentative < gScore[nextIdx])
+
+                var layerCount = grid.LayerCountAt(nx, ny);
+                for (var li = 0; li < layerCount; li++)
                 {
-                    gScore[nextIdx] = tentative;
-                    came[nextIdx] = currentIdx;
-                    var f = tentative + HeightGrid.OctileHeuristic(next, goal);
-                    open.Enqueue(nextIdx, f);
+                    var next = grid.NodeAt(nx, ny, li);
+                    if (!grid.CanStep(current, next)) continue;
+                    if (visited.Contains(next)) continue;
+                    var tentative = currentG + grid.StepCost(current, next);
+                    if (!gScore.TryGetValue(next, out var existing) || tentative < existing)
+                    {
+                        gScore[next] = tentative;
+                        came[next] = current;
+                        var f = tentative + HeightGrid.OctileHeuristic(next, goal);
+                        open.Enqueue(next, f);
+                    }
                 }
             }
         }
         return false;
     }
 
-    private static int Index(HeightGrid grid, TileCoord t) => t.Y * grid.Width + t.X;
-
-    private static TileCoord FromIndex(HeightGrid grid, int idx) =>
-        grid.At(idx % grid.Width, idx / grid.Width);
-
     private static void Reconstruct(
-        int[] came, int goalIdx, int startIdx, HeightGrid grid, List<TileCoord> outPath)
+        Dictionary<TileCoord, TileCoord> came,
+        TileCoord goal,
+        TileCoord start,
+        List<TileCoord> outPath)
     {
-        var idx = goalIdx;
-        while (idx != startIdx)
+        var node = goal;
+        while (node != start)
         {
-            outPath.Add(FromIndex(grid, idx));
-            idx = came[idx];
+            outPath.Add(node);
+            node = came[node];
         }
-        outPath.Add(FromIndex(grid, startIdx));
+        outPath.Add(start);
         outPath.Reverse();
     }
 }

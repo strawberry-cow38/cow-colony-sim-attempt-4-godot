@@ -22,7 +22,7 @@ public class SnapshotPublisherTests
     }
 
     [Fact]
-    public void Latest_publish_wins_under_concurrent_writes()
+    public async Task Latest_publish_wins_under_concurrent_writes()
     {
         var pub = new SnapshotPublisher();
         var done = new ManualResetEventSlim(false);
@@ -43,7 +43,7 @@ public class SnapshotPublisherTests
             Assert.True(t >= lastSeen, $"Snapshot tick went backwards: {lastSeen} -> {t}");
             lastSeen = t;
         }
-        writer.Wait();
+        await writer;
         Assert.Equal(10_000, pub.Current.TickNumber);
     }
 }

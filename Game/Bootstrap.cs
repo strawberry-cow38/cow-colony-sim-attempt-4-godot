@@ -60,6 +60,7 @@ public partial class Bootstrap : Node3D
         AddInfoPanel(selection, _runtime);
         AddPerfHud(_runtime);
         AddTimeHud(_runtime);
+        AddBuildBar();
 
         SimLog.Logger.Information(
             "Bootstrap ready. SimThread at {Hz} Hz. World has {Count} entities. " +
@@ -238,6 +239,15 @@ public partial class Bootstrap : Node3D
         var panel = new InfoPanel { Name = "InfoPanel" };
         panel.Configure(selection, runtime.Publisher);
         AddChild(panel);
+    }
+
+    private void AddBuildBar()
+    {
+        var tools = new BuildToolService { Name = "BuildTools" };
+        AddChild(tools);
+        var bar = new BuildBar { Name = "BuildBar" };
+        bar.Configure(tools);
+        AddChild(bar);
     }
 
     public override void _ExitTree()

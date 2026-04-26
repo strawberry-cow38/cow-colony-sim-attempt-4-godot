@@ -10,4 +10,5 @@ public enum DesignationKind
     ChopTree = 0,
     Mine = 1,
     Harvest = 2,
+    CutPlant = 3,
 }

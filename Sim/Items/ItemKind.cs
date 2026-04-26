@@ -6,4 +6,5 @@ public enum ItemKind
 {
     None = 0,
     Wood = 1,
+    Wheat = 2,
 }

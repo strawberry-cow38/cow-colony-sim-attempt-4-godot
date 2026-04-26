@@ -1,3 +1,5 @@
+using CowColonySim.Sim.Items;
+
 namespace CowColonySim.Sim.Plants;
 
 // Stable ids for the plant catalog. Trees use Tree; future crops slot
@@ -20,7 +22,9 @@ public readonly record struct CropDef(
     bool IsTree,
     float GrowthPerTickAtFullSun,
     float MinSunlightFraction,
-    int LifespanTicks);
+    int LifespanTicks,
+    ItemKind YieldItemKind,
+    int YieldCount);
 
 public static class CropCatalog
 {
@@ -37,11 +41,15 @@ public static class CropCatalog
             [CropDefIds.Tree] = new(CropDefIds.Tree, "Tree", IsTree: true,
                 GrowthPerTickAtFullSun: 0.05f,
                 MinSunlightFraction: 0.51f,
-                LifespanTicks: 60 * 60 * 30), // ~30 min real-time fully grown before wither
+                LifespanTicks: 60 * 60 * 30, // ~30 min real-time fully grown before wither
+                YieldItemKind: ItemKind.Wood,
+                YieldCount: 5),
             [CropDefIds.Wheat] = new(CropDefIds.Wheat, "Wheat", IsTree: false,
                 GrowthPerTickAtFullSun: 0.20f,
                 MinSunlightFraction: 0.51f,
-                LifespanTicks: 60 * 60 * 5),
+                LifespanTicks: 60 * 60 * 5,
+                YieldItemKind: ItemKind.Wheat,
+                YieldCount: 1),
         };
         return d;
     }

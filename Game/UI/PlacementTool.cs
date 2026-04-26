@@ -204,6 +204,7 @@ public partial class PlacementTool : Node
                 "designate.chop_tree" => DesignationKind.ChopTree,
                 "designate.mine" => DesignationKind.Mine,
                 "designate.harvest" => DesignationKind.Harvest,
+                "designate.cut_plant" => DesignationKind.CutPlant,
                 _ => (DesignationKind?)null,
             };
             if (kind is null) return;
@@ -366,6 +367,7 @@ public partial class PlacementTool : Node
         "designate.chop_tree" => new Color(0.95f, 0.25f, 0.20f, 0.30f),
         "designate.mine" => new Color(0.55f, 0.55f, 0.6f, 0.30f),
         "designate.harvest" => new Color(0.95f, 0.85f, 0.30f, 0.30f),
+        "designate.cut_plant" => new Color(0.95f, 0.55f, 0.20f, 0.30f),
         "edit.erase" => new Color(0.95f, 0.20f, 0.20f, 0.35f),
         _ => new Color(0.3f, 0.55f, 0.95f, 0.30f),
     };

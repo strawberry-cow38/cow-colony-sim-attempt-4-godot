@@ -24,6 +24,7 @@ public partial class DesignationsRenderer : Node3D
     private MultiMeshInstance3D _chop = null!;
     private MultiMeshInstance3D _mine = null!;
     private MultiMeshInstance3D _harvest = null!;
+    private MultiMeshInstance3D _cut = null!;
 
     public void Configure(SnapshotPublisher publisher, Heightfield heightfield)
     {
@@ -37,9 +38,11 @@ public partial class DesignationsRenderer : Node3D
         _chop = MakeBucket("ChopMarkers", new Color(0.95f, 0.25f, 0.20f));
         _mine = MakeBucket("MineMarkers", new Color(0.55f, 0.55f, 0.6f));
         _harvest = MakeBucket("HarvestMarkers", new Color(0.95f, 0.85f, 0.30f));
+        _cut = MakeBucket("CutMarkers", new Color(0.95f, 0.55f, 0.20f));
         AddChild(_chop);
         AddChild(_mine);
         AddChild(_harvest);
+        AddChild(_cut);
     }
 
     private MultiMeshInstance3D MakeBucket(string name, Color color)
@@ -78,7 +81,7 @@ public partial class DesignationsRenderer : Node3D
         var treeTiles = new HashSet<(int, int)>(trees.Count);
         for (var i = 0; i < trees.Count; i++) treeTiles.Add((trees[i].TileX, trees[i].TileY));
 
-        var chopN = 0; var mineN = 0; var harvestN = 0;
+        var chopN = 0; var mineN = 0; var harvestN = 0; var cutN = 0;
         for (var i = 0; i < ds.Count; i++)
         {
             var d = ds[i];
@@ -89,14 +92,16 @@ public partial class DesignationsRenderer : Node3D
                     break;
                 case DesignationKind.Mine: mineN++; break;
                 case DesignationKind.Harvest: harvestN++; break;
+                case DesignationKind.CutPlant: cutN++; break;
             }
         }
         EnsureCount(_chop, chopN);
         EnsureCount(_mine, mineN);
         EnsureCount(_harvest, harvestN);
+        EnsureCount(_cut, cutN);
 
         var hoverUnits = HoverMeters * _unitsPerMeter;
-        var ci = 0; var mi = 0; var hi = 0;
+        var ci = 0; var mi = 0; var hi = 0; var cuti = 0;
         for (var i = 0; i < ds.Count; i++)
         {
             var d = ds[i];
@@ -113,6 +118,7 @@ public partial class DesignationsRenderer : Node3D
                 case DesignationKind.ChopTree: _chop.Multimesh.SetInstanceTransform(ci++, xf); break;
                 case DesignationKind.Mine: _mine.Multimesh.SetInstanceTransform(mi++, xf); break;
                 case DesignationKind.Harvest: _harvest.Multimesh.SetInstanceTransform(hi++, xf); break;
+                case DesignationKind.CutPlant: _cut.Multimesh.SetInstanceTransform(cuti++, xf); break;
             }
         }
     }

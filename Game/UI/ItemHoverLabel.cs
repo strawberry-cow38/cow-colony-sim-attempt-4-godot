@@ -131,6 +131,7 @@ public partial class ItemHoverLabel : Node3D
     private static string KindLabel(ItemKind kind) => kind switch
     {
         ItemKind.Wood => "wood",
+        ItemKind.Wheat => "wheat",
         _ => "item",
     };
 }

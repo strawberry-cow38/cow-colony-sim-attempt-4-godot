@@ -8,4 +8,6 @@ public enum WorkKind
     None = 0,
     ChopTree = 1,
     HaulItem = 2,
+    CutPlant = 3,
+    HarvestPlant = 4,
 }

@@ -47,6 +47,7 @@ public partial class BuildBar : CanvasLayer
                 new Tool("designate.chop_tree", "Chop Trees (drag rect)"),
                 new Tool("designate.mine",      "Mine (drag rect)"),
                 new Tool("designate.harvest",   "Harvest (drag rect)"),
+                new Tool("designate.cut_plant", "Cut Plants (drag rect)"),
             }),
         };
 

@@ -257,12 +257,14 @@ public partial class InfoPanel : CanvasLayer
     private static string KindLabel(ItemKind kind) => kind switch
     {
         ItemKind.Wood => "wood",
+        ItemKind.Wheat => "wheat",
         _ => "item",
     };
 
     private static string KindDescription(ItemKind kind) => kind switch
     {
         ItemKind.Wood => "rough cut from a felled pine. fuel, walls, and tool handles. stacks to 50.",
+        ItemKind.Wheat => "harvested grain. food crop yield. stacks to 50.",
         _ => "raw resource.",
     };
 
@@ -319,6 +321,8 @@ public partial class InfoPanel : CanvasLayer
     {
         WorkKind.ChopTree => "chopping",
         WorkKind.HaulItem => "hauling",
+        WorkKind.CutPlant => "cutting",
+        WorkKind.HarvestPlant => "harvesting",
         _ => "working",
     };
 }

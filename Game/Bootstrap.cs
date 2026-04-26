@@ -44,6 +44,7 @@ public partial class Bootstrap : Node3D
         SpawnNeedSpots(_runtime);
         _runtime.Start();
 
+        AddEnvironment();
         AddSun();
         AddCameraRig();
         AddTerrain(_heightfield);
@@ -81,13 +82,36 @@ public partial class Bootstrap : Node3D
         runtime.World.SpawnNeedSpot(NeedKind.Energy, center, center + 6);
     }
 
+    // Sky-driven ambient so faceted-terrain backsides aren't pitch-black.
+    // Faceted geometry is locked (4 unshared corners per tile) — when a tile
+    // has 1 low + 3 high corners the flat normal points away from the sun
+    // and gets nothing without an ambient term. Don't fix that by welding
+    // verts. Fix it by giving the sky a real contribution.
+    private void AddEnvironment()
+    {
+        var sky = new Sky { SkyMaterial = new ProceduralSkyMaterial() };
+        var env = new Godot.Environment
+        {
+            BackgroundMode = Godot.Environment.BGMode.Sky,
+            Sky = sky,
+            AmbientLightSource = Godot.Environment.AmbientSource.Sky,
+            AmbientLightSkyContribution = 1.0f,
+            AmbientLightEnergy = 1.0f,
+            ReflectedLightSource = Godot.Environment.ReflectionSource.Sky,
+            TonemapMode = Godot.Environment.ToneMapper.Filmic,
+            TonemapExposure = 1.0f,
+        };
+        var node = new WorldEnvironment { Name = "World", Environment = env };
+        AddChild(node);
+    }
+
     private void AddSun()
     {
         var sun = new DirectionalLight3D
         {
             Name = "Sun",
             ShadowEnabled = true,
-            LightEnergy = 0.9f,
+            LightEnergy = 1.1f,
             ShadowBias = 0.5f,
             ShadowNormalBias = 2.5f,
         };

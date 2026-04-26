@@ -6,14 +6,16 @@ using Godot;
 
 namespace CowColonySim.Game.Render;
 
-// Reads SimSnapshot.Designations each frame and floats a colored cube
-// over each designated tile. Color picks per DesignationKind — red
-// for ChopTree, gray for Mine, yellow for Harvest. Dummy renderer;
-// real version will draw kind-specific glyphs.
+// Reads SimSnapshot.Designations each frame and lays a small flat
+// ground decal on each designated tile. Color picks per DesignationKind
+// — red for ChopTree, gray for Mine, yellow for Harvest. Decals hug
+// the ground so a chopped-tree-area no longer reads as a forest of
+// floating cubes (which felt like a zone). Real version will draw
+// kind-specific glyphs over actual targets.
 public partial class DesignationsRenderer : Node3D
 {
-    private const float MarkerSizeMeters = 0.35f;
-    private const float HoverMeters = 1.2f;
+    private const float MarkerSizeMeters = 0.7f;
+    private const float HoverMeters = 0.05f;
 
     private SnapshotPublisher _publisher = null!;
     private Heightfield _heightfield = null!;
@@ -43,13 +45,15 @@ public partial class DesignationsRenderer : Node3D
     private MultiMeshInstance3D MakeBucket(string name, Color color)
     {
         var sizeUnits = MarkerSizeMeters * _unitsPerMeter;
-        var box = new BoxMesh
+        var plane = new PlaneMesh
         {
-            Size = new Vector3(sizeUnits, sizeUnits, sizeUnits),
+            Size = new Vector2(sizeUnits, sizeUnits),
             Material = new StandardMaterial3D
             {
-                AlbedoColor = color,
+                AlbedoColor = new Color(color.R, color.G, color.B, 0.85f),
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             },
         };
         return new MultiMeshInstance3D
@@ -58,7 +62,7 @@ public partial class DesignationsRenderer : Node3D
             Multimesh = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-                Mesh = box,
+                Mesh = plane,
                 InstanceCount = 0,
             },
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,

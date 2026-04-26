@@ -10,4 +10,5 @@ public readonly record struct TreeView(
     int TileY,
     int Health,
     uint VariantSeed,
-    bool BeingChopped);
+    bool BeingChopped,
+    int HitCount);

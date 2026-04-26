@@ -16,7 +16,8 @@ namespace CowColonySim.Sim.Systems;
 // stays Active but doesn't progress — when needs settle it resumes.
 public sealed class ChopJobSystem : ITickSystem
 {
-    private const float ChopRatePerSec = 2f;
+    private const float ChopIntervalSec = 0.55f;
+    private const int DamagePerChop = 3;
     private const int WoodPerTree = 5;
 
     private readonly SimWorld _world;
@@ -148,12 +149,12 @@ public sealed class ChopJobSystem : ITickSystem
             return;
         }
         ref var t = ref tree.GetComponent<Tree>();
-        work.Progress += ChopRatePerSec * dt;
-        var whole = (int)work.Progress;
-        if (whole > 0)
+        work.Progress += dt;
+        if (work.Progress >= ChopIntervalSec)
         {
-            work.Progress -= whole;
-            t.Health -= whole;
+            work.Progress -= ChopIntervalSec;
+            t.Health -= DamagePerChop;
+            t.HitCount++;
         }
         if (t.Health <= 0)
         {

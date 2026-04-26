@@ -10,4 +10,7 @@ public struct Tree : IComponent
 {
     public int Health;
     public uint VariantSeed;
+    // Increments once per discrete chop hit. Renderer/audio side reads it
+    // off the snapshot to fire a thwack SFX exactly when health drops.
+    public int HitCount;
 }

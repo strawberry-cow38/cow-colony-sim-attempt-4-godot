@@ -5,12 +5,13 @@ using Godot;
 
 namespace CowColonySim.Game.Audio;
 
-// Plays a one-shot axe thwack each time a chopped tree's wobble hits its
-// peak. Pitch is randomized per play so a forest of choppers doesn't sound
-// like a metronome. Players are pooled and recycled when finished.
+// Plays a one-shot axe thwack exactly once per discrete chop hit. The
+// sim increments Tree.HitCount every time a colonist deals damage; this
+// node diffs that counter against the last seen value and fires one play
+// per increment. Pitch + volume are randomized so a forest of choppers
+// doesn't sound like a metronome.
 public partial class ChopAudio : Node3D
 {
-    private const float ChopIntervalSec = 0.55f;
     private const float MinPitch = 0.85f;
     private const float MaxPitch = 1.18f;
     private const float MaxDistance = 4000f;
@@ -19,9 +20,8 @@ public partial class ChopAudio : Node3D
     private Heightfield _heightfield = null!;
     private float _unitsPerMeter;
     private AudioStream? _stream;
-    private readonly Dictionary<int, float> _nextPlayAt = new();
+    private readonly Dictionary<int, int> _lastHitCount = new();
     private readonly List<AudioStreamPlayer3D> _pool = new();
-    private float _time;
     private RandomNumberGenerator _rng = new();
 
     public void Configure(SnapshotPublisher publisher, Heightfield heightfield)
@@ -50,7 +50,6 @@ public partial class ChopAudio : Node3D
     public override void _Process(double delta)
     {
         if (_stream is null) return;
-        _time += (float)delta;
 
         var snap = _publisher.Current;
         var trees = snap.Trees;
@@ -59,26 +58,31 @@ public partial class ChopAudio : Node3D
         for (var i = 0; i < trees.Count; i++)
         {
             var t = trees[i];
-            if (!t.BeingChopped) continue;
             seenIds.Add(t.EntityId);
-            if (!_nextPlayAt.TryGetValue(t.EntityId, out var nextAt))
+            if (!_lastHitCount.TryGetValue(t.EntityId, out var last))
             {
-                nextAt = _time + _rng.RandfRange(0.0f, ChopIntervalSec);
-                _nextPlayAt[t.EntityId] = nextAt;
+                _lastHitCount[t.EntityId] = t.HitCount;
                 continue;
             }
-            if (_time < nextAt) continue;
-
-            PlayAt(t);
-            _nextPlayAt[t.EntityId] = _time + ChopIntervalSec * _rng.RandfRange(0.85f, 1.15f);
+            if (t.HitCount > last)
+            {
+                PlayAt(t);
+                _lastHitCount[t.EntityId] = t.HitCount;
+            }
+            else if (t.HitCount < last)
+            {
+                // Friflo recycles entity ids; a new tree on a reused id starts
+                // at HitCount=0, so resync without firing on the rollback.
+                _lastHitCount[t.EntityId] = t.HitCount;
+            }
         }
 
-        if (_nextPlayAt.Count != seenIds.Count)
+        if (_lastHitCount.Count != seenIds.Count)
         {
             var stale = new List<int>();
-            foreach (var key in _nextPlayAt.Keys)
+            foreach (var key in _lastHitCount.Keys)
                 if (!seenIds.Contains(key)) stale.Add(key);
-            foreach (var key in stale) _nextPlayAt.Remove(key);
+            foreach (var key in stale) _lastHitCount.Remove(key);
         }
     }
 
@@ -96,9 +100,9 @@ public partial class ChopAudio : Node3D
         player.Position = new Vector3(x, y, z);
         player.Stream = _stream;
         player.PitchScale = _rng.RandfRange(MinPitch, MaxPitch);
-        player.VolumeDb = _rng.RandfRange(-2f, 1f);
+        player.VolumeDb = _rng.RandfRange(-10f, -6f);
         player.MaxDistance = MaxDistance;
-        player.UnitSize = 50f;
+        player.UnitSize = 30f;
         player.Play();
     }
 

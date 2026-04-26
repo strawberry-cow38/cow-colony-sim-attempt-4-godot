@@ -48,7 +48,6 @@ public partial class Bootstrap : Node3D
         AddSun();
         AddCameraRig();
         AddTerrain(_heightfield);
-        AddShadowProbe();
         AddBackground(_genSettings);
         AddVertexOverlay(_heightfield);
         AddColonists(_runtime, _heightfield);
@@ -147,28 +146,6 @@ public partial class Bootstrap : Node3D
         var terrain = new TerrainRenderer { Name = "Terrain" };
         AddChild(terrain);
         terrain.Build(field);
-    }
-
-    // TEMP shadow probe: a giant red cube floating above the camera-spawn
-    // area. If the directional light shadow pipeline is alive this MUST cast
-    // a huge unmissable shadow on the grass below it. If it doesn't cast,
-    // shadows are broken for everything (not just multimesh).
-    private void AddShadowProbe()
-    {
-        var center = PreviewTileCount / 2;
-        var pos = new Vector3(
-            center * SimConstants.GodotUnitsPerTile,
-            120f,
-            center * SimConstants.GodotUnitsPerTile);
-        var cube = new MeshInstance3D
-        {
-            Name = "ShadowProbe",
-            Mesh = new BoxMesh { Size = new Vector3(60f, 60f, 60f) },
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(1f, 0f, 0f) },
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
-            Position = pos,
-        };
-        AddChild(cube);
     }
 
     private void AddVertexOverlay(Heightfield field)

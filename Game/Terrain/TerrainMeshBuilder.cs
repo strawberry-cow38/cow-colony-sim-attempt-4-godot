@@ -71,11 +71,11 @@ public static class TerrainMeshBuilder
                 uvs[iBR] = new Vector2(1f, 1f);
 
                 indices[ii++] = iTL;
-                indices[ii++] = iBL;
-                indices[ii++] = iTR;
                 indices[ii++] = iTR;
                 indices[ii++] = iBL;
+                indices[ii++] = iTR;
                 indices[ii++] = iBR;
+                indices[ii++] = iBL;
 
                 vi += 4;
             }

@@ -73,15 +73,20 @@ jobs:
           # Import sometimes exits non-zero on first run; verify .godot exists.
           if (-not (Test-Path .godot)) { throw "Godot import failed" }
 
-      - name: Build .NET (ExportRelease)
-        run: dotnet build CowColonySim.sln -c ExportRelease --nologo
-
       - name: Export Windows Desktop
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           New-Item -ItemType Directory -Force -Path build/win | Out-Null
-          & "${{ steps.gd.outputs.exe }}" --headless --path . --export-release "Windows Desktop" "$(Resolve-Path build/win)\CowColonySim.exe"
-          if (-not (Test-Path build/win/CowColonySim.exe)) { throw "Export missing CowColonySim.exe" }
+          $out = "$((Resolve-Path build/win).Path)\CowColonySim.exe"
+          & "${{ steps.gd.outputs.exe }}" --headless --verbose --path . --export-release "Windows Desktop" $out 2>&1 | Tee-Object -Variable godotLog | Out-Host
+          $code = $LASTEXITCODE
+          Write-Host "godot exit code: $code"
+          if (-not (Test-Path $out)) {
+            Write-Host "===== last 200 lines of godot output ====="
+            $godotLog | Select-Object -Last 200 | ForEach-Object { Write-Host $_ }
+            throw "Export missing CowColonySim.exe (godot exit $code)"
+          }
 
       - name: Package zip
         shell: pwsh

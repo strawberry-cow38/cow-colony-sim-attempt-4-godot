@@ -21,12 +21,9 @@ public partial class BorderWall : Node3D
 
         var mat = new StandardMaterial3D
         {
-            AlbedoColor = new Color(0.65f, 0.65f, 0.65f, 0.25f),
+            AlbedoColor = new Color(0.30f, 0.30f, 0.30f, 0.30f),
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
             ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            EmissionEnabled = true,
-            Emission = new Color(0.65f, 0.65f, 0.65f),
-            EmissionEnergyMultiplier = 0.2f,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
         };
 

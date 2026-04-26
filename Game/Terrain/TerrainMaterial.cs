@@ -17,8 +17,9 @@ public static class TerrainMaterial
         {
             AlbedoTexture = LoadGrass(),
             Uv1Scale = new Vector3(1f, 1f, 1f),
-            Roughness = 0.95f,
+            Roughness = 1.0f,
             Metallic = 0.0f,
+            MetallicSpecular = 0.0f,
             CullMode = BaseMaterial3D.CullModeEnum.Back,
             TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
         };

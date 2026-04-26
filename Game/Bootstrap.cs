@@ -336,7 +336,7 @@ public partial class Bootstrap : Node3D
     private void AddInfoPanel(SelectionService selection, SimRuntime runtime)
     {
         var panel = new InfoPanel { Name = "InfoPanel" };
-        panel.Configure(selection, runtime.Publisher);
+        panel.Configure(selection, runtime.Publisher, runtime.Commands);
         AddChild(panel);
     }
 

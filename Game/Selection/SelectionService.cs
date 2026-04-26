@@ -26,6 +26,7 @@ public partial class SelectionService : Node
 
     public int? SelectedEntityId { get; private set; }
     public int? SelectedZoneId { get; private set; }
+    public int? SelectedTreeId { get; private set; }
     public Vector2? SelectedGroundXZUnits { get; private set; }
 
     public event System.Action? SelectionChanged;
@@ -58,13 +59,11 @@ public partial class SelectionService : Node
 
         if (mb.ButtonIndex == MouseButton.Left)
         {
-            var picked = SelectColonistNearRay(camera, mb.Position);
-            if (!picked)
-            {
-                var tx = (int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile);
-                var ty = (int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile);
-                SelectZoneAtTile(tx, ty);
-            }
+            if (SelectColonistNearRay(camera, mb.Position)) return;
+            if (SelectTreeNearRay(camera, mb.Position)) return;
+            var tx = (int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile);
+            var ty = (int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile);
+            SelectZoneAtTile(tx, ty);
         }
         else if (mb.ButtonIndex == MouseButton.Right && SelectedEntityId is int id)
         {
@@ -85,15 +84,78 @@ public partial class SelectionService : Node
             var z = snap.Zones[i];
             if (tx < z.MinTileX || tx > z.MaxTileX) continue;
             if (ty < z.MinTileY || ty > z.MaxTileY) continue;
-            if (SelectedEntityId is not null) SelectedEntityId = null;
+            ClearOthersExceptZone();
             if (SelectedZoneId == z.ZoneId) return;
             SelectedZoneId = z.ZoneId;
             SelectionChanged?.Invoke();
             return;
         }
-        if (SelectedZoneId is null) return;
+        ClearAll();
+    }
+
+    private void ClearOthersExceptZone()
+    {
+        var changed = false;
+        if (SelectedEntityId is not null) { SelectedEntityId = null; changed = true; }
+        if (SelectedTreeId is not null) { SelectedTreeId = null; changed = true; }
+        if (changed) SelectionChanged?.Invoke();
+    }
+
+    private void ClearAll()
+    {
+        var changed = SelectedEntityId is not null || SelectedZoneId is not null || SelectedTreeId is not null;
+        SelectedEntityId = null;
         SelectedZoneId = null;
+        SelectedTreeId = null;
+        if (changed) SelectionChanged?.Invoke();
+    }
+
+    private bool SelectTreeNearRay(Camera3D camera, Vector2 mousePos)
+    {
+        var origin = camera.ProjectRayOrigin(mousePos);
+        var dir = camera.ProjectRayNormal(mousePos).Normalized();
+
+        var snap = _publisher.Current;
+        var best = -1;
+        var bestDist = float.PositiveInfinity;
+
+        // Tree picking: probe ray against an axis-aligned cylinder ~0.7m
+        // radius * 5m tall around the trunk. Cheaper than triangulating the
+        // multimesh and good enough for click-to-select.
+        var radiusUnits = 0.7f * _unitsPerMeter;
+        var heightUnits = 5.0f * _unitsPerMeter;
+        for (var i = 0; i < snap.Trees.Count; i++)
+        {
+            var t = snap.Trees[i];
+            var metersX = (t.TileX + 0.5f) * SimConstants.MetersPerTile;
+            var metersY = (t.TileY + 0.5f) * SimConstants.MetersPerTile;
+            var x = metersX * _unitsPerMeter;
+            var z = metersY * _unitsPerMeter;
+            var groundY = SampleGroundUnits(metersX, metersY);
+            var center = new Vector3(x, groundY + heightUnits * 0.5f, z);
+            var toC = center - origin;
+            var tParam = toC.Dot(dir);
+            if (tParam < 0f) continue;
+            var closest = origin + dir * tParam;
+            var planar = MathF.Sqrt(
+                (closest.X - center.X) * (closest.X - center.X) +
+                (closest.Z - center.Z) * (closest.Z - center.Z));
+            var verticalOk = MathF.Abs(closest.Y - center.Y) <= heightUnits * 0.5f;
+            if (planar > radiusUnits || !verticalOk) continue;
+            if (tParam < bestDist)
+            {
+                bestDist = tParam;
+                best = t.EntityId;
+            }
+        }
+
+        if (best == -1) return false;
+        if (SelectedTreeId == best) return true;
+        SelectedTreeId = best;
+        if (SelectedEntityId is not null) SelectedEntityId = null;
+        if (SelectedZoneId is not null) SelectedZoneId = null;
         SelectionChanged?.Invoke();
+        return true;
     }
 
     private bool SelectColonistNearRay(Camera3D camera, Vector2 mousePos)
@@ -127,6 +189,7 @@ public partial class SelectionService : Node
         if (best == -1) return false;
         SelectedEntityId = best;
         if (SelectedZoneId is not null) SelectedZoneId = null;
+        if (SelectedTreeId is not null) SelectedTreeId = null;
         SelectionChanged?.Invoke();
         return true;
     }

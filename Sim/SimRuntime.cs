@@ -201,6 +201,17 @@ public sealed class SimRuntime : IDisposable
 
     private TreeView[] BuildTreeViews()
     {
+        var activeChops = new HashSet<int>();
+        var workQuery = _world.Store.Query<Colonist, WorkJob, TilePosition>();
+        foreach (var entity in workQuery.Entities)
+        {
+            ref var w = ref entity.GetComponent<WorkJob>();
+            if (!w.Active || w.TargetEntityId == 0) continue;
+            ref var pos = ref entity.GetComponent<TilePosition>();
+            if (Math.Abs(pos.TileX - w.TargetTileX) > 1 || Math.Abs(pos.TileY - w.TargetTileY) > 1) continue;
+            activeChops.Add(w.TargetEntityId);
+        }
+
         var query = _world.Store.Query<Tree, TilePosition>();
         var views = new TreeView[query.Count];
         var i = 0;
@@ -208,7 +219,7 @@ public sealed class SimRuntime : IDisposable
         {
             ref var t = ref entity.GetComponent<Tree>();
             ref var p = ref entity.GetComponent<TilePosition>();
-            views[i++] = new TreeView(entity.Id, p.TileX, p.TileY, t.Health, t.VariantSeed);
+            views[i++] = new TreeView(entity.Id, p.TileX, p.TileY, t.Health, t.VariantSeed, activeChops.Contains(entity.Id));
         }
         return views;
     }

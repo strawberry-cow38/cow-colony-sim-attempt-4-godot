@@ -46,22 +46,36 @@ public partial class SelectionRing : MeshInstance3D
 
     public override void _Process(double delta)
     {
-        if (_selection.SelectedEntityId is not int selId)
-        {
-            Visible = false;
-            return;
-        }
         var snap = _publisher.Current;
-        for (var i = 0; i < snap.Colonists.Count; i++)
+        if (_selection.SelectedEntityId is int selId)
         {
-            var c = snap.Colonists[i];
-            if (c.EntityId != selId) continue;
-            var x = c.MetersX * _unitsPerMeter;
-            var z = c.MetersY * _unitsPerMeter;
-            var y = SampleGroundUnits(c.MetersX, c.MetersY) + 1f;
-            Position = new Vector3(x, y, z);
-            Visible = true;
-            return;
+            for (var i = 0; i < snap.Colonists.Count; i++)
+            {
+                var c = snap.Colonists[i];
+                if (c.EntityId != selId) continue;
+                var x = c.MetersX * _unitsPerMeter;
+                var z = c.MetersY * _unitsPerMeter;
+                var y = SampleGroundUnits(c.MetersX, c.MetersY) + 1f;
+                Position = new Vector3(x, y, z);
+                Visible = true;
+                return;
+            }
+        }
+        if (_selection.SelectedTreeId is int treeId)
+        {
+            for (var i = 0; i < snap.Trees.Count; i++)
+            {
+                var t = snap.Trees[i];
+                if (t.EntityId != treeId) continue;
+                var metersX = (t.TileX + 0.5f) * SimConstants.MetersPerTile;
+                var metersY = (t.TileY + 0.5f) * SimConstants.MetersPerTile;
+                var x = metersX * _unitsPerMeter;
+                var z = metersY * _unitsPerMeter;
+                var y = SampleGroundUnits(metersX, metersY) + 1f;
+                Position = new Vector3(x, y, z);
+                Visible = true;
+                return;
+            }
         }
         Visible = false;
     }

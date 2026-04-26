@@ -22,6 +22,7 @@ public partial class TreesRenderer : Node3D
     private Heightfield _heightfield = null!;
     private float _unitsPerMeter;
     private MultiMeshInstance3D? _bucket;
+    private float _time;
 
     public void Configure(SnapshotPublisher publisher, Heightfield heightfield)
     {
@@ -117,6 +118,7 @@ public partial class TreesRenderer : Node3D
     public override void _Process(double delta)
     {
         if (_bucket is null) return;
+        _time += (float)delta;
         var snap = _publisher.Current;
         var trees = snap.Trees;
 
@@ -141,6 +143,18 @@ public partial class TreesRenderer : Node3D
             var basis = Basis.Identity
                 .Rotated(Vector3.Up, angle)
                 .Scaled(new Vector3(scale, scale, scale));
+
+            // Wobble while a colonist is hitting the trunk: a small lateral
+            // tilt at ~6Hz, axis-randomized by VariantSeed so adjacent
+            // chopped trees don't pulse in unison.
+            if (t.BeingChopped)
+            {
+                var wobblePhase = _time * 12f + (seed & 0xFFu) * 0.024f;
+                var tilt = MathF.Sin(wobblePhase) * 0.05f;
+                var tiltAxis = new Vector3(MathF.Cos(seed & 0xFu), 0f, MathF.Sin(seed & 0xFu)).Normalized();
+                basis = new Basis(tiltAxis, tilt) * basis;
+            }
+
             var xform = new Transform3D(basis, new Vector3(x, y, z));
             _bucket.Multimesh.SetInstanceTransform(i, xform);
         }

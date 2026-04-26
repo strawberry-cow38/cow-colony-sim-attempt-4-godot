@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using CowColonySim.Sim.Commands;
+using CowColonySim.Sim.Logging;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Systems;
@@ -74,19 +75,31 @@ public sealed class SimRuntime : IDisposable
             var stepTicks = Stopwatch.Frequency / (SimConstants.TickRateHz * speed);
             var current = Interlocked.Increment(ref _tick);
             var ctx = new TickContext(current, SimConstants.FixedDeltaSeconds);
-            _scheduler.Tick(ctx);
-            _publisher.Publish(new SimSnapshot(
-                TickNumber: current,
-                ElapsedSeconds: GameClock.SecondsAt(current),
-                EntityCount: _world.EntityCount,
-                Colonists: BuildColonistViews(),
-                Spots: BuildSpotViews(),
-                Paths: BuildPathViews(),
-                Zones: BuildZoneViews(),
-                Designations: BuildDesignationViews(),
-                BlueprintGhosts: BuildBlueprintGhostViews(),
-                Trees: BuildTreeViews(),
-                Items: BuildItemViews()));
+            try
+            {
+                _scheduler.Tick(ctx);
+                _publisher.Publish(new SimSnapshot(
+                    TickNumber: current,
+                    ElapsedSeconds: GameClock.SecondsAt(current),
+                    EntityCount: _world.EntityCount,
+                    Colonists: BuildColonistViews(),
+                    Spots: BuildSpotViews(),
+                    Paths: BuildPathViews(),
+                    Zones: BuildZoneViews(),
+                    Designations: BuildDesignationViews(),
+                    BlueprintGhosts: BuildBlueprintGhostViews(),
+                    Trees: BuildTreeViews(),
+                    Items: BuildItemViews()));
+            }
+            catch (Exception ex)
+            {
+                // Crash on the sim thread closes the Godot console before
+                // anything reaches stdout. Log to file so post-mortem is
+                // possible, then rethrow so we don't silently corrupt state.
+                SimLog.Logger.Fatal(ex, "Sim tick {Tick} threw", current);
+                Serilog.Log.CloseAndFlush();
+                throw;
+            }
 
             nextTick += stepTicks;
             var now = Stopwatch.GetTimestamp();

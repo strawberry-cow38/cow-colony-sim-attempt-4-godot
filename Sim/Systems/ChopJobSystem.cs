@@ -30,6 +30,23 @@ public sealed class ChopJobSystem : ITickSystem
         _grid = grid;
     }
 
+    private readonly List<FelledTree> _felled = new();
+
+    private readonly struct FelledTree
+    {
+        public readonly int TreeId;
+        public readonly int DesignationId;
+        public readonly int TileX;
+        public readonly int TileY;
+        public FelledTree(int treeId, int designationId, int tileX, int tileY)
+        {
+            TreeId = treeId;
+            DesignationId = designationId;
+            TileX = tileX;
+            TileY = tileY;
+        }
+    }
+
     public void Tick(TickContext ctx)
     {
         var dt = (float)ctx.FixedDeltaSeconds;
@@ -44,6 +61,7 @@ public sealed class ChopJobSystem : ITickSystem
             if (work.Active) claimedTrees.Add(work.TargetEntityId);
         }
 
+        _felled.Clear();
         foreach (var entity in query.Entities)
         {
             ref var job = ref entity.GetComponent<Job>();
@@ -61,6 +79,20 @@ public sealed class ChopJobSystem : ITickSystem
             {
                 TryAssignChop(entity, ref work, ref pf, ref pos, trees, chopDesignations, claimedTrees);
             }
+        }
+
+        // Apply structural changes outside the colonist iteration. Spawning
+        // an Item entity or deleting a Tree mid-foreach can invalidate
+        // Friflo's archetype storage and crash the sim thread.
+        for (var i = 0; i < _felled.Count; i++)
+        {
+            var f = _felled[i];
+            _grid.MarkBlocked(f.TileX, f.TileY, false);
+            _world.AddOrMergeItem(f.TileX, f.TileY, ItemKind.Wood, WoodPerTree);
+            var tree = _world.Store.GetEntityById(f.TreeId);
+            if (tree != default) tree.DeleteEntity();
+            var designation = _world.Store.GetEntityById(f.DesignationId);
+            if (designation != default) designation.DeleteEntity();
         }
     }
 
@@ -120,11 +152,7 @@ public sealed class ChopJobSystem : ITickSystem
         }
         if (t.Health <= 0)
         {
-            _grid.MarkBlocked(work.TargetTileX, work.TargetTileY, false);
-            _world.AddOrMergeItem(work.TargetTileX, work.TargetTileY, ItemKind.Wood, WoodPerTree);
-            tree.DeleteEntity();
-            var designation = _world.Store.GetEntityById(designationId);
-            if (designation != default) designation.DeleteEntity();
+            _felled.Add(new FelledTree(treeId, designationId, work.TargetTileX, work.TargetTileY));
             ClearWork(ref work, ref pf);
         }
     }

@@ -16,7 +16,7 @@ public static class TerrainMaterial
         _cached = new StandardMaterial3D
         {
             AlbedoTexture = LoadGrass(),
-            Uv1Scale = new Vector3(2f, 2f, 1f),
+            Uv1Scale = new Vector3(1f, 1f, 1f),
             Roughness = 0.95f,
             Metallic = 0.0f,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,

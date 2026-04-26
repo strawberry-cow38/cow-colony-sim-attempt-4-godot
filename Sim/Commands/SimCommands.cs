@@ -24,6 +24,12 @@ public readonly record struct StampDesignationsCommand(DesignationKind Kind, Til
 
 public readonly record struct PlaceBlueprintGhostCommand(string DefId, int OriginTileX, int OriginTileY, int Rotation) : ISimCommand;
 
+// Wipes any zone/designation/blueprint-ghost entity that overlaps the
+// rect. Zones removed if any tile of their rect is inside; designations
+// + blueprint ghosts removed if their tile/origin is inside. Colonists,
+// need spots, and other gameplay entities are untouched.
+public readonly record struct EraseInRectCommand(TileRect Rect) : ISimCommand;
+
 public sealed class CommandBus
 {
     private readonly ConcurrentQueue<ISimCommand> _queue = new();

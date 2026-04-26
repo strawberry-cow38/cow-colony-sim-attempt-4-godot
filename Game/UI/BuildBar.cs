@@ -32,6 +32,10 @@ public partial class BuildBar : CanvasLayer
                 new Tool("debug_terrain.lower_vertex",  "Lower Vertex (-0.75m)"),
                 new Tool("debug_terrain.flatten_rect",  "Flatten Rect"),
             }),
+            new Category("edit", "Edit", new[]
+            {
+                new Tool("edit.erase", "Erase (drag rect)"),
+            }),
             new Category("zones", "Zones", new[]
             {
                 new Tool("zone.stockpile", "Stockpile (drag rect)"),

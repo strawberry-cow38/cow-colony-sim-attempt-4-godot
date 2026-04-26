@@ -47,9 +47,44 @@ public sealed class CommandSystem : ITickSystem
                 case PlaceBlueprintGhostCommand pb:
                     Apply(pb);
                     break;
+                case EraseInRectCommand er:
+                    Apply(er);
+                    break;
             }
         }
     }
+
+    private void Apply(EraseInRectCommand cmd)
+    {
+        var rect = ClampRect(cmd.Rect);
+        var toDelete = new List<int>();
+
+        foreach (var entity in _world.Store.Query<Zone>().Entities)
+        {
+            ref var z = ref entity.GetComponent<Zone>();
+            if (RectsOverlap(z.Rect, rect)) toDelete.Add(entity.Id);
+        }
+        foreach (var entity in _world.Store.Query<Designation, TilePosition>().Entities)
+        {
+            ref var p = ref entity.GetComponent<TilePosition>();
+            if (rect.Contains(p.TileX, p.TileY)) toDelete.Add(entity.Id);
+        }
+        foreach (var entity in _world.Store.Query<BlueprintGhost>().Entities)
+        {
+            ref var g = ref entity.GetComponent<BlueprintGhost>();
+            if (rect.Contains(g.OriginTileX, g.OriginTileY)) toDelete.Add(entity.Id);
+        }
+
+        foreach (var id in toDelete)
+        {
+            var e = _world.Store.GetEntityById(id);
+            if (e != default) e.DeleteEntity();
+        }
+    }
+
+    private static bool RectsOverlap(TileRect a, TileRect b)
+        => a.MinX <= b.MaxX && a.MaxX >= b.MinX
+        && a.MinY <= b.MaxY && a.MaxY >= b.MinY;
 
     private void Apply(CreateZoneCommand cmd)
     {

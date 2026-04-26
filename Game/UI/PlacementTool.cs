@@ -9,16 +9,17 @@ using Godot;
 
 namespace CowColonySim.Game.UI;
 
-// Owns left-click placement for zones, designators, and blueprints.
-// Reads BuildToolService.ActiveToolId + BlueprintCatalog to decide
-// which mode to run. Drives RectDragOverlay (drag-rect modes) and
-// BlueprintGhostPreview (Footprint/Single blueprint mode).
+// Owns left-click placement for zones, designators, blueprints, and the
+// erase tool. Reads BuildToolService.ActiveToolId + BlueprintCatalog
+// to decide which mode to run. Drives RectDragOverlay (drag-rect modes)
+// and BlueprintGhostPreview (Single/Footprint blueprint modes).
 //
 // Tool id conventions:
 //   zone.<type>          -> drag rect, CreateZoneCommand
 //   designate.<kind>     -> drag rect, StampDesignationsCommand
 //   blueprint.<defId>    -> Single / LineDrag / Footprint placement
 //                           (mode resolved via BlueprintCatalog)
+//   edit.erase           -> drag rect, EraseInRectCommand
 public partial class PlacementTool : Node
 {
     private BuildToolService _tools = null!;
@@ -62,8 +63,7 @@ public partial class PlacementTool : Node
         var toolId = _tools.ActiveToolId;
         if (string.IsNullOrEmpty(toolId)) return;
 
-        if (toolId.StartsWith("blueprint.") && ev is InputEventKey k && k.Pressed && !k.Echo
-            && k.PhysicalKeycode == Key.R)
+        if (toolId.StartsWith("blueprint.") && IsRotateKey(ev))
         {
             _blueprintRotation = (_blueprintRotation + 1) & 3;
             GetViewport().SetInputAsHandled();
@@ -76,7 +76,7 @@ public partial class PlacementTool : Node
         var tile = ProjectMouseToTile(mb.Position);
         if (tile is null) return;
 
-        if (toolId.StartsWith("zone.") || toolId.StartsWith("designate."))
+        if (UsesRectDrag(toolId))
         {
             HandleRectDrag(mb.Pressed, tile.Value, toolId);
             GetViewport().SetInputAsHandled();
@@ -103,24 +103,10 @@ public partial class PlacementTool : Node
         var camera = GetViewport().GetCamera3D();
         Vector2I? hovered = camera is null ? null : ProjectMouseToTile(GetViewport().GetMousePosition());
 
-        if (toolId.StartsWith("zone.") || toolId.StartsWith("designate."))
+        if (UsesRectDrag(toolId))
         {
             _ghostPreview.DefId = null;
-            if (_dragStart is not null && hovered is not null)
-            {
-                _rectOverlay.QuadColor = ColorForRectTool(toolId);
-                _rectOverlay.PreviewRect = TileRect.FromCorners(
-                    _dragStart.Value.X, _dragStart.Value.Y, hovered.Value.X, hovered.Value.Y);
-            }
-            else if (hovered is not null)
-            {
-                _rectOverlay.QuadColor = ColorForRectTool(toolId);
-                _rectOverlay.PreviewRect = new TileRect(hovered.Value.X, hovered.Value.Y, hovered.Value.X, hovered.Value.Y);
-            }
-            else
-            {
-                _rectOverlay.PreviewRect = null;
-            }
+            UpdateRectPreview(toolId, hovered);
             return;
         }
 
@@ -142,6 +128,42 @@ public partial class PlacementTool : Node
         }
     }
 
+    private bool UsesRectDrag(string toolId)
+    {
+        if (toolId == "edit.erase") return true;
+        if (toolId.StartsWith("zone.")) return true;
+        if (toolId.StartsWith("designate.")) return true;
+        if (toolId.StartsWith("blueprint."))
+        {
+            var defId = toolId.Substring("blueprint.".Length);
+            return BlueprintCatalog.TryGet(defId, out var def) && def is not null
+                && def.Placement == PlacementMode.LineDrag;
+        }
+        return false;
+    }
+
+    private void UpdateRectPreview(string toolId, Vector2I? hovered)
+    {
+        if (hovered is null && _dragStart is null)
+        {
+            _rectOverlay.PreviewRect = null;
+            return;
+        }
+        _rectOverlay.QuadColor = ColorForRectTool(toolId);
+
+        if (_dragStart is not null && hovered is not null)
+        {
+            var rect = TileRect.FromCorners(
+                _dragStart.Value.X, _dragStart.Value.Y, hovered.Value.X, hovered.Value.Y);
+            if (toolId.StartsWith("blueprint.")) rect = AxisAlignedLine(_dragStart.Value, hovered.Value);
+            _rectOverlay.PreviewRect = rect;
+        }
+        else if (hovered is not null)
+        {
+            _rectOverlay.PreviewRect = new TileRect(hovered.Value.X, hovered.Value.Y, hovered.Value.X, hovered.Value.Y);
+        }
+    }
+
     private void HandleRectDrag(bool pressed, Vector2I tile, string toolId)
     {
         if (pressed)
@@ -151,9 +173,11 @@ public partial class PlacementTool : Node
             return;
         }
         if (_dragStart is null) return;
-        var rect = TileRect.FromCorners(_dragStart.Value.X, _dragStart.Value.Y, tile.X, tile.Y);
+        var start = _dragStart.Value;
         _dragStart = null;
         _rectOverlay.PreviewRect = null;
+
+        var rect = TileRect.FromCorners(start.X, start.Y, tile.X, tile.Y);
 
         if (toolId.StartsWith("zone."))
         {
@@ -179,17 +203,55 @@ public partial class PlacementTool : Node
             if (kind is null) return;
             _commands.Submit(new StampDesignationsCommand(kind.Value, rect));
         }
+        else if (toolId == "edit.erase")
+        {
+            _commands.Submit(new EraseInRectCommand(rect));
+        }
+        else if (toolId.StartsWith("blueprint."))
+        {
+            var defId = toolId.Substring("blueprint.".Length);
+            if (!BlueprintCatalog.TryGet(defId, out var def) || def is null) return;
+            if (def.Placement != PlacementMode.LineDrag) return;
+            var line = AxisAlignedLine(start, tile);
+            for (var y = line.MinY; y <= line.MaxY; y++)
+            {
+                for (var x = line.MinX; x <= line.MaxX; x++)
+                {
+                    if (!IsFootprintInBounds(def, 0, new Vector2I(x, y))) continue;
+                    _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, x, y, 0));
+                }
+            }
+        }
     }
 
     private void HandleBlueprintClick(Vector2I tile, string toolId)
     {
         var defId = toolId.Substring("blueprint.".Length);
         if (!BlueprintCatalog.TryGet(defId, out var def) || def is null) return;
+        if (def.Placement == PlacementMode.LineDrag) return;
 
         var origin = OriginForFootprintCenter(def, _blueprintRotation, tile);
         if (!IsFootprintInBounds(def, _blueprintRotation, origin)) return;
 
         _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, origin.X, origin.Y, _blueprintRotation));
+    }
+
+    // Reduces a (start, end) pair to a 1-tile-thick rect along the axis
+    // with the larger delta — matches how RimWorld-style line-paint
+    // commits walls.
+    private static TileRect AxisAlignedLine(Vector2I start, Vector2I end)
+    {
+        var dx = Math.Abs(end.X - start.X);
+        var dy = Math.Abs(end.Y - start.Y);
+        if (dx >= dy)
+        {
+            var minX = Math.Min(start.X, end.X);
+            var maxX = Math.Max(start.X, end.X);
+            return new TileRect(minX, start.Y, maxX, start.Y);
+        }
+        var minY = Math.Min(start.Y, end.Y);
+        var maxY = Math.Max(start.Y, end.Y);
+        return new TileRect(start.X, minY, start.X, maxY);
     }
 
     private static Vector2I OriginForFootprintCenter(BlueprintDef def, int rotation, Vector2I cursor)
@@ -218,6 +280,9 @@ public partial class PlacementTool : Node
         return new Vector2I(tx, ty);
     }
 
+    private static bool IsRotateKey(InputEvent ev)
+        => ev is InputEventKey k && k.Pressed && !k.Echo && k.PhysicalKeycode == Key.R;
+
     private static Color ColorForRectTool(string toolId) => toolId switch
     {
         "zone.stockpile" => new Color(0.85f, 0.65f, 0.35f, 0.30f),
@@ -225,6 +290,7 @@ public partial class PlacementTool : Node
         "designate.chop_tree" => new Color(0.95f, 0.25f, 0.20f, 0.30f),
         "designate.mine" => new Color(0.55f, 0.55f, 0.6f, 0.30f),
         "designate.harvest" => new Color(0.95f, 0.85f, 0.30f, 0.30f),
-        _ => new Color(1f, 0.85f, 0.25f, 0.30f),
+        "edit.erase" => new Color(0.95f, 0.20f, 0.20f, 0.35f),
+        _ => new Color(0.3f, 0.55f, 0.95f, 0.30f),
     };
 }

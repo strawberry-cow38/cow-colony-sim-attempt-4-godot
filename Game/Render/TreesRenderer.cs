@@ -78,7 +78,6 @@ public partial class TreesRenderer : Node3D
             if (b.Multimesh.InstanceCount != trees.Count) b.Multimesh.InstanceCount = trees.Count;
         }
 
-        var unitsPerTile = SimConstants.GodotUnitsPerTile;
         for (var i = 0; i < trees.Count; i++)
         {
             var t = trees[i];

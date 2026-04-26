@@ -58,7 +58,7 @@ public sealed class ChopJobSystem : ITickSystem
         foreach (var entity in query.Entities)
         {
             ref var work = ref entity.GetComponent<WorkJob>();
-            if (work.Active) claimedTrees.Add(work.TargetEntityId);
+            if (work.Active && work.Kind == WorkKind.ChopTree) claimedTrees.Add(work.TargetEntityId);
         }
 
         _felled.Clear();
@@ -71,11 +71,11 @@ public sealed class ChopJobSystem : ITickSystem
 
             if (job.Active) continue;
 
-            if (work.Active)
+            if (work.Active && work.Kind == WorkKind.ChopTree)
             {
                 ProgressChop(entity, ref work, ref pf, ref pos, trees, chopDesignations, dt);
             }
-            else
+            else if (!work.Active)
             {
                 TryAssignChop(entity, ref work, ref pf, ref pos, trees, chopDesignations, claimedTrees);
             }

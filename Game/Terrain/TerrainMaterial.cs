@@ -1,18 +1,30 @@
+using CowColonySim.Sim.Terrain;
 using Godot;
 
 namespace CowColonySim.Game.Terrain;
 
-// Procedural grass material — value-noise lookup over world XZ blends two
-// green tones, plus a sparser noise for darker patches. No external texture
-// assets; the shader is the asset. All terrain (main + LOD background)
-// shares one cached instance so material params can be tweaked in one place.
+// Terrain shading. Geometry is locked to faceted 4-unshared-corners-per-tile,
+// so the mesh ships flat per-tile vertex normals — but shading uses a SMOOTH
+// normal computed in the fragment shader from a heightmap texture (one
+// 32-bit-float Image per chunk, central-difference sampled). Net: silhouette
+// stays AoE2-blocky, lighting is gradient-smooth across each tile, no
+// 1-low-3-high "knife edge" on shadowed faces.
+//
+// One ShaderMaterial per chunk (each carries its own heightmap texture +
+// chunk-size uniforms). The Shader resource is cached + shared.
 public static class TerrainMaterial
 {
-    private static ShaderMaterial? _cached;
+    private static Shader? _cachedShader;
 
     private const string ShaderCode = """
 shader_type spatial;
 render_mode cull_disabled;
+
+uniform sampler2D heightmap : filter_linear, repeat_disable;
+uniform vec2 chunk_local_size;
+uniform vec2 vert_count;
+uniform float units_per_quanta;
+uniform float units_per_tile;
 
 uniform vec3 grass_dark : source_color = vec3(0.22, 0.34, 0.18);
 uniform vec3 grass_mid  : source_color = vec3(0.36, 0.50, 0.24);
@@ -39,7 +51,21 @@ float vnoise(vec2 p) {
 }
 
 void fragment() {
-    vec3 wp = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    vec2 local_xz = VERTEX.xz;
+    vec2 uv = clamp(local_xz / chunk_local_size, vec2(0.0), vec2(1.0));
+
+    vec2 step_uv = 1.0 / vert_count;
+    float hL = textureLod(heightmap, uv - vec2(step_uv.x, 0.0), 0.0).r;
+    float hR = textureLod(heightmap, uv + vec2(step_uv.x, 0.0), 0.0).r;
+    float hD = textureLod(heightmap, uv - vec2(0.0, step_uv.y), 0.0).r;
+    float hU = textureLod(heightmap, uv + vec2(0.0, step_uv.y), 0.0).r;
+
+    float dHx = (hR - hL) * units_per_quanta / (2.0 * units_per_tile);
+    float dHz = (hU - hD) * units_per_quanta / (2.0 * units_per_tile);
+    vec3 n_local = normalize(vec3(-dHx, 1.0, -dHz));
+    NORMAL = (VIEW_MATRIX * MODEL_MATRIX * vec4(n_local, 0.0)).xyz;
+
+    vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float fine  = vnoise(wp.xz * fine_scale);
     float patch = vnoise(wp.xz * patch_scale);
     vec3 grass = mix(grass_dark, grass_mid, fine);
@@ -50,11 +76,37 @@ void fragment() {
 }
 """;
 
-    public static ShaderMaterial Get()
+    public static ShaderMaterial CreateForField(Heightfield field, float unitsPerTile)
     {
-        if (_cached is not null) return _cached;
-        var shader = new Shader { Code = ShaderCode };
-        _cached = new ShaderMaterial { Shader = shader };
-        return _cached;
+        _cachedShader ??= new Shader { Code = ShaderCode };
+
+        var tex = BuildHeightmapTexture(field);
+        var unitsPerQuanta = TerrainConstants.VerticalQuantumMetres
+                           * (CowColonySim.Sim.SimConstants.GodotUnitsPerTile / CowColonySim.Sim.SimConstants.MetersPerTile);
+
+        var mat = new ShaderMaterial { Shader = _cachedShader };
+        mat.SetShaderParameter("heightmap", tex);
+        mat.SetShaderParameter("chunk_local_size", new Vector2(
+            (field.VertWidth - 1) * unitsPerTile,
+            (field.VertHeight - 1) * unitsPerTile));
+        mat.SetShaderParameter("vert_count", new Vector2(field.VertWidth, field.VertHeight));
+        mat.SetShaderParameter("units_per_quanta", unitsPerQuanta);
+        mat.SetShaderParameter("units_per_tile", unitsPerTile);
+        return mat;
+    }
+
+    private static ImageTexture BuildHeightmapTexture(Heightfield field)
+    {
+        var w = field.VertWidth;
+        var h = field.VertHeight;
+        var bytes = new byte[w * h * sizeof(float)];
+        var floats = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(bytes);
+        var src = field.AsReadOnlySpan();
+        for (var i = 0; i < src.Length; i++)
+        {
+            floats[i] = src[i];
+        }
+        var img = Image.CreateFromData(w, h, false, Image.Format.Rf, bytes);
+        return ImageTexture.CreateFromImage(img);
     }
 }

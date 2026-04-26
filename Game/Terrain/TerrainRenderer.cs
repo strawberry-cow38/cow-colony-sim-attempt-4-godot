@@ -11,6 +11,7 @@ public partial class TerrainRenderer : MeshInstance3D
         // Faceted per-tile normals self-shadow-alias on slopes; only let
         // props/walls cast. Terrain still receives shadows.
         CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
-        MaterialOverride = TerrainMaterial.Get();
+        var unitsPerTile = unitsPerTileOverride ?? CowColonySim.Sim.SimConstants.GodotUnitsPerTile;
+        MaterialOverride = TerrainMaterial.CreateForField(field, unitsPerTile);
     }
 }

@@ -117,7 +117,7 @@ public partial class ZoneSettingsPanel : CanvasLayer
         _root.Visible = true;
         if (_boundZoneId != z.ZoneId || !_userEdited)
         {
-            _header.Text = $"{z.Type} #{z.ZoneId} ({z.MaxTileX - z.MinTileX + 1}×{z.MaxTileY - z.MinTileY + 1})";
+            _header.Text = $"{z.Type} #{z.ZoneId} ({z.TileCount} tiles)";
             _nameEdit.Text = z.Name;
             _priority.Value = z.Priority;
             _cropDefId.Value = z.CropDefId;

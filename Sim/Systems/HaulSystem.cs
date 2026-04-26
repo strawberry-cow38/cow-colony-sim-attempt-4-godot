@@ -229,6 +229,7 @@ public sealed class HaulSystem : ITickSystem
             {
                 for (var tx = z.Rect.MinX; tx <= z.Rect.MaxX; tx++)
                 {
+                    if (!z.ContainsTile(tx, ty)) continue;
                     if ((uint)tx >= (uint)_grid.Width || (uint)ty >= (uint)_grid.Height) continue;
                     if (_grid.IsBlocked(tx, ty)) continue;
                     if (occupiedDropTiles.Contains((tx, ty))) continue;
@@ -339,7 +340,7 @@ public sealed class HaulSystem : ITickSystem
             {
                 for (var tx = z.Rect.MinX; tx <= z.Rect.MaxX; tx++)
                 {
-                    tiles.Add((tx, ty));
+                    if (z.ContainsTile(tx, ty)) tiles.Add((tx, ty));
                 }
             }
         }

@@ -58,10 +58,10 @@ public sealed class SimWorld
         return e;
     }
 
-    public Entity SpawnZone(int zoneId, ZoneType type, TileRect rect, string name)
+    public Entity SpawnZone(int zoneId, ZoneType type, TileRect rect, bool[] mask, string name)
     {
         var e = Store.CreateEntity();
-        e.AddComponent(new Zone { ZoneId = zoneId, Type = type, Rect = rect, Name = name });
+        e.AddComponent(new Zone { ZoneId = zoneId, Type = type, Rect = rect, Mask = mask, Name = name });
         switch (type)
         {
             case ZoneType.Stockpile: e.AddComponent(new StockpileSettings()); break;

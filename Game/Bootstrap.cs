@@ -109,13 +109,15 @@ public partial class Bootstrap : Node3D
     {
         var center = PreviewTileCount / 2;
 
+        var stockpileRect = new TileRect(center - 14, center - 4, center - 10, center);
         runtime.World.SpawnZone(
             zoneId: 1, ZoneType.Stockpile,
-            new TileRect(center - 14, center - 4, center - 10, center),
+            stockpileRect, TileMask.Filled(stockpileRect),
             "Dummy Stockpile");
+        var farmRect = new TileRect(center + 10, center - 4, center + 14, center);
         runtime.World.SpawnZone(
             zoneId: 2, ZoneType.Farm,
-            new TileRect(center + 10, center - 4, center + 14, center),
+            farmRect, TileMask.Filled(farmRect),
             "Dummy Farm");
 
         runtime.World.SpawnDesignation(center - 8, center + 8, DesignationKind.ChopTree);

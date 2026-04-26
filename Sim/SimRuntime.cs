@@ -198,7 +198,7 @@ public sealed class SimRuntime : IDisposable
             views[i++] = new ZoneView(
                 z.ZoneId, z.Type,
                 z.Rect.MinX, z.Rect.MinY, z.Rect.MaxX, z.Rect.MaxY,
-                z.Name, priority, cropDefId);
+                z.Mask, z.Name, priority, cropDefId);
         }
         return views;
     }

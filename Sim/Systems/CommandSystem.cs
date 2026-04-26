@@ -176,6 +176,7 @@ public sealed class CommandSystem : ITickSystem
             {
                 for (var tx = z.Rect.MinX; tx <= z.Rect.MaxX; tx++)
                 {
+                    if (!z.ContainsTile(tx, ty)) continue;
                     if ((uint)tx >= (uint)_grid.Width || (uint)ty >= (uint)_grid.Height) continue;
                     if (_grid.IsBlocked(tx, ty)) continue;
                     var partial = -1;
@@ -280,10 +281,22 @@ public sealed class CommandSystem : ITickSystem
         var rect = ClampRect(cmd.Rect);
         var toDelete = new List<int>();
 
+        var zoneEdits = new List<(int Id, TileRect Rect, bool[] Mask)>();
         foreach (var entity in _world.Store.Query<Zone>().Entities)
         {
             ref var z = ref entity.GetComponent<Zone>();
-            if (RectsOverlap(z.Rect, rect)) toDelete.Add(entity.Id);
+            if (!RectsOverlap(z.Rect, rect)) continue;
+            var result = TileMask.SubtractRect(z.Rect, z.Mask, rect);
+            if (result is null) toDelete.Add(entity.Id);
+            else zoneEdits.Add((entity.Id, result.Value.Item1, result.Value.Item2));
+        }
+        foreach (var (id, newRect, newMask) in zoneEdits)
+        {
+            var e = _world.Store.GetEntityById(id);
+            if (e == default) continue;
+            ref var z = ref e.GetComponent<Zone>();
+            z.Rect = newRect;
+            z.Mask = newMask;
         }
         foreach (var entity in _world.Store.Query<Designation, TilePosition>().Entities)
         {
@@ -312,42 +325,48 @@ public sealed class CommandSystem : ITickSystem
         var rect = ClampRect(cmd.Rect);
         if (rect.Width <= 0 || rect.Height <= 0) return;
 
-        // Merge any same-type zones that overlap the new rect (and any
-        // zones the expanded bounding box pulls in transitively) into a
-        // single zone whose rect is the union AABB. Different zone types
-        // (stockpile vs farm) never merge — they coexist.
-        var merged = rect;
-        var toDelete = new List<int>();
+        // Merge any same-type zones whose mask actually intersects the
+        // newly-drawn tiles (transitively, so chain merges collapse in
+        // one pass). The first overlapping zone keeps its entity +
+        // settings; the rest are absorbed into it. Different zone types
+        // never merge — they coexist.
+        var bbox = rect;
+        var mask = TileMask.Filled(rect);
+        var overlapping = new List<int>();
         bool grew;
         do
         {
             grew = false;
             foreach (var entity in _world.Store.Query<Zone>().Entities)
             {
-                if (toDelete.Contains(entity.Id)) continue;
+                if (overlapping.Contains(entity.Id)) continue;
                 ref var z = ref entity.GetComponent<Zone>();
                 if (z.Type != cmd.Type) continue;
-                if (!RectsOverlap(z.Rect, merged)) continue;
-                merged = UnionRect(merged, z.Rect);
-                toDelete.Add(entity.Id);
+                if (!TileMask.Intersects(z.Rect, z.Mask, bbox, mask)) continue;
+                (bbox, mask) = TileMask.Union(bbox, mask, z.Rect, z.Mask);
+                overlapping.Add(entity.Id);
                 grew = true;
             }
         } while (grew);
 
-        foreach (var id in toDelete)
+        if (overlapping.Count > 0)
         {
-            var e = _world.Store.GetEntityById(id);
-            if (e != default) e.DeleteEntity();
+            var primary = _world.Store.GetEntityById(overlapping[0]);
+            ref var pz = ref primary.GetComponent<Zone>();
+            pz.Rect = bbox;
+            pz.Mask = mask;
+            for (var i = 1; i < overlapping.Count; i++)
+            {
+                var e = _world.Store.GetEntityById(overlapping[i]);
+                if (e != default) e.DeleteEntity();
+            }
+            return;
         }
 
-        var spawned = _world.SpawnZone(0, cmd.Type, merged, cmd.Name);
+        var spawned = _world.SpawnZone(0, cmd.Type, bbox, mask, cmd.Name);
         ref var sz = ref spawned.GetComponent<Zone>();
         sz.ZoneId = spawned.Id;
     }
-
-    private static TileRect UnionRect(TileRect a, TileRect b)
-        => new(Math.Min(a.MinX, b.MinX), Math.Min(a.MinY, b.MinY),
-               Math.Max(a.MaxX, b.MaxX), Math.Max(a.MaxY, b.MaxY));
 
     private void Apply(StampDesignationsCommand cmd)
     {

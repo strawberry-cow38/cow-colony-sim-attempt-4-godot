@@ -5,26 +5,30 @@ using Godot;
 namespace CowColonySim.Game.Render;
 
 // Builds a flat-shaded triangle strip that hugs the heightfield over a
-// tile rect — two triangles per tile snapped to the four corner heights.
-// Shared by ZonesRenderer (stockpiles + farms) and RectDragOverlay (live
-// placement preview) so both follow slopes consistently.
+// tile rect — two triangles per tile snapped to the four corner heights,
+// matching TerrainMeshBuilder's TR→BL diagonal so the strip lies on
+// the same plane as the terrain on slopes. Optional per-tile mask skips
+// tiles that aren't part of the zone (post-merge L-shapes etc).
 internal static class TerrainStripMesh
 {
     public static ArrayMesh Build(
         Heightfield field, float unitsPerMeter,
         int minTileX, int minTileY, int maxTileX, int maxTileY,
-        float hoverUnits)
+        float hoverUnits,
+        bool[]? mask = null)
     {
         var widthTiles = maxTileX - minTileX + 1;
         var heightTiles = maxTileY - minTileY + 1;
-        var verts = new Vector3[widthTiles * heightTiles * 6];
         var unitsPerTile = SimConstants.GodotUnitsPerTile;
-        var v = 0;
+
+        var verts = new List<Vector3>(widthTiles * heightTiles * 6);
 
         for (var ty = 0; ty < heightTiles; ty++)
         {
             for (var tx = 0; tx < widthTiles; tx++)
             {
+                if (mask is not null && !mask[ty * widthTiles + tx]) continue;
+
                 var gx = minTileX + tx;
                 var gy = minTileY + ty;
 
@@ -43,21 +47,22 @@ internal static class TerrainStripMesh
                 var p01 = new Vector3(x0, h01, y1);
                 var p11 = new Vector3(x1, h11, y1);
 
-                // Match TerrainMeshBuilder diagonal (TR→BL) so the strip lies
-                // exactly on the terrain plane on non-coplanar quads — the
-                // opposite diagonal would dip below at hill corners and the
-                // hover offset wouldn't be enough to clear it.
-                verts[v++] = p00; verts[v++] = p10; verts[v++] = p01;
-                verts[v++] = p10; verts[v++] = p11; verts[v++] = p01;
+                // TR→BL diagonal matches TerrainMeshBuilder so strip and
+                // terrain share the same plane on non-coplanar quads.
+                verts.Add(p00); verts.Add(p10); verts.Add(p01);
+                verts.Add(p10); verts.Add(p11); verts.Add(p01);
             }
         }
 
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = verts;
+        arrays[(int)Mesh.ArrayType.Vertex] = verts.ToArray();
 
         var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        if (verts.Count > 0)
+        {
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        }
         return mesh;
     }
 

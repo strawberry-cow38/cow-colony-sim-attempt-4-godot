@@ -26,6 +26,7 @@ public partial class ZonesRenderer : Node3D
         public MeshInstance3D Node = null!;
         public int CachedRectKey;
         public int CachedHeightVersion;
+        public bool[]? CachedMask;
     }
 
     public void Configure(SnapshotPublisher publisher, Heightfield heightfield)
@@ -66,11 +67,14 @@ public partial class ZonesRenderer : Node3D
             }
 
             var rectKey = RectKey(z);
-            if (rectKey != entry.CachedRectKey || _heightfield.Version != entry.CachedHeightVersion)
+            if (rectKey != entry.CachedRectKey
+                || _heightfield.Version != entry.CachedHeightVersion
+                || !ReferenceEquals(z.Mask, entry.CachedMask))
             {
                 entry.Node.Mesh = BuildMesh(z);
                 entry.CachedRectKey = rectKey;
                 entry.CachedHeightVersion = _heightfield.Version;
+                entry.CachedMask = z.Mask;
             }
         }
 
@@ -90,7 +94,7 @@ public partial class ZonesRenderer : Node3D
         TerrainStripMesh.Build(
             _heightfield, _unitsPerMeter,
             z.MinTileX, z.MinTileY, z.MaxTileX, z.MaxTileY,
-            HoverUnits);
+            HoverUnits, z.Mask);
 
     private static StandardMaterial3D MakeMaterial(ZoneType type) => new()
     {

@@ -128,8 +128,7 @@ public partial class SelectionService : Node
         for (var i = 0; i < snap.Zones.Count; i++)
         {
             var z = snap.Zones[i];
-            if (tx < z.MinTileX || tx > z.MaxTileX) continue;
-            if (ty < z.MinTileY || ty > z.MaxTileY) continue;
+            if (!z.ContainsTile(tx, ty)) continue;
             ClearOthersExceptZone();
             if (SelectedZoneId == z.ZoneId) return;
             SelectedZoneId = z.ZoneId;

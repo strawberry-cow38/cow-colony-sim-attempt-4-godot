@@ -34,6 +34,24 @@ public class SimRuntimeSmokeTests
         Assert.Throws<InvalidOperationException>(() => runtime.Start());
     }
 
+    [Fact]
+    public void Snapshot_publishes_each_tick()
+    {
+        using var runtime = new SimRuntime();
+        runtime.Start();
+
+        var deadline = DateTime.UtcNow.AddSeconds(2);
+        while (runtime.Publisher.Current.TickNumber < 5 && DateTime.UtcNow < deadline)
+        {
+            Thread.Sleep(10);
+        }
+
+        var snap = runtime.Publisher.Current;
+        Assert.True(snap.TickNumber >= 5,
+            $"Expected snapshot tick >= 5, got {snap.TickNumber}");
+        Assert.True(snap.ElapsedSeconds > 0);
+    }
+
     private sealed class Counter : ITickSystem
     {
         public int Count;

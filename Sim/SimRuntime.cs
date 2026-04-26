@@ -1,16 +1,19 @@
 using System.Diagnostics;
+using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Systems;
+using CowColonySim.Sim.Time;
 using CowColonySim.Sim.World;
 
 namespace CowColonySim.Sim;
 
-// Owns the dedicated SimThread, the scheduler, and the world. Pre-pre-game:
-// no real systems yet, just a fixed-step tick loop other systems can hook
-// into and a Friflo EntityStore behind SimWorld.
+// Owns the dedicated SimThread, the scheduler, the world, and the snapshot
+// publisher. Each tick: scheduler runs, then SimRuntime builds an immutable
+// SimSnapshot and publishes it. Game-side code reads only the snapshot.
 public sealed class SimRuntime : IDisposable
 {
     private readonly Scheduler _scheduler = new();
     private readonly SimWorld _world = new();
+    private readonly SnapshotPublisher _publisher = new();
     private readonly CancellationTokenSource _cts = new();
     private Thread? _thread;
     private long _tick;
@@ -18,6 +21,7 @@ public sealed class SimRuntime : IDisposable
 
     public Scheduler Scheduler => _scheduler;
     public SimWorld World => _world;
+    public SnapshotPublisher Publisher => _publisher;
     public long TickNumber => Interlocked.Read(ref _tick);
 
     public void Start()
@@ -45,6 +49,10 @@ public sealed class SimRuntime : IDisposable
             var current = Interlocked.Increment(ref _tick);
             var ctx = new TickContext(current, SimConstants.FixedDeltaSeconds);
             _scheduler.Tick(ctx);
+            _publisher.Publish(new SimSnapshot(
+                TickNumber: current,
+                ElapsedSeconds: GameClock.SecondsAt(current),
+                EntityCount: _world.EntityCount));
 
             var now = Stopwatch.GetTimestamp();
             var remaining = nextTick - now;

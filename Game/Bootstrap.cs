@@ -1,7 +1,7 @@
 using CowColonySim.Game.Camera;
 using CowColonySim.Game.Colonists;
 using CowColonySim.Game.Debug;
-using CowColonySim.Game.Input;
+using CowColonySim.Game.Selection;
 using CowColonySim.Game.Terrain;
 using CowColonySim.Game.UI;
 using CowColonySim.Sim;

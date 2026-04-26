@@ -6,7 +6,7 @@ using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Terrain;
 using Godot;
 
-namespace CowColonySim.Game.Input;
+namespace CowColonySim.Game.Selection;
 
 // Click-to-select + right-click-to-move. Reads the latest snapshot to
 // pick the colonist nearest the mouse ray; pushes MoveCommand back to

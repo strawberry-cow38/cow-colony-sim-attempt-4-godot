@@ -3,7 +3,7 @@ using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Terrain;
 using Godot;
 
-namespace CowColonySim.Game.Input;
+namespace CowColonySim.Game.Selection;
 
 // Flat torus ring that hovers under the currently selected colonist.
 // Hidden when nothing is selected. Reads SelectionService for the id
@@ -36,7 +36,6 @@ public partial class SelectionRing : MeshInstance3D
             InnerRadius = (RingRadiusMeters - RingThicknessMeters) * _unitsPerMeter,
             OuterRadius = RingRadiusMeters * _unitsPerMeter,
             RingSegments = 32,
-            RadialSegments = 8,
             Material = new StandardMaterial3D
             {
                 AlbedoColor = new Color(1f, 0.85f, 0.2f),

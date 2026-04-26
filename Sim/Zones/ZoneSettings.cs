@@ -1,3 +1,5 @@
+using Friflo.Engine.ECS;
+
 namespace CowColonySim.Sim.Zones;
 
 // Per-ZoneType settings stub. Real fields land when each zone gets
@@ -5,12 +7,12 @@ namespace CowColonySim.Sim.Zones;
 // Kept as separate components so each zone entity only carries the
 // settings struct that matches its ZoneType.
 
-public struct StockpileSettings
+public struct StockpileSettings : IComponent
 {
     public int Priority;
 }
 
-public struct FarmSettings
+public struct FarmSettings : IComponent
 {
     public int CropDefId;
 }

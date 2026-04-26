@@ -1,0 +1,109 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-latest
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.6.2
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cache Godot
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: |
+            godot
+            templates
+          key: godot-${{ env.GODOT_VERSION }}-mono-win
+
+      - name: Download Godot + export templates
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ver = "${{ env.GODOT_VERSION }}"
+          $editor = "https://github.com/godotengine/godot/releases/download/$ver-stable/Godot_v$ver-stable_mono_win64.zip"
+          $tpz    = "https://github.com/godotengine/godot/releases/download/$ver-stable/Godot_v$ver-stable_mono_export_templates.tpz"
+
+          New-Item -ItemType Directory -Force -Path godot,templates | Out-Null
+          Invoke-WebRequest -Uri $editor -OutFile godot.zip
+          Expand-Archive godot.zip -DestinationPath godot -Force
+
+          Invoke-WebRequest -Uri $tpz -OutFile templates.zip
+          Expand-Archive templates.zip -DestinationPath templates -Force
+
+      - name: Stage export templates
+        shell: pwsh
+        run: |
+          $ver = "${{ env.GODOT_VERSION }}"
+          $dst = Join-Path $env:APPDATA "Godot\export_templates\$ver.stable.mono"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Get-ChildItem templates/templates | Copy-Item -Destination $dst -Recurse -Force
+
+      - name: Resolve godot exe
+        id: gd
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem -Path godot -Recurse -Filter 'Godot_v*_mono_win64.exe' |
+                  Where-Object { $_.Name -notmatch '_console' } | Select-Object -First 1).FullName
+          if (-not $exe) { throw "Godot exe not found" }
+          "exe=$exe" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Import project (build .godot/)
+        shell: pwsh
+        run: |
+          & "${{ steps.gd.outputs.exe }}" --headless --import --path . 2>&1 | Out-Host
+          # Import sometimes exits non-zero on first run; verify .godot exists.
+          if (-not (Test-Path .godot)) { throw "Godot import failed" }
+
+      - name: Build .NET (Release)
+        run: dotnet build CowColonySim.sln -c Release --nologo
+
+      - name: Export Windows Desktop
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build/win | Out-Null
+          & "${{ steps.gd.outputs.exe }}" --headless --path . --export-release "Windows Desktop" "$(Resolve-Path build/win)\CowColonySim.exe"
+          if (-not (Test-Path build/win/CowColonySim.exe)) { throw "Export missing CowColonySim.exe" }
+
+      - name: Package zip
+        shell: pwsh
+        run: |
+          $zip = "CowColonySim-windows.zip"
+          if (Test-Path $zip) { Remove-Item $zip }
+          Compress-Archive -Path build/win/* -DestinationPath $zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CowColonySim-windows
+          path: CowColonySim-windows.zip
+
+      - name: Publish "latest" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: latest
+          body: |
+            Auto-build from ${{ github.sha }}
+            Built: ${{ github.run_started_at }}
+          files: CowColonySim-windows.zip
+          prerelease: false
+          make_latest: 'true'

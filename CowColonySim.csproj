@@ -11,8 +11,10 @@
          Godot assembly. -->
     <Compile Remove="Sim\**\*.cs" />
     <Compile Remove="Tests\**\*.cs" />
+    <Compile Remove="Launcher\**\*.cs" />
     <None Remove="Sim\**\*" />
     <None Remove="Tests\**\*" />
+    <None Remove="Launcher\**\*" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="Sim\CowColonySim.Sim.csproj" />

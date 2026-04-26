@@ -1,0 +1,158 @@
+using System.IO.Compression;
+using System.Text.Json;
+
+namespace CowColonySim.Launcher;
+
+internal static class Program
+{
+    private const string Repo = "strawberry-cow38/cow-colony-sim-attempt-4-godot";
+    private const string ReleaseTag = "latest";
+    private const string GameDirName = "game";
+    private const string VersionFileName = "version.txt";
+    private const string GameExeName = "CowColonySim.exe";
+
+    private static async Task<int> Main()
+    {
+        Console.Title = "Cow Colony Sim — Launcher";
+        try
+        {
+            var baseDir = AppContext.BaseDirectory;
+            var gameDir = Path.Combine(baseDir, GameDirName);
+            var versionPath = Path.Combine(baseDir, VersionFileName);
+
+            using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("CowColonyLauncher/1.0");
+            http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+
+            Console.WriteLine($"Checking {Repo} @ tag '{ReleaseTag}' ...");
+            var apiUrl = $"https://api.github.com/repos/{Repo}/releases/tags/{ReleaseTag}";
+            using var resp = await http.GetAsync(apiUrl, HttpCompletionOption.ResponseHeadersRead);
+            if (!resp.IsSuccessStatusCode)
+            {
+                Console.Error.WriteLine($"GitHub API returned {(int)resp.StatusCode} {resp.StatusCode}.");
+                return Bail(1);
+            }
+
+            await using var apiStream = await resp.Content.ReadAsStreamAsync();
+            using var doc = await JsonDocument.ParseAsync(apiStream);
+            var root = doc.RootElement;
+            var publishedAt = root.TryGetProperty("published_at", out var p) ? p.GetString() ?? "" : "";
+            var sha = root.TryGetProperty("target_commitish", out var t) ? t.GetString() ?? "" : "";
+            var remoteVersion = $"{publishedAt}|{sha}";
+
+            string? zipUrl = null;
+            string? zipName = null;
+            if (root.TryGetProperty("assets", out var assets))
+            {
+                foreach (var asset in assets.EnumerateArray())
+                {
+                    var name = asset.GetProperty("name").GetString();
+                    if (name is null || !name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!name.Contains("windows", StringComparison.OrdinalIgnoreCase)) continue;
+                    zipName = name;
+                    zipUrl = asset.GetProperty("browser_download_url").GetString();
+                    break;
+                }
+            }
+            if (zipUrl is null)
+            {
+                Console.Error.WriteLine("No Windows zip asset on the 'latest' release yet.");
+                return Bail(1);
+            }
+
+            var localVersion = File.Exists(versionPath) ? File.ReadAllText(versionPath).Trim() : "";
+            var hasGame = Directory.Exists(gameDir) &&
+                          Directory.EnumerateFiles(gameDir, GameExeName, SearchOption.AllDirectories).Any();
+
+            if (localVersion != remoteVersion || !hasGame)
+            {
+                Console.WriteLine($"Update available: {zipName}");
+                Console.WriteLine($"  remote: {remoteVersion}");
+                Console.WriteLine($"  local:  {(string.IsNullOrEmpty(localVersion) ? "(none)" : localVersion)}");
+
+                var tmpZip = Path.Combine(baseDir, "update.zip");
+                if (File.Exists(tmpZip)) File.Delete(tmpZip);
+
+                Console.WriteLine("Downloading...");
+                using (var dlResp = await http.GetAsync(zipUrl, HttpCompletionOption.ResponseHeadersRead))
+                {
+                    dlResp.EnsureSuccessStatusCode();
+                    var total = dlResp.Content.Headers.ContentLength ?? -1L;
+                    await using var src = await dlResp.Content.ReadAsStreamAsync();
+                    await using var dst = File.Create(tmpZip);
+                    await CopyWithProgress(src, dst, total);
+                }
+                Console.WriteLine();
+
+                Console.WriteLine("Extracting...");
+                if (Directory.Exists(gameDir)) Directory.Delete(gameDir, recursive: true);
+                Directory.CreateDirectory(gameDir);
+                ZipFile.ExtractToDirectory(tmpZip, gameDir, overwriteFiles: true);
+                File.Delete(tmpZip);
+
+                File.WriteAllText(versionPath, remoteVersion);
+                Console.WriteLine("Update complete.");
+            }
+            else
+            {
+                Console.WriteLine($"Up to date: {remoteVersion}");
+            }
+
+            var exePath = Directory
+                .EnumerateFiles(gameDir, GameExeName, SearchOption.AllDirectories)
+                .FirstOrDefault();
+            if (exePath is null)
+            {
+                Console.Error.WriteLine($"{GameExeName} not found after extract.");
+                return Bail(1);
+            }
+
+            Console.WriteLine($"Launching: {exePath}");
+            var psi = new System.Diagnostics.ProcessStartInfo(exePath)
+            {
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetDirectoryName(exePath)!,
+            };
+            System.Diagnostics.Process.Start(psi);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("Launcher error:");
+            Console.Error.WriteLine(ex);
+            return Bail(1);
+        }
+    }
+
+    private static int Bail(int code)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Press any key to close...");
+        try { Console.ReadKey(intercept: true); } catch { }
+        return code;
+    }
+
+    private static async Task CopyWithProgress(Stream src, Stream dst, long total)
+    {
+        var buffer = new byte[81920];
+        long copied = 0;
+        var lastReport = DateTime.UtcNow;
+        int read;
+        while ((read = await src.ReadAsync(buffer)) > 0)
+        {
+            await dst.WriteAsync(buffer.AsMemory(0, read));
+            copied += read;
+            if ((DateTime.UtcNow - lastReport).TotalMilliseconds < 250) continue;
+            lastReport = DateTime.UtcNow;
+            if (total > 0)
+            {
+                var pct = (double)copied / total * 100.0;
+                Console.Write($"\r  {copied / 1024.0 / 1024.0:F1} / {total / 1024.0 / 1024.0:F1} MiB ({pct:F0}%)   ");
+            }
+            else
+            {
+                Console.Write($"\r  {copied / 1024.0 / 1024.0:F1} MiB   ");
+            }
+        }
+    }
+}

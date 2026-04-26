@@ -6,11 +6,12 @@ using Godot;
 
 namespace CowColonySim.Game.Render;
 
-// Reads SimSnapshot.Zones each frame and rebuilds a translucent floor
-// quad per zone. Quad sits a hair above the heightfield surface (worst-
-// case slope sample at the rect corners) so it doesn't z-fight on hills.
-// Stockpile = warm tan, Farm = green. Dummy renderer — full version
-// will switch to a per-zone tile-strip mesh that hugs terrain exactly.
+// Reads SimSnapshot.Zones each frame and rebuilds a per-zone mesh that
+// hugs the heightfield: two triangles per zone tile with vertices snapped
+// to that tile's four corner heights. Mesh is cached per zone and only
+// rebuilt when the zone rect or the heightfield revision changes, so a
+// stable map costs almost nothing per frame. Stockpile = warm tan, Farm =
+// green.
 public partial class ZonesRenderer : Node3D
 {
     private const float HoverUnits = 0.4f;
@@ -18,7 +19,14 @@ public partial class ZonesRenderer : Node3D
     private SnapshotPublisher _publisher = null!;
     private Heightfield _heightfield = null!;
     private float _unitsPerMeter;
-    private readonly Dictionary<int, MeshInstance3D> _quads = new();
+    private readonly Dictionary<int, ZoneMesh> _meshes = new();
+
+    private sealed class ZoneMesh
+    {
+        public MeshInstance3D Node = null!;
+        public int CachedRectKey;
+        public int CachedHeightVersion;
+    }
 
     public void Configure(SnapshotPublisher publisher, Heightfield heightfield)
     {
@@ -41,84 +49,59 @@ public partial class ZonesRenderer : Node3D
         {
             var z = zones[i];
             seen.Add(z.ZoneId);
-            if (!_quads.TryGetValue(z.ZoneId, out var quad))
+            if (!_meshes.TryGetValue(z.ZoneId, out var entry))
             {
-                quad = MakeQuad(z.Type);
-                _quads[z.ZoneId] = quad;
-                AddChild(quad);
+                entry = new ZoneMesh
+                {
+                    Node = new MeshInstance3D
+                    {
+                        MaterialOverride = MakeMaterial(z.Type),
+                        CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                    },
+                    CachedRectKey = 0,
+                    CachedHeightVersion = -1,
+                };
+                _meshes[z.ZoneId] = entry;
+                AddChild(entry.Node);
             }
-            UpdateQuad(quad, z);
+
+            var rectKey = RectKey(z);
+            if (rectKey != entry.CachedRectKey || _heightfield.Version != entry.CachedHeightVersion)
+            {
+                entry.Node.Mesh = BuildMesh(z);
+                entry.CachedRectKey = rectKey;
+                entry.CachedHeightVersion = _heightfield.Version;
+            }
         }
 
-        if (_quads.Count != seen.Count)
+        if (_meshes.Count != seen.Count)
         {
             var stale = new List<int>();
-            foreach (var kv in _quads) if (!seen.Contains(kv.Key)) stale.Add(kv.Key);
+            foreach (var kv in _meshes) if (!seen.Contains(kv.Key)) stale.Add(kv.Key);
             foreach (var id in stale)
             {
-                _quads[id].QueueFree();
-                _quads.Remove(id);
+                _meshes[id].Node.QueueFree();
+                _meshes.Remove(id);
             }
         }
     }
 
-    private MeshInstance3D MakeQuad(ZoneType type)
+    private ArrayMesh BuildMesh(ZoneView z) =>
+        TerrainStripMesh.Build(
+            _heightfield, _unitsPerMeter,
+            z.MinTileX, z.MinTileY, z.MaxTileX, z.MaxTileY,
+            HoverUnits);
+
+    private static StandardMaterial3D MakeMaterial(ZoneType type) => new()
     {
-        var color = ColorFor(type);
-        return new MeshInstance3D
-        {
-            Mesh = new PlaneMesh
-            {
-                Size = new Vector2(1f, 1f),
-                Material = new StandardMaterial3D
-                {
-                    AlbedoColor = color,
-                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                    CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-                },
-            },
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-        };
-    }
+        AlbedoColor = ColorFor(type),
+        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+    };
 
-    private void UpdateQuad(MeshInstance3D quad, ZoneView z)
-    {
-        var unitsPerTile = SimConstants.GodotUnitsPerTile;
-        var widthTiles = z.MaxTileX - z.MinTileX + 1;
-        var heightTiles = z.MaxTileY - z.MinTileY + 1;
-        var sizeUnitsX = widthTiles * unitsPerTile;
-        var sizeUnitsZ = heightTiles * unitsPerTile;
-
-        var plane = (PlaneMesh)quad.Mesh;
-        plane.Size = new Vector2(sizeUnitsX, sizeUnitsZ);
-
-        var centerTileX = (z.MinTileX + z.MaxTileX + 1) * 0.5f;
-        var centerTileY = (z.MinTileY + z.MaxTileY + 1) * 0.5f;
-        var x = centerTileX * unitsPerTile;
-        var zPos = centerTileY * unitsPerTile;
-
-        var maxH = SampleMaxCornerHeight(z);
-        quad.Position = new Vector3(x, maxH + HoverUnits, zPos);
-    }
-
-    private float SampleMaxCornerHeight(ZoneView z)
-    {
-        var corners = new[]
-        {
-            (z.MinTileX, z.MinTileY),
-            (z.MaxTileX + 1, z.MinTileY),
-            (z.MinTileX, z.MaxTileY + 1),
-            (z.MaxTileX + 1, z.MaxTileY + 1),
-        };
-        var max = float.NegativeInfinity;
-        foreach (var (vx, vy) in corners)
-        {
-            var h = _heightfield.SurfaceMetresAt(vx, vy) * _unitsPerMeter;
-            if (h > max) max = h;
-        }
-        return max;
-    }
+    private static int RectKey(ZoneView z) =>
+        HashCode.Combine(z.MinTileX, z.MinTileY, z.MaxTileX, z.MaxTileY);
 
     private static Color ColorFor(ZoneType type) => type switch
     {

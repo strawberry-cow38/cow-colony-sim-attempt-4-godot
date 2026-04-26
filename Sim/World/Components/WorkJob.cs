@@ -17,4 +17,8 @@ public struct WorkJob : IComponent
     // at ChopRatePerSec but fixed-step is 60 Hz, so we accumulate fractions
     // here and subtract a whole point each time it crosses 1.
     public float Progress;
+    // Player force-prioritized this specific assignment via the context
+    // menu. ChopJobSystem.TryAssignChop won't repoint a forced WorkJob to
+    // a closer tree on the next tick — only target invalid clears it.
+    public bool Forced;
 }

@@ -247,6 +247,7 @@ public sealed class ChopJobSystem : ITickSystem
         work.Kind = WorkKind.None;
         work.TargetEntityId = 0;
         work.Progress = 0f;
+        work.Forced = false;
         pf.Tiles = null;
         pf.Index = 0;
     }

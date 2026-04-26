@@ -22,6 +22,7 @@ public partial class SelectionService : Node
     private CommandBus _commands = null!;
     private Heightfield _heightfield = null!;
     private BuildToolService? _tools;
+    private ContextMenu? _contextMenu;
     private float _unitsPerMeter;
 
     public int? SelectedEntityId { get; private set; }
@@ -39,6 +40,8 @@ public partial class SelectionService : Node
     }
 
     public void SetBuildTools(BuildToolService tools) => _tools = tools;
+
+    public void SetContextMenu(ContextMenu menu) => _contextMenu = menu;
 
     public override void _Ready()
     {
@@ -65,14 +68,18 @@ public partial class SelectionService : Node
             var ty = (int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile);
             SelectZoneAtTile(tx, ty);
         }
-        else if (mb.ButtonIndex == MouseButton.Right && SelectedEntityId is int id)
+        else if (mb.ButtonIndex == MouseButton.Right)
         {
-            var tx = (int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile);
-            var ty = (int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile);
-            tx = Mathf.Clamp(tx, 0, TilesPerCell - 1);
-            ty = Mathf.Clamp(ty, 0, TilesPerCell - 1);
-            _commands.Submit(new MoveCommand(id, new TileCoord(tx, ty)));
-            SimLog.Logger.Information("Move command for entity {Id} -> ({TX},{TY}).", id, tx, ty);
+            if (TryOpenTreeContextMenu(camera, mb.Position)) return;
+            if (SelectedEntityId is int id)
+            {
+                var tx = (int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile);
+                var ty = (int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile);
+                tx = Mathf.Clamp(tx, 0, TilesPerCell - 1);
+                ty = Mathf.Clamp(ty, 0, TilesPerCell - 1);
+                _commands.Submit(new MoveCommand(id, new TileCoord(tx, ty)));
+                SimLog.Logger.Information("Move command for entity {Id} -> ({TX},{TY}).", id, tx, ty);
+            }
         }
     }
 
@@ -110,7 +117,16 @@ public partial class SelectionService : Node
         if (changed) SelectionChanged?.Invoke();
     }
 
-    private bool SelectTreeNearRay(Camera3D camera, Vector2 mousePos)
+    private bool TryOpenTreeContextMenu(Camera3D camera, Vector2 mousePos)
+    {
+        if (_contextMenu is null) return false;
+        var id = PickTreeId(camera, mousePos);
+        if (id is null) return false;
+        _contextMenu.OpenForTree(id.Value, mousePos);
+        return true;
+    }
+
+    private int? PickTreeId(Camera3D camera, Vector2 mousePos)
     {
         var origin = camera.ProjectRayOrigin(mousePos);
         var dir = camera.ProjectRayNormal(mousePos).Normalized();
@@ -118,13 +134,6 @@ public partial class SelectionService : Node
         var snap = _publisher.Current;
         var best = -1;
         var bestDist = float.PositiveInfinity;
-
-        // Proper ray-vs-vertical-cylinder. Old version checked the
-        // perpendicular foot from the trunk axis onto the ray — at oblique
-        // camera angles that point's Y often lay outside the cylinder even
-        // when the ray actually pierced it, so clicks felt random. Now we
-        // solve the XZ quadratic for entry/exit, clip against [y0, y1], and
-        // pick the first valid t.
         var radiusUnits = 1.0f * _unitsPerMeter;
         var heightUnits = 6.0f * _unitsPerMeter;
         for (var i = 0; i < snap.Trees.Count; i++)
@@ -136,7 +145,6 @@ public partial class SelectionService : Node
             var cz = metersY * _unitsPerMeter;
             var y0 = SampleGroundUnits(metersX, metersY);
             var y1 = y0 + heightUnits;
-
             if (!RayCylinderHit(origin, dir, cx, cz, radiusUnits, y0, y1, out var tHit)) continue;
             if (tHit < bestDist)
             {
@@ -144,10 +152,17 @@ public partial class SelectionService : Node
                 best = t.EntityId;
             }
         }
+        return best == -1 ? null : best;
+    }
 
-        if (best == -1) return false;
-        if (SelectedTreeId == best) return true;
-        SelectedTreeId = best;
+    private bool SelectTreeNearRay(Camera3D camera, Vector2 mousePos)
+    {
+        // Real ray-vs-vertical-cylinder picker is in PickTreeId — old
+        // perpendicular-foot test made oblique camera clicks miss.
+        var id = PickTreeId(camera, mousePos);
+        if (id is null) return false;
+        if (SelectedTreeId == id) return true;
+        SelectedTreeId = id;
         if (SelectedEntityId is not null) SelectedEntityId = null;
         if (SelectedZoneId is not null) SelectedZoneId = null;
         SelectionChanged?.Invoke();

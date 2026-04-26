@@ -22,6 +22,12 @@ public readonly record struct CreateZoneCommand(ZoneType Type, TileRect Rect, st
 
 public readonly record struct StampDesignationsCommand(DesignationKind Kind, TileRect Rect) : ISimCommand;
 
+// Player-issued "prioritize this colonist on this tree" — pins the
+// colonist's WorkJob to a specific tree and stamps a chop designation
+// at the trunk if one isn't there yet. Tier-2 ASSIGNED in the priority
+// model. Cleared automatically when the tree is felled or destroyed.
+public readonly record struct PrioritizeChopCommand(int ColonistId, int TreeEntityId) : ISimCommand;
+
 public readonly record struct PlaceBlueprintGhostCommand(string DefId, int OriginTileX, int OriginTileY, int Rotation, int BaseLayer) : ISimCommand;
 
 // Wipes any zone/designation/blueprint-ghost entity that overlaps the

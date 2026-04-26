@@ -69,6 +69,7 @@ public partial class Bootstrap : Node3D
         var selection = AddSelectionService(_runtime, _heightfield);
         AddSelectionRing(selection, _runtime, _heightfield);
         AddInfoPanel(selection, _runtime);
+        AddContextMenu(selection, _runtime);
         AddZoneSettingsPanel(selection, _runtime);
         AddPerfHud(_runtime);
         AddTimeHud(_runtime);
@@ -338,6 +339,14 @@ public partial class Bootstrap : Node3D
         var panel = new InfoPanel { Name = "InfoPanel" };
         panel.Configure(selection, runtime.Publisher, runtime.Commands);
         AddChild(panel);
+    }
+
+    private void AddContextMenu(SelectionService selection, SimRuntime runtime)
+    {
+        var menu = new ContextMenu { Name = "ContextMenu" };
+        menu.Configure(selection, runtime.Publisher, runtime.Commands);
+        AddChild(menu);
+        selection.SetContextMenu(menu);
     }
 
     private void AddZoneSettingsPanel(SelectionService selection, SimRuntime runtime)

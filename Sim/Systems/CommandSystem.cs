@@ -1,5 +1,6 @@
 using CowColonySim.Sim.Blueprints;
 using CowColonySim.Sim.Commands;
+using CowColonySim.Sim.Designations;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.World;
 using CowColonySim.Sim.World.Components;
@@ -53,8 +54,50 @@ public sealed class CommandSystem : ITickSystem
                 case SetZoneSettingsCommand szs:
                     Apply(szs);
                     break;
+                case PrioritizeChopCommand pc:
+                    Apply(pc);
+                    break;
             }
         }
+    }
+
+    private void Apply(PrioritizeChopCommand cmd)
+    {
+        var colonist = _world.Store.GetEntityById(cmd.ColonistId);
+        if (colonist == default) return;
+        if (!colonist.HasComponent<WorkJob>() || !colonist.HasComponent<PathFollower>()) return;
+
+        var tree = _world.Store.GetEntityById(cmd.TreeEntityId);
+        if (tree == default || !tree.HasComponent<Tree>() || !tree.HasComponent<TilePosition>()) return;
+
+        ref var treePos = ref tree.GetComponent<TilePosition>();
+        var tx = treePos.TileX;
+        var ty = treePos.TileY;
+
+        // Stamp a chop designation if one isn't there yet so ChopJobSystem's
+        // CollectChopDesignations sees the tile. Players using prioritize
+        // shouldn't have to also click "designate".
+        var hasDesignation = false;
+        foreach (var entity in _world.Store.Query<Designation, TilePosition>().Entities)
+        {
+            ref var d = ref entity.GetComponent<Designation>();
+            if (d.Kind != DesignationKind.ChopTree) continue;
+            ref var p = ref entity.GetComponent<TilePosition>();
+            if (p.TileX == tx && p.TileY == ty) { hasDesignation = true; break; }
+        }
+        if (!hasDesignation) _world.SpawnDesignation(tx, ty, DesignationKind.ChopTree);
+
+        ref var work = ref colonist.GetComponent<WorkJob>();
+        ref var pf = ref colonist.GetComponent<PathFollower>();
+        work.Active = true;
+        work.Kind = WorkKind.ChopTree;
+        work.TargetEntityId = cmd.TreeEntityId;
+        work.TargetTileX = tx;
+        work.TargetTileY = ty;
+        work.Progress = 0f;
+        work.Forced = true;
+        pf.Tiles = null;
+        pf.Index = 0;
     }
 
     private void Apply(EraseInRectCommand cmd)

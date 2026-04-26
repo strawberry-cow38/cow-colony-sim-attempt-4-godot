@@ -1,3 +1,4 @@
+using CowColonySim.Game.Camera;
 using CowColonySim.Game.Terrain;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Logging;
@@ -23,7 +24,7 @@ public partial class Bootstrap : Node3D
         HeightfieldGenerator.Generate(_heightfield, new HeightfieldGenerator.Settings());
 
         AddSun();
-        AddCamera();
+        AddCameraRig();
         AddTerrain(_heightfield);
 
         SimLog.Logger.Information(
@@ -47,17 +48,13 @@ public partial class Bootstrap : Node3D
         AddChild(sun);
     }
 
-    private void AddCamera()
+    private void AddCameraRig()
     {
-        var halfSpan = (PreviewTileCount * SimConstants.GodotUnitsPerTile) * 0.5f;
-        var camera = new Camera3D
-        {
-            Name = "Camera",
-            Position = new Vector3(halfSpan, halfSpan * 1.5f, halfSpan * 2f),
-            Far = 20_000f,
-        };
-        AddChild(camera);
-        camera.LookAt(new Vector3(halfSpan, 0f, halfSpan), Vector3.Up);
+        var span = PreviewTileCount * SimConstants.GodotUnitsPerTile;
+        var rig = new CameraRig { Name = "CameraRig" };
+        rig.Configure(boundsMax: new Vector2(span, span),
+                      startCenter: new Vector2(span * 0.5f, span * 0.5f));
+        AddChild(rig);
     }
 
     private void AddTerrain(Heightfield field)

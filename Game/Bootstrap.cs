@@ -248,6 +248,10 @@ public partial class Bootstrap : Node3D
         var bar = new BuildBar { Name = "BuildBar" };
         bar.Configure(tools);
         AddChild(bar);
+
+        var overlay = new TerrainEditOverlay { Name = "TerrainEditOverlay" };
+        overlay.Configure(tools, _heightfield!);
+        AddChild(overlay);
     }
 
     public override void _ExitTree()

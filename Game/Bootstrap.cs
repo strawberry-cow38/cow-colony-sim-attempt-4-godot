@@ -23,6 +23,7 @@ public partial class Bootstrap : Node3D
     private SimRuntime? _runtime;
     private Heightfield? _heightfield;
     private HeightfieldGenerator.Settings _genSettings;
+    private TerrainRenderer? _terrain;
 
     public override void _Ready()
     {
@@ -60,7 +61,7 @@ public partial class Bootstrap : Node3D
         AddInfoPanel(selection, _runtime);
         AddPerfHud(_runtime);
         AddTimeHud(_runtime);
-        AddBuildBar();
+        AddBuildBar(selection);
 
         SimLog.Logger.Information(
             "Bootstrap ready. SimThread at {Hz} Hz. World has {Count} entities. " +
@@ -168,6 +169,7 @@ public partial class Bootstrap : Node3D
         var terrain = new TerrainRenderer { Name = "Terrain" };
         AddChild(terrain);
         terrain.Build(field);
+        _terrain = terrain;
     }
 
     private void AddBorderWall()
@@ -241,10 +243,12 @@ public partial class Bootstrap : Node3D
         AddChild(panel);
     }
 
-    private void AddBuildBar()
+    private void AddBuildBar(SelectionService selection)
     {
         var tools = new BuildToolService { Name = "BuildTools" };
         AddChild(tools);
+        selection.SetBuildTools(tools);
+
         var bar = new BuildBar { Name = "BuildBar" };
         bar.Configure(tools);
         AddChild(bar);
@@ -252,6 +256,10 @@ public partial class Bootstrap : Node3D
         var overlay = new TerrainEditOverlay { Name = "TerrainEditOverlay" };
         overlay.Configure(tools, _heightfield!);
         AddChild(overlay);
+
+        var tool = new TerrainEditTool { Name = "TerrainEditTool" };
+        tool.Configure(tools, overlay, _heightfield!, _terrain!);
+        AddChild(tool);
     }
 
     public override void _ExitTree()

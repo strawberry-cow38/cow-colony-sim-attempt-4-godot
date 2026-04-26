@@ -1,3 +1,4 @@
+using CowColonySim.Game.UI;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Commands;
 using CowColonySim.Sim.Logging;
@@ -19,6 +20,7 @@ public partial class SelectionService : Node
     private SnapshotPublisher _publisher = null!;
     private CommandBus _commands = null!;
     private Heightfield _heightfield = null!;
+    private BuildToolService? _tools;
     private float _unitsPerMeter;
 
     public int? SelectedEntityId { get; private set; }
@@ -33,6 +35,8 @@ public partial class SelectionService : Node
         _heightfield = heightfield;
     }
 
+    public void SetBuildTools(BuildToolService tools) => _tools = tools;
+
     public override void _Ready()
     {
         _unitsPerMeter = SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile;
@@ -41,6 +45,7 @@ public partial class SelectionService : Node
     public override void _UnhandledInput(InputEvent ev)
     {
         if (ev is not InputEventMouseButton mb || !mb.Pressed) return;
+        if (_tools is not null && !string.IsNullOrEmpty(_tools.ActiveToolId)) return;
 
         var camera = GetViewport().GetCamera3D();
         if (camera is null) return;

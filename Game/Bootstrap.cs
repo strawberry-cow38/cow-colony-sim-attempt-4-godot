@@ -1,8 +1,10 @@
 using CowColonySim.Game.Camera;
+using CowColonySim.Game.Colonists;
 using CowColonySim.Game.Debug;
 using CowColonySim.Game.Terrain;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Logging;
+using CowColonySim.Sim.Systems;
 using CowColonySim.Sim.Terrain;
 using Godot;
 
@@ -19,15 +21,20 @@ public partial class Bootstrap : Node3D
     {
         SimLog.Configure();
         _runtime = new SimRuntime();
-        _runtime.Start();
 
         _heightfield = new Heightfield(PreviewTileCount, PreviewTileCount);
         HeightfieldGenerator.Generate(_heightfield, new HeightfieldGenerator.Settings());
+
+        _runtime.Scheduler.Register(new WanderSystem(
+            _runtime.World, PreviewTileCount, PreviewTileCount));
+        SpawnColonists(_runtime);
+        _runtime.Start();
 
         AddSun();
         AddCameraRig();
         AddTerrain(_heightfield);
         AddVertexOverlay(_heightfield);
+        AddColonists(_runtime, _heightfield);
         AddPerfHud(_runtime);
 
         SimLog.Logger.Information(
@@ -35,6 +42,14 @@ public partial class Bootstrap : Node3D
             "Heightfield {VW}x{VH} verts (rev {Rev}).",
             SimConstants.TickRateHz, _runtime.World.EntityCount,
             _heightfield.VertWidth, _heightfield.VertHeight, _heightfield.Version);
+    }
+
+    private static void SpawnColonists(SimRuntime runtime)
+    {
+        var center = PreviewTileCount / 2;
+        runtime.World.SpawnColonist(0xCAFEBABE, center - 2, center - 2);
+        runtime.World.SpawnColonist(0xDEADC0DE, center,     center);
+        runtime.World.SpawnColonist(0xFACEFEED, center + 2, center + 2);
     }
 
     private void AddSun()
@@ -79,6 +94,13 @@ public partial class Bootstrap : Node3D
         var hud = new PerfHud { Name = "PerfHud" };
         hud.Configure(runtime);
         AddChild(hud);
+    }
+
+    private void AddColonists(SimRuntime runtime, Heightfield field)
+    {
+        var renderer = new ColonistsRenderer { Name = "Colonists" };
+        renderer.Configure(runtime.Publisher, field);
+        AddChild(renderer);
     }
 
     public override void _ExitTree()

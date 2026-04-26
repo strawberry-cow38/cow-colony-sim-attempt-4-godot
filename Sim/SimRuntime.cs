@@ -3,6 +3,7 @@ using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Systems;
 using CowColonySim.Sim.Time;
 using CowColonySim.Sim.World;
+using CowColonySim.Sim.World.Components;
 
 namespace CowColonySim.Sim;
 
@@ -52,7 +53,8 @@ public sealed class SimRuntime : IDisposable
             _publisher.Publish(new SimSnapshot(
                 TickNumber: current,
                 ElapsedSeconds: GameClock.SecondsAt(current),
-                EntityCount: _world.EntityCount));
+                EntityCount: _world.EntityCount,
+                Colonists: BuildColonistViews()));
 
             var now = Stopwatch.GetTimestamp();
             var remaining = nextTick - now;
@@ -73,6 +75,19 @@ public sealed class SimRuntime : IDisposable
             }
             nextTick += stepTicks;
         }
+    }
+
+    private ColonistView[] BuildColonistViews()
+    {
+        var query = _world.Store.Query<Colonist, TilePosition>();
+        var views = new ColonistView[query.Count];
+        var i = 0;
+        foreach (var entity in query.Entities)
+        {
+            ref var p = ref entity.GetComponent<TilePosition>();
+            views[i++] = new ColonistView(p.MetersX, p.MetersY);
+        }
+        return views;
     }
 
     public void Dispose()

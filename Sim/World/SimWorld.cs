@@ -1,3 +1,4 @@
+using CowColonySim.Sim.World.Components;
 using Friflo.Engine.ECS;
 
 namespace CowColonySim.Sim.World;
@@ -12,4 +13,18 @@ public sealed class SimWorld
     public int EntityCount => Store.Count;
 
     public Entity CreateEntity() => Store.CreateEntity();
+
+    public Entity SpawnColonist(uint rngSeed, int tileX, int tileY)
+    {
+        var e = Store.CreateEntity();
+        e.AddComponent(new TilePosition(tileX, tileY, 0, 0.5f, 0.5f));
+        e.AddComponent(new Colonist
+        {
+            Rng = rngSeed == 0 ? 0xC0FFEE01u : rngSeed,
+            VelMpsX = 0f,
+            VelMpsY = 0f,
+            NextRerollTick = 0,
+        });
+        return e;
+    }
 }

@@ -15,7 +15,10 @@ public static class TerrainMaterial
         if (_cached is not null) return _cached;
         _cached = new StandardMaterial3D
         {
-            AlbedoTexture = LoadGrass(),
+            AlbedoTexture = LoadImageTexture("res://assets/grass05.jpg"),
+            NormalEnabled = true,
+            NormalTexture = LoadBumpAsNormalMap("res://assets/grass0xb.jpg"),
+            NormalScale = 0.6f,
             Uv1Scale = new Vector3(1f, 1f, 1f),
             Roughness = 1.0f,
             Metallic = 0.0f,
@@ -31,12 +34,25 @@ public static class TerrainMaterial
     // Source-pull launcher means assets ship as raw files (no .import). Read
     // the JPG straight off disk and build an ImageTexture so we don't need
     // Godot's import pipeline to have run.
-    private static ImageTexture LoadGrass()
+    private static ImageTexture LoadImageTexture(string resPath)
     {
-        var path = ProjectSettings.GlobalizePath("res://assets/grass05.jpg");
+        var path = ProjectSettings.GlobalizePath(resPath);
         var img = new Image();
         var err = img.Load(path);
-        if (err != Error.Ok) GD.PushError($"Failed to load grass texture at {path}: {err}");
+        if (err != Error.Ok) GD.PushError($"Failed to load texture at {path}: {err}");
+        img.GenerateMipmaps();
+        return ImageTexture.CreateFromImage(img);
+    }
+
+    // Source asset is a grayscale bump (height) map; Godot's NormalTexture
+    // wants RGB-encoded normals. Convert in place at load time.
+    private static ImageTexture LoadBumpAsNormalMap(string resPath)
+    {
+        var path = ProjectSettings.GlobalizePath(resPath);
+        var img = new Image();
+        var err = img.Load(path);
+        if (err != Error.Ok) GD.PushError($"Failed to load bump map at {path}: {err}");
+        img.BumpMapToNormalMap();
         img.GenerateMipmaps();
         return ImageTexture.CreateFromImage(img);
     }

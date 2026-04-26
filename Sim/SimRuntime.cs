@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using CowColonySim.Sim.Commands;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Systems;
 using CowColonySim.Sim.Time;
@@ -15,6 +16,7 @@ public sealed class SimRuntime : IDisposable
     private readonly Scheduler _scheduler = new();
     private readonly SimWorld _world = new();
     private readonly SnapshotPublisher _publisher = new();
+    private readonly CommandBus _commands = new();
     private readonly CancellationTokenSource _cts = new();
     private Thread? _thread;
     private long _tick;
@@ -23,6 +25,7 @@ public sealed class SimRuntime : IDisposable
     public Scheduler Scheduler => _scheduler;
     public SimWorld World => _world;
     public SnapshotPublisher Publisher => _publisher;
+    public CommandBus Commands => _commands;
     public long TickNumber => Interlocked.Read(ref _tick);
 
     public void Start()
@@ -85,7 +88,7 @@ public sealed class SimRuntime : IDisposable
         foreach (var entity in query.Entities)
         {
             ref var p = ref entity.GetComponent<TilePosition>();
-            views[i++] = new ColonistView(p.MetersX, p.MetersY);
+            views[i++] = new ColonistView(entity.Id, p.MetersX, p.MetersY);
         }
         return views;
     }

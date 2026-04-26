@@ -1,7 +1,9 @@
 using CowColonySim.Game.Camera;
 using CowColonySim.Game.Colonists;
 using CowColonySim.Game.Debug;
+using CowColonySim.Game.Input;
 using CowColonySim.Game.Terrain;
+using CowColonySim.Game.UI;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Logging;
 using CowColonySim.Sim.Pathfinding;
@@ -30,6 +32,8 @@ public partial class Bootstrap : Node3D
 
         var grid = new HeightGrid(_heightfield);
         var planner = new PathPlanner(grid);
+        _runtime.Scheduler.Register(new CommandSystem(
+            _runtime.Commands, _runtime.World, planner, grid));
         _runtime.Scheduler.Register(new WanderSystem(_runtime.World, planner, grid));
         SpawnColonists(_runtime);
         _runtime.Start();
@@ -40,6 +44,9 @@ public partial class Bootstrap : Node3D
         AddBackground(_genSettings);
         AddVertexOverlay(_heightfield);
         AddColonists(_runtime, _heightfield);
+        var selection = AddSelectionService(_runtime, _heightfield);
+        AddSelectionRing(selection, _runtime, _heightfield);
+        AddInfoPanel(selection, _runtime);
         AddPerfHud(_runtime);
 
         SimLog.Logger.Information(
@@ -114,6 +121,28 @@ public partial class Bootstrap : Node3D
         var renderer = new ColonistsRenderer { Name = "Colonists" };
         renderer.Configure(runtime.Publisher, field);
         AddChild(renderer);
+    }
+
+    private SelectionService AddSelectionService(SimRuntime runtime, Heightfield field)
+    {
+        var sel = new SelectionService { Name = "Selection" };
+        sel.Configure(runtime.Publisher, runtime.Commands, field);
+        AddChild(sel);
+        return sel;
+    }
+
+    private void AddSelectionRing(SelectionService selection, SimRuntime runtime, Heightfield field)
+    {
+        var ring = new SelectionRing { Name = "SelectionRing" };
+        ring.Configure(selection, runtime.Publisher, field);
+        AddChild(ring);
+    }
+
+    private void AddInfoPanel(SelectionService selection, SimRuntime runtime)
+    {
+        var panel = new InfoPanel { Name = "InfoPanel" };
+        panel.Configure(selection, runtime.Publisher);
+        AddChild(panel);
     }
 
     public override void _ExitTree()

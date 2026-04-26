@@ -128,6 +128,7 @@ public partial class PlacementTool : Node
             _ghostPreview.OriginTileX = origin.X;
             _ghostPreview.OriginTileY = origin.Y;
             _ghostPreview.RotationSteps = _blueprintRotation;
+            _ghostPreview.BaseLayer = _tools.ActiveBuildLayer;
             _ghostPreview.Valid = IsFootprintPlaceable(def, _blueprintRotation, origin);
         }
     }
@@ -222,7 +223,7 @@ public partial class PlacementTool : Node
                 for (var x = line.MinX; x <= line.MaxX; x++)
                 {
                     if (!IsFootprintInBounds(def, 0, new Vector2I(x, y))) continue;
-                    _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, x, y, 0));
+                    _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, x, y, 0, _tools.ActiveBuildLayer));
                 }
             }
         }
@@ -237,7 +238,7 @@ public partial class PlacementTool : Node
         var origin = OriginForFootprintCenter(def, _blueprintRotation, tile);
         if (!IsFootprintPlaceable(def, _blueprintRotation, origin)) return;
 
-        _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, origin.X, origin.Y, _blueprintRotation));
+        _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, origin.X, origin.Y, _blueprintRotation, _tools.ActiveBuildLayer));
     }
 
     // Reduces a (start, end) pair to a 1-tile-thick rect along the axis
@@ -277,8 +278,9 @@ public partial class PlacementTool : Node
     {
         if (!IsFootprintInBounds(def, rotation, origin)) return false;
         var (w, h) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
-        if (!IsFootprintLevel(origin.X, origin.Y, w, h)) return false;
-        if (IsFootprintObstructed(origin.X, origin.Y, w, h)) return false;
+        var layer = _tools.ActiveBuildLayer;
+        if (layer == 0 && !IsFootprintLevel(origin.X, origin.Y, w, h)) return false;
+        if (IsFootprintObstructed(origin.X, origin.Y, w, h, layer)) return false;
         return true;
     }
 
@@ -295,7 +297,7 @@ public partial class PlacementTool : Node
         return true;
     }
 
-    private bool IsFootprintObstructed(int ox, int oy, int w, int h)
+    private bool IsFootprintObstructed(int ox, int oy, int w, int h, int layer)
     {
         var minX = ox; var minY = oy;
         var maxX = ox + w - 1; var maxY = oy + h - 1;
@@ -303,6 +305,7 @@ public partial class PlacementTool : Node
         for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
         {
             var g = snap.BlueprintGhosts[i];
+            if (g.BaseLayer != layer) continue;
             if (!BlueprintCatalog.TryGet(g.DefId, out var od) || od is null) continue;
             var (ow, oh) = (g.Rotation & 1) == 0 ? (od.FootprintW, od.FootprintH) : (od.FootprintH, od.FootprintW);
             var omx = g.OriginTileX + ow - 1;

@@ -22,7 +22,7 @@ public readonly record struct CreateZoneCommand(ZoneType Type, TileRect Rect, st
 
 public readonly record struct StampDesignationsCommand(DesignationKind Kind, TileRect Rect) : ISimCommand;
 
-public readonly record struct PlaceBlueprintGhostCommand(string DefId, int OriginTileX, int OriginTileY, int Rotation) : ISimCommand;
+public readonly record struct PlaceBlueprintGhostCommand(string DefId, int OriginTileX, int OriginTileY, int Rotation, int BaseLayer) : ISimCommand;
 
 // Wipes any zone/designation/blueprint-ghost entity that overlaps the
 // rect. Zones removed if any tile of their rect is inside; designations

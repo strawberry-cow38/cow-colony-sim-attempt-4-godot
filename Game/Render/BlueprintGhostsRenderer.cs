@@ -7,12 +7,13 @@ using Godot;
 namespace CowColonySim.Game.Render;
 
 // Reads SimSnapshot.BlueprintGhosts each frame and draws a translucent
-// blue box per ghost sized to the def's footprint. Rotation in 90°
-// steps swaps W/H. Dummy renderer — real version will ghost the actual
-// asset mesh and color-tint by build progress / validation state.
+// blue box per ghost sized to the def's footprint and HeightMeters.
+// Rotation in 90° steps swaps W/H. BaseLayer offsets the box vertically
+// so wall-tops can stack ghosts on z+1. Dummy renderer — real version
+// will ghost the actual asset mesh.
 public partial class BlueprintGhostsRenderer : Node3D
 {
-    private const float HeightMeters = 1.5f;
+    private const float LayerStepMeters = 3.0f;
     private const float HoverUnits = 0.4f;
 
     private SnapshotPublisher _publisher = null!;
@@ -85,7 +86,7 @@ public partial class BlueprintGhostsRenderer : Node3D
         var unitsPerTile = SimConstants.GodotUnitsPerTile;
         var sizeUnitsX = footW * unitsPerTile;
         var sizeUnitsZ = footH * unitsPerTile;
-        var sizeUnitsY = HeightMeters * _unitsPerMeter;
+        var sizeUnitsY = def.HeightMeters * _unitsPerMeter;
 
         var mesh = (BoxMesh)box.Mesh;
         mesh.Size = new Vector3(sizeUnitsX, sizeUnitsY, sizeUnitsZ);
@@ -96,7 +97,8 @@ public partial class BlueprintGhostsRenderer : Node3D
         var z = centerTileY * unitsPerTile;
 
         var ground = SampleGround(centerTileX, centerTileY);
-        box.Position = new Vector3(x, ground + sizeUnitsY * 0.5f + HoverUnits, z);
+        var layerOffset = g.BaseLayer * LayerStepMeters * _unitsPerMeter;
+        box.Position = new Vector3(x, ground + layerOffset + sizeUnitsY * 0.5f + HoverUnits, z);
     }
 
     private static (int w, int h) RotatedFootprint(int w, int h, int rot)

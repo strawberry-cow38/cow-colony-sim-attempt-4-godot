@@ -117,9 +117,9 @@ public sealed class CommandSystem : ITickSystem
             ? (def.FootprintW, def.FootprintH)
             : (def.FootprintH, def.FootprintW);
         if (!FootprintInBounds(cmd.OriginTileX, cmd.OriginTileY, footW, footH)) return;
-        if (!FootprintLevel(cmd.OriginTileX, cmd.OriginTileY, footW, footH)) return;
-        if (FootprintObstructed(cmd.OriginTileX, cmd.OriginTileY, footW, footH)) return;
-        _world.SpawnBlueprintGhost(cmd.DefId, cmd.OriginTileX, cmd.OriginTileY, cmd.Rotation);
+        if (cmd.BaseLayer == 0 && !FootprintLevel(cmd.OriginTileX, cmd.OriginTileY, footW, footH)) return;
+        if (FootprintObstructed(cmd.OriginTileX, cmd.OriginTileY, footW, footH, cmd.BaseLayer)) return;
+        _world.SpawnBlueprintGhost(cmd.DefId, cmd.OriginTileX, cmd.OriginTileY, cmd.Rotation, cmd.BaseLayer);
     }
 
     private bool FootprintInBounds(int ox, int oy, int w, int h)
@@ -141,12 +141,13 @@ public sealed class CommandSystem : ITickSystem
         return true;
     }
 
-    private bool FootprintObstructed(int ox, int oy, int w, int h)
+    private bool FootprintObstructed(int ox, int oy, int w, int h, int layer)
     {
         var foot = new TileRect(ox, oy, ox + w - 1, oy + h - 1);
         foreach (var entity in _world.Store.Query<BlueprintGhost>().Entities)
         {
             ref var g = ref entity.GetComponent<BlueprintGhost>();
+            if (g.BaseLayer != layer) continue;
             if (!BlueprintCatalog.TryGet(g.DefId, out var od) || od is null) continue;
             var (ow, oh) = (g.Rotation & 1) == 0
                 ? (od.FootprintW, od.FootprintH)

@@ -27,7 +27,28 @@ public static class BlueprintCatalog
                 Placement: PlacementMode.LineDrag,
                 FootprintW: 1, FootprintH: 1,
                 Rotatable: false,
-                Requirements: System.Array.Empty<FootprintRequirement>()),
+                Requirements: System.Array.Empty<FootprintRequirement>(),
+                HeightMeters: 3.0f),
+
+            new BlueprintDef(
+                Id: "structure.wall_half",
+                DisplayName: "Half Wall",
+                Category: BlueprintCategory.Structure,
+                Placement: PlacementMode.LineDrag,
+                FootprintW: 1, FootprintH: 1,
+                Rotatable: false,
+                Requirements: System.Array.Empty<FootprintRequirement>(),
+                HeightMeters: 1.5f),
+
+            new BlueprintDef(
+                Id: "structure.wall_quarter",
+                DisplayName: "Quarter Wall",
+                Category: BlueprintCategory.Structure,
+                Placement: PlacementMode.LineDrag,
+                FootprintW: 1, FootprintH: 1,
+                Rotatable: false,
+                Requirements: System.Array.Empty<FootprintRequirement>(),
+                HeightMeters: 0.75f),
 
             new BlueprintDef(
                 Id: "structure.door",

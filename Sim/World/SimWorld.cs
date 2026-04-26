@@ -59,7 +59,7 @@ public sealed class SimWorld
         return e;
     }
 
-    public Entity SpawnBlueprintGhost(string defId, int tileX, int tileY, int rotation = 0)
+    public Entity SpawnBlueprintGhost(string defId, int tileX, int tileY, int rotation = 0, int baseLayer = 0)
     {
         var def = BlueprintCatalog.Get(defId);
         var e = Store.CreateEntity();
@@ -70,6 +70,7 @@ public sealed class SimWorld
             OriginTileX = tileX,
             OriginTileY = tileY,
             Rotation = rotation,
+            BaseLayer = baseLayer,
             BuildProgress = 0f,
         });
         return e;

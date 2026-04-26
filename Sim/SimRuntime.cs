@@ -207,7 +207,7 @@ public sealed class SimRuntime : IDisposable
             ref var g = ref entity.GetComponent<BlueprintGhost>();
             views[i++] = new BlueprintGhostView(
                 entity.Id, g.DefId, g.OriginTileX, g.OriginTileY,
-                g.Rotation, g.BuildProgress);
+                g.Rotation, g.BaseLayer, g.BuildProgress);
         }
         return views;
     }

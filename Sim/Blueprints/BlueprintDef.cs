@@ -16,4 +16,5 @@ public sealed record BlueprintDef(
     int FootprintW,
     int FootprintH,
     bool Rotatable,
-    IReadOnlyList<FootprintRequirement> Requirements);
+    IReadOnlyList<FootprintRequirement> Requirements,
+    float HeightMeters = 1.5f);

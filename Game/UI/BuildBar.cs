@@ -19,6 +19,7 @@ public partial class BuildBar : CanvasLayer
     private VBoxContainer _categoryList = null!;
     private VBoxContainer _toolList = null!;
     private Label _toolHeader = null!;
+    private Label _layerLabel = null!;
 
     private readonly List<Category> _categories = BuildCategories();
 
@@ -92,6 +93,22 @@ public partial class BuildBar : CanvasLayer
         _buildButton.Toggled += OnBuildToggled;
         AddChild(_buildButton);
 
+        _layerLabel = new Label
+        {
+            Text = "layer 0  (Q/E)",
+            AnchorLeft = 0.5f, AnchorRight = 0.5f,
+            AnchorTop = 1f, AnchorBottom = 1f,
+            OffsetLeft = 56f, OffsetRight = 240f,
+            OffsetTop = -36f, OffsetBottom = -12f,
+            Visible = false,
+        };
+        _layerLabel.AddThemeColorOverride("font_color", new Color(1f, 1f, 1f));
+        _layerLabel.AddThemeColorOverride("font_outline_color", new Color(0f, 0f, 0f));
+        _layerLabel.AddThemeConstantOverride("outline_size", 4);
+        AddChild(_layerLabel);
+        _tools.BuildLayerChanged += OnBuildLayerChanged;
+        _tools.ToolChanged += OnToolChangedForLayer;
+
         _popup = new PanelContainer
         {
             AnchorLeft = 0.5f,
@@ -141,6 +158,16 @@ public partial class BuildBar : CanvasLayer
             _categoryList.AddChild(btn);
             _categoryButtons[cat.Id] = btn;
         }
+    }
+
+    private void OnBuildLayerChanged(int layer)
+    {
+        _layerLabel.Text = $"layer {layer}  (Q/E)";
+    }
+
+    private void OnToolChangedForLayer(string toolId)
+    {
+        _layerLabel.Visible = toolId.StartsWith("blueprint.");
     }
 
     private void OnBuildToggled(bool open)

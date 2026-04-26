@@ -8,4 +8,5 @@ public readonly record struct BlueprintGhostView(
     int OriginTileX,
     int OriginTileY,
     int Rotation,
+    int BaseLayer,
     float BuildProgress);

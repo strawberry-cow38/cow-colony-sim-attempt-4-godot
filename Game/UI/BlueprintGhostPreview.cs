@@ -10,7 +10,7 @@ namespace CowColonySim.Game.UI;
 // + OriginTile each frame. Color flips to red when Valid is false.
 public partial class BlueprintGhostPreview : Node3D
 {
-    private const float HeightMeters = 1.5f;
+    private const float LayerStepMeters = 3.0f;
     private const float HoverUnits = 0.4f;
 
     private Heightfield _field = null!;
@@ -21,6 +21,7 @@ public partial class BlueprintGhostPreview : Node3D
     public int OriginTileX { get; set; }
     public int OriginTileY { get; set; }
     public int RotationSteps { get; set; }
+    public int BaseLayer { get; set; }
     public bool Valid { get; set; } = true;
 
     public void Configure(Heightfield field) => _field = field;
@@ -59,7 +60,7 @@ public partial class BlueprintGhostPreview : Node3D
         var unitsPerTile = SimConstants.GodotUnitsPerTile;
         var sizeUnitsX = footW * unitsPerTile;
         var sizeUnitsZ = footH * unitsPerTile;
-        var sizeUnitsY = HeightMeters * _unitsPerMeter;
+        var sizeUnitsY = def.HeightMeters * _unitsPerMeter;
 
         var mesh = (BoxMesh)_box.Mesh;
         mesh.Size = new Vector3(sizeUnitsX, sizeUnitsY, sizeUnitsZ);
@@ -71,9 +72,10 @@ public partial class BlueprintGhostPreview : Node3D
         var centerTileX = OriginTileX + footW * 0.5f;
         var centerTileY = OriginTileY + footH * 0.5f;
         var ground = _field.SurfaceMetresAt(centerTileX, centerTileY) * _unitsPerMeter;
+        var layerOffset = BaseLayer * LayerStepMeters * _unitsPerMeter;
         _box.Position = new Vector3(
             centerTileX * unitsPerTile,
-            ground + sizeUnitsY * 0.5f + HoverUnits,
+            ground + layerOffset + sizeUnitsY * 0.5f + HoverUnits,
             centerTileY * unitsPerTile);
         _box.Visible = true;
     }

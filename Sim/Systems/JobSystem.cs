@@ -36,7 +36,7 @@ public sealed class JobSystem : ITickSystem
         var dt = (float)ctx.FixedDeltaSeconds;
         var spots = CollectSpots();
 
-        var query = _world.Store.Query<Colonist, Needs, Job, TilePosition, PathFollower, WorkJob>();
+        var query = _world.Store.Query<Colonist, Needs, Job, TilePosition, WorkJob>();
         foreach (var entity in query.Entities)
         {
             ref var needs = ref entity.GetComponent<Needs>();

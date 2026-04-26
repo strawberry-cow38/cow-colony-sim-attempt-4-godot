@@ -117,8 +117,8 @@ public partial class Bootstrap : Node3D
             ShadowNormalBias = 2.0f,
             ShadowBlur = 1.0f,
             ShadowOpacity = 1.0f,
-            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
-            DirectionalShadowMaxDistance = 400f,
+            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Orthogonal,
+            DirectionalShadowMaxDistance = 200f,
         };
         sun.Rotation = new Vector3(Mathf.DegToRad(-55f), Mathf.DegToRad(35f), 0f);
         AddChild(sun);

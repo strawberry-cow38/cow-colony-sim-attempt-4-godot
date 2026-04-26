@@ -56,6 +56,10 @@ public sealed class Heightfield
         Version++;
     }
 
+    // Bulk writers (e.g. generators) call this after a sweep to guarantee
+    // a Version bump even when individual Set() calls happened to be no-ops.
+    public void MarkChanged() => Version++;
+
     public float MetresAt(int vx, int vy) =>
         Get(vx, vy) * TerrainConstants.VerticalQuantumMetres;
 

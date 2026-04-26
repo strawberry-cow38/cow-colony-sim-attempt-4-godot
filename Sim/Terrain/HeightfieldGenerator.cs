@@ -24,6 +24,7 @@ public static class HeightfieldGenerator
                 field.Set(vx, vy, h);
             }
         }
+        field.MarkChanged();
     }
 
     private static float Fbm(int vx, int vy, Settings s)

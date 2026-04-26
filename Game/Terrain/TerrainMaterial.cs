@@ -33,6 +33,12 @@ uniform float fine_scale  = 0.6;
 uniform float patch_scale = 0.05;
 uniform float roughness_v = 0.95;
 
+// VERTEX in fragment() is view-space in Godot 4. Capture model-space and
+// world-space positions in vertex() and ship them down via varyings so
+// the noise + heightmap UV stay locked to the mesh, not to the camera.
+varying vec3 v_local;
+varying vec3 v_world;
+
 float hash21(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
@@ -50,8 +56,13 @@ float vnoise(vec2 p) {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+void vertex() {
+    v_local = VERTEX;
+    v_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+
 void fragment() {
-    vec2 local_xz = VERTEX.xz;
+    vec2 local_xz = v_local.xz;
     vec2 uv = clamp(local_xz / chunk_local_size, vec2(0.0), vec2(1.0));
 
     vec2 step_uv = 1.0 / vert_count;
@@ -65,9 +76,8 @@ void fragment() {
     vec3 n_local = normalize(vec3(-dHx, 1.0, -dHz));
     NORMAL = (VIEW_MATRIX * MODEL_MATRIX * vec4(n_local, 0.0)).xyz;
 
-    vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    float fine  = vnoise(wp.xz * fine_scale);
-    float patch = vnoise(wp.xz * patch_scale);
+    float fine  = vnoise(v_world.xz * fine_scale);
+    float patch = vnoise(v_world.xz * patch_scale);
     vec3 grass = mix(grass_dark, grass_mid, fine);
     grass = mix(grass, grass_light, smoothstep(0.55, 0.9, patch));
     ALBEDO = grass;

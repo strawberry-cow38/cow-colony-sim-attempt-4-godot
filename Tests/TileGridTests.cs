@@ -11,7 +11,9 @@ public class TileGridTests
         var s = new MapSettings();
         Assert.Equal(256, s.Width);
         Assert.Equal(256, s.Height);
-        Assert.Equal(5, s.Depth);
+        Assert.Equal(-64, s.MinZ);
+        Assert.Equal(64, s.MaxZ);
+        Assert.Equal(129, s.Depth);
     }
 
     [Fact]

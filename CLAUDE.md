@@ -59,6 +59,8 @@ untestable and engine-coupled. If you find yourself wanting Godot types in
 - **Sim stores tile coords + sub-tile floats.** Game multiplies by 43 when
   rendering. Sim is engine-agnostic; nothing in `Sim/` knows about Godot
   units.
+- **Z range = -64..64** (129 layers per cell). Deep underground +
+  sky-tower headroom. Override per-test for smaller cases.
 
 ### Save format
 - **Friflo JSON** for now. Diffable, scriptable, debuggable. Profile before

@@ -1,13 +1,13 @@
 namespace CowColonySim.Sim.Map;
 
-// Phase target: 256x256 tiles per cell. Z range covers the multi-level
-// vertical map. Defaults reflect the pre-game one-cell skeleton; override
-// per-test as needed.
+// Phase target: 256x256 tiles per cell with a tall vertical column from
+// z=-64 (deep underground) to z=64 (sky towers). 129 z-layers total.
+// Override per-test for smaller cases.
 public sealed record MapSettings(
     int Width = 256,
     int Height = 256,
-    int MinZ = 0,
-    int MaxZ = 4,
+    int MinZ = -64,
+    int MaxZ = 64,
     int Seed = 0)
 {
     public int Depth => MaxZ - MinZ + 1;

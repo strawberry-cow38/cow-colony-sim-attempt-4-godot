@@ -23,7 +23,10 @@ public partial class BorderWall : Node3D
         {
             AlbedoColor = new Color(0.30f, 0.30f, 0.30f, 0.30f),
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            Roughness = 1.0f,
+            Metallic = 0.0f,
+            MetallicSpecular = 0.0f,
+            SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
         };
 

@@ -119,32 +119,28 @@ public partial class SelectionService : Node
         var best = -1;
         var bestDist = float.PositiveInfinity;
 
-        // Tree picking: probe ray against an axis-aligned cylinder ~0.7m
-        // radius * 5m tall around the trunk. Cheaper than triangulating the
-        // multimesh and good enough for click-to-select.
-        var radiusUnits = 0.7f * _unitsPerMeter;
-        var heightUnits = 5.0f * _unitsPerMeter;
+        // Proper ray-vs-vertical-cylinder. Old version checked the
+        // perpendicular foot from the trunk axis onto the ray — at oblique
+        // camera angles that point's Y often lay outside the cylinder even
+        // when the ray actually pierced it, so clicks felt random. Now we
+        // solve the XZ quadratic for entry/exit, clip against [y0, y1], and
+        // pick the first valid t.
+        var radiusUnits = 1.0f * _unitsPerMeter;
+        var heightUnits = 6.0f * _unitsPerMeter;
         for (var i = 0; i < snap.Trees.Count; i++)
         {
             var t = snap.Trees[i];
             var metersX = (t.TileX + 0.5f) * SimConstants.MetersPerTile;
             var metersY = (t.TileY + 0.5f) * SimConstants.MetersPerTile;
-            var x = metersX * _unitsPerMeter;
-            var z = metersY * _unitsPerMeter;
-            var groundY = SampleGroundUnits(metersX, metersY);
-            var center = new Vector3(x, groundY + heightUnits * 0.5f, z);
-            var toC = center - origin;
-            var tParam = toC.Dot(dir);
-            if (tParam < 0f) continue;
-            var closest = origin + dir * tParam;
-            var planar = MathF.Sqrt(
-                (closest.X - center.X) * (closest.X - center.X) +
-                (closest.Z - center.Z) * (closest.Z - center.Z));
-            var verticalOk = MathF.Abs(closest.Y - center.Y) <= heightUnits * 0.5f;
-            if (planar > radiusUnits || !verticalOk) continue;
-            if (tParam < bestDist)
+            var cx = metersX * _unitsPerMeter;
+            var cz = metersY * _unitsPerMeter;
+            var y0 = SampleGroundUnits(metersX, metersY);
+            var y1 = y0 + heightUnits;
+
+            if (!RayCylinderHit(origin, dir, cx, cz, radiusUnits, y0, y1, out var tHit)) continue;
+            if (tHit < bestDist)
             {
-                bestDist = tParam;
+                bestDist = tHit;
                 best = t.EntityId;
             }
         }
@@ -191,6 +187,55 @@ public partial class SelectionService : Node
         if (SelectedZoneId is not null) SelectedZoneId = null;
         if (SelectedTreeId is not null) SelectedTreeId = null;
         SelectionChanged?.Invoke();
+        return true;
+    }
+
+    private static bool RayCylinderHit(
+        Vector3 origin, Vector3 dir,
+        float cx, float cz, float radius, float y0, float y1,
+        out float tHit)
+    {
+        tHit = 0f;
+        var ox = origin.X - cx;
+        var oz = origin.Z - cz;
+        var a = dir.X * dir.X + dir.Z * dir.Z;
+        var b = 2f * (ox * dir.X + oz * dir.Z);
+        var c = ox * ox + oz * oz - radius * radius;
+
+        float tEnter, tExit;
+        if (a < 1e-6f)
+        {
+            // Ray is vertical: only inside cylinder if origin already is.
+            if (c > 0f) return false;
+            tEnter = float.NegativeInfinity;
+            tExit = float.PositiveInfinity;
+        }
+        else
+        {
+            var disc = b * b - 4f * a * c;
+            if (disc < 0f) return false;
+            var sq = MathF.Sqrt(disc);
+            tEnter = (-b - sq) / (2f * a);
+            tExit = (-b + sq) / (2f * a);
+        }
+
+        // Clip against horizontal caps so we only count t-values where the
+        // ray is *also* inside the cylinder's vertical extent.
+        if (MathF.Abs(dir.Y) > 1e-6f)
+        {
+            var tCap0 = (y0 - origin.Y) / dir.Y;
+            var tCap1 = (y1 - origin.Y) / dir.Y;
+            if (tCap0 > tCap1) (tCap0, tCap1) = (tCap1, tCap0);
+            tEnter = MathF.Max(tEnter, tCap0);
+            tExit = MathF.Min(tExit, tCap1);
+        }
+        else
+        {
+            if (origin.Y < y0 || origin.Y > y1) return false;
+        }
+
+        if (tExit < 0f || tEnter > tExit) return false;
+        tHit = tEnter > 0f ? tEnter : 0f;
         return true;
     }
 

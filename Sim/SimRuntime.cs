@@ -219,11 +219,13 @@ public sealed class SimRuntime : IDisposable
     private TreeView[] BuildTreeViews()
     {
         var activeChops = new HashSet<int>();
-        var workQuery = _world.Store.Query<Colonist, WorkJob, TilePosition>();
+        var workQuery = _world.Store.Query<Colonist, WorkJob, Job, TilePosition>();
         foreach (var entity in workQuery.Entities)
         {
             ref var w = ref entity.GetComponent<WorkJob>();
-            if (!w.Active || w.TargetEntityId == 0) continue;
+            if (!w.Active || w.Kind != WorkKind.ChopTree || w.TargetEntityId == 0) continue;
+            ref var j = ref entity.GetComponent<Job>();
+            if (j.Active) continue;
             ref var pos = ref entity.GetComponent<TilePosition>();
             if (Math.Abs(pos.TileX - w.TargetTileX) > 1 || Math.Abs(pos.TileY - w.TargetTileY) > 1) continue;
             activeChops.Add(w.TargetEntityId);

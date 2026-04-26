@@ -49,6 +49,7 @@ public partial class Bootstrap : Node3D
         var lighting = new LightingSystem(_runtime.World, grid.Width, grid.Height);
         _runtime.Scheduler.Register(lighting);
         _runtime.Lighting = lighting;
+        _runtime.Scheduler.Register(new PlantGrowthSystem(_runtime.World, lighting));
         SpawnColonists(_runtime);
         SpawnNeedSpots(_runtime);
         SpawnDummyFrameworkObjects(_runtime);

@@ -265,6 +265,15 @@ public sealed class ChopJobSystem : ITickSystem
         var result = new Dictionary<(int, int), int>(query.Count);
         foreach (var entity in query.Entities)
         {
+            // Trees below 50% growth aren't choppable yet — saplings yield
+            // no wood, so the chop designator skips them. Plant component
+            // is added alongside Tree by SpawnTree; missing-component case
+            // (legacy spawns / tests) still allows chop.
+            if (entity.HasComponent<Plant>())
+            {
+                ref var p = ref entity.GetComponent<Plant>();
+                if (p.Growth < 50f) continue;
+            }
             ref var pos = ref entity.GetComponent<TilePosition>();
             result[(pos.TileX, pos.TileY)] = entity.Id;
         }

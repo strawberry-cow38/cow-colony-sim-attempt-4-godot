@@ -245,7 +245,8 @@ public sealed class SimRuntime : IDisposable
         {
             ref var t = ref entity.GetComponent<Tree>();
             ref var p = ref entity.GetComponent<TilePosition>();
-            views[i++] = new TreeView(entity.Id, p.TileX, p.TileY, t.Health, t.VariantSeed, activeChops.Contains(entity.Id), t.HitCount);
+            var growth = entity.HasComponent<Plant>() ? entity.GetComponent<Plant>().Growth : 100f;
+            views[i++] = new TreeView(entity.Id, p.TileX, p.TileY, t.Health, t.VariantSeed, activeChops.Contains(entity.Id), t.HitCount, growth);
         }
         return views;
     }

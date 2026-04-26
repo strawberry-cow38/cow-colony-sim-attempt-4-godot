@@ -70,11 +70,19 @@ public sealed class SimWorld
         return e;
     }
 
-    public Entity SpawnTree(int tileX, int tileY, uint variantSeed, int health = 30)
+    public Entity SpawnTree(int tileX, int tileY, uint variantSeed, int health = 30, float growth = 100f)
     {
         var e = Store.CreateEntity();
         e.AddComponent(new TilePosition(tileX, tileY, 0, 0.5f, 0.5f));
         e.AddComponent(new Tree { Health = health, VariantSeed = variantSeed });
+        e.AddComponent(new Plant
+        {
+            Growth = growth,
+            Age = 0,
+            LifespanTicks = Plants.CropCatalog.Get(Plants.CropDefIds.Tree).LifespanTicks,
+            CropDefId = Plants.CropDefIds.Tree,
+            IsTree = true,
+        });
         return e;
     }
 

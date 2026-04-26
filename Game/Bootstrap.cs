@@ -56,8 +56,8 @@ public partial class Bootstrap : Node3D
             Position = new Vector3(halfSpan, halfSpan * 1.5f, halfSpan * 2f),
             Far = 20_000f,
         };
-        camera.LookAt(new Vector3(halfSpan, 0f, halfSpan), Vector3.Up);
         AddChild(camera);
+        camera.LookAt(new Vector3(halfSpan, 0f, halfSpan), Vector3.Up);
     }
 
     private void AddTerrain(Heightfield field)

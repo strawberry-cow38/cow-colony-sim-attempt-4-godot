@@ -17,7 +17,6 @@ public partial class SpotsRenderer : Node3D
     private SnapshotPublisher _publisher = null!;
     private Heightfield _heightfield = null!;
     private float _unitsPerMeter;
-    private float _unitsPerQuanta;
 
     private MultiMeshInstance3D _hunger = null!;
     private MultiMeshInstance3D _thirst = null!;
@@ -32,7 +31,6 @@ public partial class SpotsRenderer : Node3D
     public override void _Ready()
     {
         _unitsPerMeter = SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile;
-        _unitsPerQuanta = TerrainConstants.VerticalQuantumMetres * _unitsPerMeter;
 
         _hunger = MakeBucket("HungerSpots", new Color(0.3f, 0.85f, 0.35f));
         _thirst = MakeBucket("ThirstSpots", new Color(0.3f, 0.55f, 0.95f));
@@ -126,8 +124,6 @@ public partial class SpotsRenderer : Node3D
     {
         var tilesX = metersX / SimConstants.MetersPerTile;
         var tilesY = metersY / SimConstants.MetersPerTile;
-        var vx = Mathf.Clamp((int)MathF.Round(tilesX), 0, _heightfield.VertWidth - 1);
-        var vy = Mathf.Clamp((int)MathF.Round(tilesY), 0, _heightfield.VertHeight - 1);
-        return _heightfield.Get(vx, vy) * _unitsPerQuanta;
+        return _heightfield.SurfaceMetresAt(tilesX, tilesY) * _unitsPerMeter;
     }
 }

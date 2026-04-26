@@ -17,7 +17,6 @@ public partial class SelectionRing : MeshInstance3D
     private SnapshotPublisher _publisher = null!;
     private Heightfield _heightfield = null!;
     private float _unitsPerMeter;
-    private float _unitsPerQuanta;
 
     public void Configure(SelectionService selection, SnapshotPublisher publisher, Heightfield heightfield)
     {
@@ -29,7 +28,6 @@ public partial class SelectionRing : MeshInstance3D
     public override void _Ready()
     {
         _unitsPerMeter = SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile;
-        _unitsPerQuanta = TerrainConstants.VerticalQuantumMetres * _unitsPerMeter;
 
         Mesh = new TorusMesh
         {
@@ -72,8 +70,6 @@ public partial class SelectionRing : MeshInstance3D
     {
         var tilesX = metersX / SimConstants.MetersPerTile;
         var tilesY = metersY / SimConstants.MetersPerTile;
-        var vx = Mathf.Clamp((int)MathF.Round(tilesX), 0, _heightfield.VertWidth - 1);
-        var vy = Mathf.Clamp((int)MathF.Round(tilesY), 0, _heightfield.VertHeight - 1);
-        return _heightfield.Get(vx, vy) * _unitsPerQuanta;
+        return _heightfield.SurfaceMetresAt(tilesX, tilesY) * _unitsPerMeter;
     }
 }

@@ -22,7 +22,6 @@ public partial class PathOverlay : Node3D
     private SnapshotPublisher _publisher = null!;
     private Heightfield _heightfield = null!;
     private float _unitsPerMeter;
-    private float _unitsPerQuanta;
 
     private MeshInstance3D _lines = null!;
     private ImmediateMesh _linesMesh = null!;
@@ -37,7 +36,6 @@ public partial class PathOverlay : Node3D
     public override void _Ready()
     {
         _unitsPerMeter = SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile;
-        _unitsPerQuanta = TerrainConstants.VerticalQuantumMetres * _unitsPerMeter;
 
         _linesMesh = new ImmediateMesh();
         var lineMat = new StandardMaterial3D
@@ -151,14 +149,12 @@ public partial class PathOverlay : Node3D
         return new Vector3(x, y, z);
     }
 
-    // Today: nearest vertex from heightfield. When TileCoord becomes 3D
-    // and PathView carries Z, this becomes coord.Z * VerticalQuantumMetres.
+    // When TileCoord becomes 3D and PathView carries Z, this becomes
+    // coord.Z * VerticalQuantumMetres instead of a surface sample.
     private float SampleTileFloorY(float metersX, float metersY)
     {
         var tilesX = metersX / SimConstants.MetersPerTile;
         var tilesY = metersY / SimConstants.MetersPerTile;
-        var vx = Mathf.Clamp((int)MathF.Round(tilesX), 0, _heightfield.VertWidth - 1);
-        var vy = Mathf.Clamp((int)MathF.Round(tilesY), 0, _heightfield.VertHeight - 1);
-        return _heightfield.Get(vx, vy) * _unitsPerQuanta;
+        return _heightfield.SurfaceMetresAt(tilesX, tilesY) * _unitsPerMeter;
     }
 }

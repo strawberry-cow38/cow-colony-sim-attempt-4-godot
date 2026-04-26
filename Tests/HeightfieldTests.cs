@@ -76,4 +76,72 @@ public class HeightfieldTests
         Assert.False(hf.InBounds(0, 3));
         Assert.False(hf.InBounds(-1, 0));
     }
+
+    [Fact]
+    public void Surface_metres_returns_corner_height_at_corners()
+    {
+        var hf = new Heightfield(2, 2);
+        hf.Set(0, 0, 4);
+        hf.Set(1, 0, 8);
+        hf.Set(0, 1, 12);
+        hf.Set(1, 1, 0);
+        var q = TerrainConstants.VerticalQuantumMetres;
+        Assert.Equal(4 * q, hf.SurfaceMetresAt(0f, 0f), 4);
+        Assert.Equal(8 * q, hf.SurfaceMetresAt(1f, 0f), 4);
+        Assert.Equal(12 * q, hf.SurfaceMetresAt(0f, 1f), 4);
+        Assert.Equal(0f, hf.SurfaceMetresAt(1f, 1f), 4);
+    }
+
+    [Fact]
+    public void Surface_metres_interpolates_inside_triangle_TL_TR_BL()
+    {
+        var hf = new Heightfield(2, 2);
+        hf.Set(0, 0, 0);
+        hf.Set(1, 0, 10);
+        hf.Set(0, 1, 20);
+        hf.Set(1, 1, 99);
+        var q = TerrainConstants.VerticalQuantumMetres;
+        // (u, v) = (0.25, 0.25), u + v <= 1 → triangle TL/TR/BL only
+        Assert.Equal((0 + 0.25f * 10 + 0.25f * 20) * q, hf.SurfaceMetresAt(0.25f, 0.25f), 4);
+    }
+
+    [Fact]
+    public void Surface_metres_interpolates_inside_triangle_TR_BR_BL()
+    {
+        var hf = new Heightfield(2, 2);
+        hf.Set(0, 0, 99);
+        hf.Set(1, 0, 10);
+        hf.Set(0, 1, 20);
+        hf.Set(1, 1, 4);
+        var q = TerrainConstants.VerticalQuantumMetres;
+        // (u, v) = (0.75, 0.75), u + v > 1 → triangle TR/BR/BL only
+        var u1 = 1f - 0.75f;
+        var v1 = 1f - 0.75f;
+        Assert.Equal((4 + u1 * 20 + v1 * 10) * q, hf.SurfaceMetresAt(0.75f, 0.75f), 4);
+    }
+
+    [Fact]
+    public void Surface_metres_clamps_out_of_range_input()
+    {
+        var hf = new Heightfield(2, 2);
+        hf.Set(0, 0, 7);
+        hf.Set(2, 2, 9);
+        var q = TerrainConstants.VerticalQuantumMetres;
+        Assert.Equal(7 * q, hf.SurfaceMetresAt(-5f, -5f), 4);
+        Assert.Equal(9 * q, hf.SurfaceMetresAt(99f, 99f), 4);
+    }
+
+    [Fact]
+    public void Surface_metres_is_continuous_across_diagonal()
+    {
+        var hf = new Heightfield(2, 2);
+        hf.Set(0, 0, 0);
+        hf.Set(1, 0, 30);
+        hf.Set(0, 1, 70);
+        hf.Set(1, 1, 100);
+        // Approach diagonal u + v = 1 from both sides — heights must agree.
+        var a = hf.SurfaceMetresAt(0.5f - 1e-4f, 0.5f);
+        var b = hf.SurfaceMetresAt(0.5f + 1e-4f, 0.5f);
+        Assert.Equal(a, b, 3);
+    }
 }

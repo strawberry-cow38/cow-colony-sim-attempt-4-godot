@@ -20,7 +20,6 @@ public partial class SelectionService : Node
     private CommandBus _commands = null!;
     private Heightfield _heightfield = null!;
     private float _unitsPerMeter;
-    private float _unitsPerQuanta;
 
     public int? SelectedEntityId { get; private set; }
     public Vector2? SelectedGroundXZUnits { get; private set; }
@@ -37,7 +36,6 @@ public partial class SelectionService : Node
     public override void _Ready()
     {
         _unitsPerMeter = SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile;
-        _unitsPerQuanta = TerrainConstants.VerticalQuantumMetres * _unitsPerMeter;
     }
 
     public override void _UnhandledInput(InputEvent ev)
@@ -119,8 +117,6 @@ public partial class SelectionService : Node
     {
         var tilesX = metersX / SimConstants.MetersPerTile;
         var tilesY = metersY / SimConstants.MetersPerTile;
-        var vx = Mathf.Clamp((int)MathF.Round(tilesX), 0, _heightfield.VertWidth - 1);
-        var vy = Mathf.Clamp((int)MathF.Round(tilesY), 0, _heightfield.VertHeight - 1);
-        return _heightfield.Get(vx, vy) * _unitsPerQuanta;
+        return _heightfield.SurfaceMetresAt(tilesX, tilesY) * _unitsPerMeter;
     }
 }

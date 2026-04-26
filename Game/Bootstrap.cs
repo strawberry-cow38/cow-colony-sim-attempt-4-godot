@@ -23,7 +23,7 @@ public partial class Bootstrap : Node3D
     private SimRuntime? _runtime;
     private Heightfield? _heightfield;
     private HeightfieldGenerator.Settings _genSettings;
-    private TerrainRenderer? _terrain;
+    private ChunkedTerrainRenderer? _terrain;
 
     public override void _Ready()
     {
@@ -166,7 +166,7 @@ public partial class Bootstrap : Node3D
 
     private void AddTerrain(Heightfield field)
     {
-        var terrain = new TerrainRenderer { Name = "Terrain" };
+        var terrain = new ChunkedTerrainRenderer { Name = "Terrain" };
         AddChild(terrain);
         terrain.Build(field);
         _terrain = terrain;

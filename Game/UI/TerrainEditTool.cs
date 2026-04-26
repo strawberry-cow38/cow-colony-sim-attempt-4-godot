@@ -14,7 +14,7 @@ public partial class TerrainEditTool : Node
     private BuildToolService _tools = null!;
     private TerrainEditOverlay _overlay = null!;
     private Heightfield _field = null!;
-    private TerrainRenderer _terrain = null!;
+    private ChunkedTerrainRenderer _terrain = null!;
 
     private Vector2I? _flattenStart;
     private short _flattenHeight;
@@ -23,7 +23,7 @@ public partial class TerrainEditTool : Node
         BuildToolService tools,
         TerrainEditOverlay overlay,
         Heightfield field,
-        TerrainRenderer terrain)
+        ChunkedTerrainRenderer terrain)
     {
         _tools = tools;
         _overlay = overlay;
@@ -107,10 +107,8 @@ public partial class TerrainEditTool : Node
 
     private void DrainDirtyAndRebuild()
     {
-        if (!_field.HasDirtyRegion) return;
-        _field.TryConsumeDirtyRegion(out _, out _, out _, out _);
-        // TODO: chunked partial rebuild. For now full rebuild every edit.
-        _terrain.Build(_field);
+        if (!_field.TryConsumeDirtyRegion(out var minVx, out var minVy, out var maxVx, out var maxVy)) return;
+        _terrain.RebuildVertexBbox(minVx, minVy, maxVx, maxVy);
     }
 
 }

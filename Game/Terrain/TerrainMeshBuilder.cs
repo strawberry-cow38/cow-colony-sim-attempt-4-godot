@@ -9,10 +9,28 @@ namespace CowColonySim.Game.Terrain;
 // crisp shading per tile, no smooth interpolation across tile borders.
 public static class TerrainMeshBuilder
 {
-    public static ArrayMesh Build(Heightfield field, float? unitsPerTileOverride = null)
+    public static ArrayMesh Build(Heightfield field, float? unitsPerTileOverride = null) =>
+        BuildRange(field, 0, 0, field.VertWidth - 1, field.VertHeight - 1, unitsPerTileOverride);
+
+    // Build a mesh covering tiles [tileMinX, tileMaxX) x [tileMinY, tileMaxY).
+    // Used by ChunkedTerrainRenderer to rebuild a chunk after dirty edits.
+    // Vertex positions come from the same heightfield as the rest of the
+    // terrain, so adjacent chunks share corner heights and the seams are
+    // gap-free even when only one chunk is rebuilt.
+    public static ArrayMesh BuildRange(
+        Heightfield field,
+        int tileMinX, int tileMinY,
+        int tileMaxX, int tileMaxY,
+        float? unitsPerTileOverride = null)
     {
-        var tilesX = field.VertWidth - 1;
-        var tilesY = field.VertHeight - 1;
+        if (tileMinX < 0) tileMinX = 0;
+        if (tileMinY < 0) tileMinY = 0;
+        if (tileMaxX > field.VertWidth - 1) tileMaxX = field.VertWidth - 1;
+        if (tileMaxY > field.VertHeight - 1) tileMaxY = field.VertHeight - 1;
+
+        var tilesX = tileMaxX - tileMinX;
+        var tilesY = tileMaxY - tileMinY;
+        if (tilesX <= 0 || tilesY <= 0) return new ArrayMesh();
         var tileCount = tilesX * tilesY;
         var vertCount = tileCount * 4;
         var indexCount = tileCount * 6;
@@ -28,9 +46,9 @@ public static class TerrainMeshBuilder
 
         var vi = 0;
         var ii = 0;
-        for (var ty = 0; ty < tilesY; ty++)
+        for (var ty = tileMinY; ty < tileMaxY; ty++)
         {
-            for (var tx = 0; tx < tilesX; tx++)
+            for (var tx = tileMinX; tx < tileMaxX; tx++)
             {
                 var hTL = field.Get(tx, ty) * unitsPerQuanta;
                 var hTR = field.Get(tx + 1, ty) * unitsPerQuanta;

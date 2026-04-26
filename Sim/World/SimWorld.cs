@@ -21,10 +21,8 @@ public sealed class SimWorld
         e.AddComponent(new Colonist
         {
             Rng = rngSeed == 0 ? 0xC0FFEE01u : rngSeed,
-            VelMpsX = 0f,
-            VelMpsY = 0f,
-            NextRerollTick = 0,
         });
+        e.AddComponent(new PathFollower());
         return e;
     }
 }

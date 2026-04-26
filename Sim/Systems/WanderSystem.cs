@@ -1,55 +1,112 @@
+using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.World;
 using CowColonySim.Sim.World.Components;
+using Friflo.Engine.ECS;
 
 namespace CowColonySim.Sim.Systems;
 
-// Drifts each colonist around the ground plane. Direction re-rolls every
-// 1-3 seconds; bounces off the configured tile bounds. Pure Sim/, no
-// Godot deps.
+// Drains finished A* results onto matching colonist entities, then walks
+// each colonist toward its current path waypoint. When a colonist has no
+// path (and no request in flight), pick a random walkable tile and ask
+// the PathPlanner. Pure Sim/, no Godot deps.
 public sealed class WanderSystem : ITickSystem
 {
-    private const float SpeedMps = 0.6f;
-    private const int MinRerollTicks = 60;
-    private const int MaxRerollTicks = 180;
+    private const float SpeedMps = 0.9f;
+    private const float WaypointReachedMeters = 0.05f;
 
     private readonly SimWorld _world;
-    private readonly float _maxMetersX;
-    private readonly float _maxMetersY;
+    private readonly PathPlanner _planner;
+    private readonly HeightGrid _grid;
+    private uint _rng = 0xA5A5A5A5;
 
-    public WanderSystem(SimWorld world, int boundsTilesX, int boundsTilesY)
+    public WanderSystem(SimWorld world, PathPlanner planner, HeightGrid grid)
     {
         _world = world;
-        _maxMetersX = boundsTilesX * SimConstants.MetersPerTile;
-        _maxMetersY = boundsTilesY * SimConstants.MetersPerTile;
+        _planner = planner;
+        _grid = grid;
     }
 
     public void Tick(TickContext ctx)
     {
-        var dt = (float)ctx.FixedDeltaSeconds;
-        var query = _world.Store.Query<Colonist, TilePosition>();
+        DrainResults();
+        StepColonists((float)ctx.FixedDeltaSeconds);
+    }
+
+    private void DrainResults()
+    {
+        while (_planner.TryDequeue(out var result))
+        {
+            var entity = _world.Store.GetEntityById(result.RequesterId);
+            if (entity == default || !entity.HasComponent<PathFollower>()) continue;
+            ref var pf = ref entity.GetComponent<PathFollower>();
+            pf.PendingRequest = false;
+            if (result.Found && result.Tiles.Length > 1)
+            {
+                pf.Tiles = result.Tiles;
+                pf.Index = 1;
+            }
+        }
+    }
+
+    private void StepColonists(float dt)
+    {
+        var query = _world.Store.Query<Colonist, TilePosition, PathFollower>();
         foreach (var entity in query.Entities)
         {
-            ref var c = ref entity.GetComponent<Colonist>();
-            ref var p = ref entity.GetComponent<TilePosition>();
+            ref var pos = ref entity.GetComponent<TilePosition>();
+            ref var pf = ref entity.GetComponent<PathFollower>();
 
-            if (ctx.TickNumber >= c.NextRerollTick)
+            if (pf.Tiles is null || pf.Index >= pf.Tiles.Length)
             {
-                var (vx, vy) = SampleUnitDir(ref c.Rng);
-                c.VelMpsX = vx * SpeedMps;
-                c.VelMpsY = vy * SpeedMps;
-                c.NextRerollTick = ctx.TickNumber + RandRange(ref c.Rng, MinRerollTicks, MaxRerollTicks);
+                if (!pf.PendingRequest)
+                {
+                    RequestRandomPath(entity, pos);
+                    pf.PendingRequest = true;
+                }
+                continue;
             }
 
-            var nx = p.MetersX + c.VelMpsX * dt;
-            var ny = p.MetersY + c.VelMpsY * dt;
+            var target = pf.Tiles[pf.Index];
+            var targetMx = (target.X + 0.5f) * SimConstants.MetersPerTile;
+            var targetMy = (target.Y + 0.5f) * SimConstants.MetersPerTile;
+            var dx = targetMx - pos.MetersX;
+            var dy = targetMy - pos.MetersY;
+            var dist = MathF.Sqrt(dx * dx + dy * dy);
 
-            if (nx < 0f) { nx = 0f; c.VelMpsX = -c.VelMpsX; }
-            else if (nx > _maxMetersX) { nx = _maxMetersX; c.VelMpsX = -c.VelMpsX; }
-            if (ny < 0f) { ny = 0f; c.VelMpsY = -c.VelMpsY; }
-            else if (ny > _maxMetersY) { ny = _maxMetersY; c.VelMpsY = -c.VelMpsY; }
+            if (dist <= WaypointReachedMeters)
+            {
+                pf.Index++;
+                continue;
+            }
 
-            WriteMetersXY(ref p, nx, ny);
+            var step = SpeedMps * dt;
+            if (step >= dist)
+            {
+                WriteMetersXY(ref pos, targetMx, targetMy);
+                pf.Index++;
+            }
+            else
+            {
+                var nx = pos.MetersX + dx / dist * step;
+                var ny = pos.MetersY + dy / dist * step;
+                WriteMetersXY(ref pos, nx, ny);
+            }
         }
+    }
+
+    private void RequestRandomPath(Entity entity, TilePosition pos)
+    {
+        var start = new TileCoord(
+            Math.Clamp(pos.TileX, 0, _grid.Width - 1),
+            Math.Clamp(pos.TileY, 0, _grid.Height - 1));
+        var goal = new TileCoord(
+            (int)(NextU32() % (uint)_grid.Width),
+            (int)(NextU32() % (uint)_grid.Height));
+        if (goal == start)
+        {
+            goal = new TileCoord((goal.X + 1) % _grid.Width, goal.Y);
+        }
+        _planner.Request(entity.Id, start, goal);
     }
 
     private static void WriteMetersXY(ref TilePosition p, float metersX, float metersY)
@@ -64,31 +121,13 @@ public sealed class WanderSystem : ITickSystem
         p.SubY = (float)(tilesY - ty);
     }
 
-    private static (float, float) SampleUnitDir(ref uint rng)
+    private uint NextU32()
     {
-        // Two random floats → angle on [0, 2π) → unit vector. Skip rejection
-        // sampling; over many rerolls bias is invisible.
-        var r = NextFloat01(ref rng);
-        var theta = r * MathF.Tau;
-        return (MathF.Cos(theta), MathF.Sin(theta));
-    }
-
-    private static int RandRange(ref uint rng, int lo, int hiExclusive)
-    {
-        var span = (uint)(hiExclusive - lo);
-        return lo + (int)(NextU32(ref rng) % span);
-    }
-
-    private static float NextFloat01(ref uint rng) =>
-        (NextU32(ref rng) & 0xFFFFFF) / (float)0x1000000;
-
-    private static uint NextU32(ref uint state)
-    {
-        var x = state == 0 ? 0xDEADBEEFu : state;
+        var x = _rng == 0 ? 0xDEADBEEFu : _rng;
         x ^= x << 13;
         x ^= x >> 17;
         x ^= x << 5;
-        state = x;
+        _rng = x;
         return x;
     }
 }

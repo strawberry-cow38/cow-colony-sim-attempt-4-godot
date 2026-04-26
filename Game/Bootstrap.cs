@@ -4,6 +4,7 @@ using CowColonySim.Game.Debug;
 using CowColonySim.Game.Terrain;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Logging;
+using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.Systems;
 using CowColonySim.Sim.Terrain;
 using Godot;
@@ -25,8 +26,9 @@ public partial class Bootstrap : Node3D
         _heightfield = new Heightfield(PreviewTileCount, PreviewTileCount);
         HeightfieldGenerator.Generate(_heightfield, new HeightfieldGenerator.Settings());
 
-        _runtime.Scheduler.Register(new WanderSystem(
-            _runtime.World, PreviewTileCount, PreviewTileCount));
+        var grid = new HeightGrid(_heightfield);
+        var planner = new PathPlanner(grid);
+        _runtime.Scheduler.Register(new WanderSystem(_runtime.World, planner, grid));
         SpawnColonists(_runtime);
         _runtime.Start();
 

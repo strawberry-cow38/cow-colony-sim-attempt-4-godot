@@ -20,6 +20,8 @@ public static class TerrainMaterial
             Roughness = 1.0f,
             Metallic = 0.0f,
             MetallicSpecular = 0.0f,
+            SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
+            DiffuseMode = BaseMaterial3D.DiffuseModeEnum.Lambert,
             CullMode = BaseMaterial3D.CullModeEnum.Back,
             TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
         };

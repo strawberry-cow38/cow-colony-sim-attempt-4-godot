@@ -95,9 +95,9 @@ public partial class Bootstrap : Node3D
             BackgroundMode = Godot.Environment.BGMode.Sky,
             Sky = sky,
             AmbientLightSource = Godot.Environment.AmbientSource.Color,
-            AmbientLightColor = new Color(0.85f, 0.9f, 1.0f),
+            AmbientLightColor = new Color(0.55f, 0.6f, 0.7f),
             AmbientLightSkyContribution = 0.0f,
-            AmbientLightEnergy = 1.2f,
+            AmbientLightEnergy = 0.6f,
             ReflectedLightSource = Godot.Environment.ReflectionSource.Sky,
             TonemapMode = Godot.Environment.ToneMapper.Linear,
             TonemapExposure = 1.2f,
@@ -115,6 +115,7 @@ public partial class Bootstrap : Node3D
             LightEnergy = 4.5f,
             ShadowBias = 0.05f,
             ShadowNormalBias = 1.0f,
+            DirectionalShadowMaxDistance = 400f,
         };
         sun.Rotation = new Vector3(Mathf.DegToRad(-55f), Mathf.DegToRad(35f), 0f);
         AddChild(sun);

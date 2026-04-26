@@ -34,12 +34,6 @@ public static class TerrainMaterial
         var img = new Image();
         var err = img.Load(path);
         if (err != Error.Ok) GD.PushError($"Failed to load grass texture at {path}: {err}");
-        // Godot's normal import pipeline tags albedo textures as sRGB so the
-        // sampler returns linear values for lighting. Image.Load gives us an
-        // RGB8 texture sampled as linear — sRGB-encoded data sampled-as-linear
-        // looks ~half brightness. Pre-convert pixels to linear so the shader
-        // sees correct values.
-        img.SrgbToLinear();
         img.GenerateMipmaps();
         return ImageTexture.CreateFromImage(img);
     }

@@ -1,35 +1,31 @@
 using CowColonySim.Game.Selection;
 using CowColonySim.Sim.Commands;
 using CowColonySim.Sim.Designations;
+using CowColonySim.Sim.Items;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Zones;
 using Godot;
 
 namespace CowColonySim.Game.UI;
 
-// Right-click context menu for entities in the world. Currently only
-// trees: shows "prioritize chop (selected colonist)" when a colonist is
-// selected, plus designate/cancel chop. Submits through CommandBus —
-// nothing here mutates the sim directly. SelectionService decides when
-// to call OpenForTree.
+// Right-click context menu for entities in the world. Custom popup
+// (PanelContainer + Button list) instead of Godot's PopupMenu so each
+// entry can react to BOTH left- and right-click — the user wants
+// either button to fire the option, since that's the same gesture
+// they used to open the menu.
+//
+// SelectionService decides when to call OpenForTree / OpenForItem.
+// All actions submit through CommandBus — never mutate the sim here.
 public partial class ContextMenu : CanvasLayer
 {
     private SelectionService _selection = null!;
     private SnapshotPublisher _publisher = null!;
     private CommandBus _commands = null!;
-    private PopupMenu _menu = null!;
 
-    private enum Action
-    {
-        PrioritizeChop = 1,
-        DesignateChop,
-        CancelChop,
-    }
-
-    private int _treeId;
-    private int _treeTileX;
-    private int _treeTileY;
-    private int _colonistId;
+    private Control _root = null!;
+    private PanelContainer _panel = null!;
+    private VBoxContainer _items = null!;
+    private Control _dismissCatcher = null!;
 
     public void Configure(SelectionService selection, SnapshotPublisher publisher, CommandBus commands)
     {
@@ -41,9 +37,34 @@ public partial class ContextMenu : CanvasLayer
     public override void _Ready()
     {
         Layer = 110;
-        _menu = new PopupMenu { Name = "ContextPopup" };
-        _menu.IdPressed += OnIdPressed;
-        AddChild(_menu);
+        _root = new Control
+        {
+            Name = "ContextRoot",
+            AnchorRight = 1f,
+            AnchorBottom = 1f,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            Visible = false,
+        };
+        AddChild(_root);
+
+        // Full-viewport invisible button under the panel so any click
+        // outside the menu dismisses it. Sits behind the panel in z-order
+        // because we add the panel after.
+        _dismissCatcher = new Control
+        {
+            Name = "DismissCatcher",
+            AnchorRight = 1f,
+            AnchorBottom = 1f,
+            MouseFilter = Control.MouseFilterEnum.Stop,
+        };
+        _dismissCatcher.GuiInput += OnDismissInput;
+        _root.AddChild(_dismissCatcher);
+
+        _panel = new PanelContainer { Name = "ContextPanel" };
+        _root.AddChild(_panel);
+
+        _items = new VBoxContainer { Name = "Items" };
+        _panel.AddChild(_items);
     }
 
     public void OpenForTree(int treeId, Vector2 screenPos)
@@ -57,45 +78,106 @@ public partial class ContextMenu : CanvasLayer
             break;
         }
         if (tree is null) return;
+        var tx = tree.Value.TileX;
+        var ty = tree.Value.TileY;
+        var colonistId = _selection.SelectedEntityId ?? 0;
 
-        _treeId = treeId;
-        _treeTileX = tree.Value.TileX;
-        _treeTileY = tree.Value.TileY;
-        _colonistId = _selection.SelectedEntityId ?? 0;
-
-        _menu.Clear();
-        if (_colonistId != 0)
+        ClearItems();
+        if (colonistId != 0)
         {
-            _menu.AddItem($"prioritize chop (colonist #{_colonistId})", (int)Action.PrioritizeChop);
+            AddOption($"prioritize chop (colonist #{colonistId})",
+                () => _commands.Submit(new PrioritizeChopCommand(colonistId, treeId)));
         }
-        var designated = HasChopDesignation(snap, _treeTileX, _treeTileY);
-        if (!designated) _menu.AddItem("designate chop", (int)Action.DesignateChop);
-        else _menu.AddItem("cancel chop", (int)Action.CancelChop);
-
-        var pos = (Vector2I)screenPos;
-        _menu.Position = pos;
-        _menu.ResetSize();
-        _menu.Popup();
+        if (HasChopDesignation(snap, tx, ty))
+        {
+            AddOption("cancel chop",
+                () => _commands.Submit(new EraseInRectCommand(new TileRect(tx, ty, tx, ty))));
+        }
+        else
+        {
+            AddOption("designate chop",
+                () => _commands.Submit(new StampDesignationsCommand(
+                    DesignationKind.ChopTree, new TileRect(tx, ty, tx, ty))));
+        }
+        Show(screenPos);
     }
 
-    private void OnIdPressed(long id)
+    public void OpenForItem(int itemId, Vector2 screenPos)
     {
-        switch ((Action)id)
+        var snap = _publisher.Current;
+        ItemView? item = null;
+        for (var i = 0; i < snap.Items.Count; i++)
         {
-            case Action.PrioritizeChop:
-                if (_colonistId == 0 || _treeId == 0) return;
-                _commands.Submit(new PrioritizeChopCommand(_colonistId, _treeId));
-                break;
-            case Action.DesignateChop:
-                _commands.Submit(new StampDesignationsCommand(
-                    DesignationKind.ChopTree,
-                    new TileRect(_treeTileX, _treeTileY, _treeTileX, _treeTileY)));
-                break;
-            case Action.CancelChop:
-                _commands.Submit(new EraseInRectCommand(
-                    new TileRect(_treeTileX, _treeTileY, _treeTileX, _treeTileY)));
-                break;
+            if (snap.Items[i].EntityId != itemId) continue;
+            item = snap.Items[i];
+            break;
         }
+        if (item is null) return;
+        var view = item.Value;
+        var colonistId = _selection.SelectedEntityId ?? 0;
+
+        ClearItems();
+        if (colonistId != 0 && !view.Forbidden)
+        {
+            AddOption($"prioritize haul (colonist #{colonistId})",
+                () => _commands.Submit(new PrioritizeHaulCommand(colonistId, itemId)));
+        }
+        if (view.Forbidden)
+        {
+            AddOption("unforbid",
+                () => _commands.Submit(new SetItemForbiddenCommand(itemId, false)));
+        }
+        else
+        {
+            AddOption("forbid",
+                () => _commands.Submit(new SetItemForbiddenCommand(itemId, true)));
+        }
+        Show(screenPos);
+    }
+
+    private void Show(Vector2 screenPos)
+    {
+        _root.Visible = true;
+        _panel.Position = screenPos;
+        _panel.ResetSize();
+    }
+
+    private void Hide() => _root.Visible = false;
+
+    private void ClearItems()
+    {
+        foreach (var child in _items.GetChildren())
+        {
+            child.QueueFree();
+        }
+    }
+
+    private void AddOption(string label, System.Action action)
+    {
+        var btn = new Button
+        {
+            Text = label,
+            CustomMinimumSize = new Vector2(220f, 24f),
+            FocusMode = Control.FocusModeEnum.None,
+        };
+        // Both left and right clicks fire the action. The user opened the
+        // menu with right-click, so making them switch hands to commit a
+        // choice is hostile. Listen on gui_input so we see the raw button.
+        btn.GuiInput += (InputEvent ev) =>
+        {
+            if (ev is not InputEventMouseButton mb || !mb.Pressed) return;
+            if (mb.ButtonIndex != MouseButton.Left && mb.ButtonIndex != MouseButton.Right) return;
+            _root.GetViewport().SetInputAsHandled();
+            action.Invoke();
+            Hide();
+        };
+        _items.AddChild(btn);
+    }
+
+    private void OnDismissInput(InputEvent ev)
+    {
+        if (ev is not InputEventMouseButton mb || !mb.Pressed) return;
+        Hide();
     }
 
     private static bool HasChopDesignation(SimSnapshot snap, int tx, int ty)

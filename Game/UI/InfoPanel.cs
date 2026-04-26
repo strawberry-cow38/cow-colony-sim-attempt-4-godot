@@ -1,6 +1,7 @@
 using CowColonySim.Game.Selection;
 using CowColonySim.Sim.Commands;
 using CowColonySim.Sim.Designations;
+using CowColonySim.Sim.Items;
 using CowColonySim.Sim.Zones;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.World.Components;
@@ -31,7 +32,13 @@ public partial class InfoPanel : CanvasLayer
     private Button _designateChopBtn = null!;
     private Button _cancelChopBtn = null!;
 
+    private VBoxContainer _itemBox = null!;
+    private Label _itemHeader = null!;
+    private Label _itemDescription = null!;
+    private CheckBox _forbidCheck = null!;
+
     private Label _emptyLabel = null!;
+    private bool _forbidSyncing;
 
     public void Configure(SelectionService selection, SnapshotPublisher publisher, CommandBus commands)
     {
@@ -89,6 +96,17 @@ public partial class InfoPanel : CanvasLayer
         _cancelChopBtn = new Button { Text = "cancel chop" };
         _cancelChopBtn.Pressed += OnCancelChop;
         _treeBox.AddChild(_cancelChopBtn);
+
+        _itemBox = new VBoxContainer { Visible = false };
+        root.AddChild(_itemBox);
+        _itemHeader = MakeLabel("item");
+        _itemBox.AddChild(_itemHeader);
+        _itemDescription = MakeLabel("");
+        _itemDescription.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _itemBox.AddChild(_itemDescription);
+        _forbidCheck = new CheckBox { Text = "forbid" };
+        _forbidCheck.Toggled += OnForbidToggled;
+        _itemBox.AddChild(_forbidCheck);
     }
 
     private static Label MakeLabel(string text)
@@ -131,6 +149,11 @@ public partial class InfoPanel : CanvasLayer
             ShowTree(snap, treeId);
             return;
         }
+        if (_selection.SelectedItemId is int itemId)
+        {
+            ShowItem(snap, itemId);
+            return;
+        }
         ShowEmpty();
     }
 
@@ -139,12 +162,14 @@ public partial class InfoPanel : CanvasLayer
         _emptyLabel.Visible = true;
         _colonistBox.Visible = false;
         _treeBox.Visible = false;
+        _itemBox.Visible = false;
     }
 
     private void ShowColonist(SimSnapshot snap, int id)
     {
         _emptyLabel.Visible = false;
         _treeBox.Visible = false;
+        _itemBox.Visible = false;
         _colonistBox.Visible = true;
         for (var i = 0; i < snap.Colonists.Count; i++)
         {
@@ -168,6 +193,7 @@ public partial class InfoPanel : CanvasLayer
     {
         _emptyLabel.Visible = false;
         _colonistBox.Visible = false;
+        _itemBox.Visible = false;
         _treeBox.Visible = true;
         for (var i = 0; i < snap.Trees.Count; i++)
         {
@@ -187,6 +213,51 @@ public partial class InfoPanel : CanvasLayer
         _designateChopBtn.Disabled = true;
         _cancelChopBtn.Disabled = true;
     }
+
+    private void ShowItem(SimSnapshot snap, int id)
+    {
+        _emptyLabel.Visible = false;
+        _colonistBox.Visible = false;
+        _treeBox.Visible = false;
+        _itemBox.Visible = true;
+        for (var i = 0; i < snap.Items.Count; i++)
+        {
+            var it = snap.Items[i];
+            if (it.EntityId != id) continue;
+            _itemHeader.Text =
+                $"{KindLabel(it.Kind)} ×{it.Count}\n" +
+                $"tile ({it.TileX}, {it.TileY})";
+            _itemDescription.Text = KindDescription(it.Kind);
+            _forbidSyncing = true;
+            _forbidCheck.ButtonPressed = it.Forbidden;
+            _forbidSyncing = false;
+            return;
+        }
+        _itemHeader.Text = $"item #{id} (gone)";
+        _itemDescription.Text = "stack picked up or merged.";
+        _forbidSyncing = true;
+        _forbidCheck.ButtonPressed = false;
+        _forbidSyncing = false;
+    }
+
+    private void OnForbidToggled(bool pressed)
+    {
+        if (_forbidSyncing) return;
+        if (_selection.SelectedItemId is not int id) return;
+        _commands.Submit(new SetItemForbiddenCommand(id, pressed));
+    }
+
+    private static string KindLabel(ItemKind kind) => kind switch
+    {
+        ItemKind.Wood => "wood",
+        _ => "item",
+    };
+
+    private static string KindDescription(ItemKind kind) => kind switch
+    {
+        ItemKind.Wood => "rough cut from a felled pine. fuel, walls, and tool handles. stacks to 50.",
+        _ => "raw resource.",
+    };
 
     private static bool HasChopDesignation(SimSnapshot snap, int tx, int ty)
     {

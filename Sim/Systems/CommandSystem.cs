@@ -1,6 +1,7 @@
 using CowColonySim.Sim.Blueprints;
 using CowColonySim.Sim.Commands;
 using CowColonySim.Sim.Designations;
+using CowColonySim.Sim.Items;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.World;
 using CowColonySim.Sim.World.Components;
@@ -57,8 +58,162 @@ public sealed class CommandSystem : ITickSystem
                 case PrioritizeChopCommand pc:
                     Apply(pc);
                     break;
+                case PrioritizeHaulCommand ph:
+                    Apply(ph);
+                    break;
+                case SetItemForbiddenCommand sf:
+                    Apply(sf);
+                    break;
             }
         }
+    }
+
+    private void Apply(PrioritizeHaulCommand cmd)
+    {
+        var colonist = _world.Store.GetEntityById(cmd.ColonistId);
+        if (colonist == default) return;
+        if (!colonist.HasComponent<WorkJob>() || !colonist.HasComponent<PathFollower>()
+            || !colonist.HasComponent<TilePosition>()) return;
+
+        var item = _world.Store.GetEntityById(cmd.ItemEntityId);
+        if (item == default || !item.HasComponent<Item>() || !item.HasComponent<TilePosition>()) return;
+        ref var itComp = ref item.GetComponent<Item>();
+        if (itComp.Forbidden) return;
+        ref var itPos = ref item.GetComponent<TilePosition>();
+        var ix = itPos.TileX;
+        var iy = itPos.TileY;
+
+        if (!TryFindDropTile(itComp.Kind, out var dropX, out var dropY)) return;
+
+        // Clear any other colonist already hauling this item; if they were
+        // mid-carry, drop the payload where they stand so it doesn't vanish.
+        foreach (var other in _world.Store.Query<Colonist, WorkJob, PathFollower, TilePosition>().Entities)
+        {
+            if (other.Id == cmd.ColonistId) continue;
+            ref var ow = ref other.GetComponent<WorkJob>();
+            if (!ow.Active || ow.Kind != WorkKind.HaulItem || ow.TargetEntityId != cmd.ItemEntityId) continue;
+            ref var opf = ref other.GetComponent<PathFollower>();
+            ref var opos = ref other.GetComponent<TilePosition>();
+            if (ow.Carrying)
+            {
+                _world.AddOrMergeItem(opos.TileX, opos.TileY, ow.CarryKind, ow.CarryCount);
+            }
+            ResetWorkJob(ref ow, ref opf);
+        }
+
+        ref var work = ref colonist.GetComponent<WorkJob>();
+        ref var pf = ref colonist.GetComponent<PathFollower>();
+        work.Active = true;
+        work.Kind = WorkKind.HaulItem;
+        work.TargetEntityId = cmd.ItemEntityId;
+        work.TargetTileX = ix;
+        work.TargetTileY = iy;
+        work.DropTileX = dropX;
+        work.DropTileY = dropY;
+        work.Progress = 0f;
+        work.Forced = true;
+        work.Carrying = false;
+        work.CarryKind = ItemKind.None;
+        work.CarryCount = 0;
+        pf.Tiles = null;
+        pf.Index = 0;
+    }
+
+    private void Apply(SetItemForbiddenCommand cmd)
+    {
+        var item = _world.Store.GetEntityById(cmd.ItemEntityId);
+        if (item == default || !item.HasComponent<Item>()) return;
+        ref var it = ref item.GetComponent<Item>();
+        it.Forbidden = cmd.Forbidden;
+        if (!cmd.Forbidden) return;
+
+        // Forbidding clears every haul job pointing at this stack.
+        // If a colonist had already picked it up, drop the payload where
+        // they stand so the stack count survives.
+        foreach (var other in _world.Store.Query<Colonist, WorkJob, PathFollower, TilePosition>().Entities)
+        {
+            ref var ow = ref other.GetComponent<WorkJob>();
+            if (!ow.Active || ow.Kind != WorkKind.HaulItem || ow.TargetEntityId != cmd.ItemEntityId) continue;
+            ref var opf = ref other.GetComponent<PathFollower>();
+            ref var opos = ref other.GetComponent<TilePosition>();
+            if (ow.Carrying)
+            {
+                _world.AddOrMergeItem(opos.TileX, opos.TileY, ow.CarryKind, ow.CarryCount);
+            }
+            ResetWorkJob(ref ow, ref opf);
+        }
+    }
+
+    private bool TryFindDropTile(ItemKind kind, out int dropX, out int dropY)
+    {
+        dropX = 0;
+        dropY = 0;
+        var bestPriority = int.MinValue;
+        var bestPartialFill = -1;
+        var found = false;
+        var bestX = 0;
+        var bestY = 0;
+
+        // Snapshot existing items keyed by tile so we can prefer
+        // partial-fill stacks of the same kind over empty tiles.
+        var itemsByTile = new Dictionary<(int, int), (ItemKind kind, int count, int capacity)>();
+        foreach (var entity in _world.Store.Query<Item, TilePosition>().Entities)
+        {
+            ref var it = ref entity.GetComponent<Item>();
+            ref var pos = ref entity.GetComponent<TilePosition>();
+            itemsByTile[(pos.TileX, pos.TileY)] = (it.Kind, it.Count, it.Capacity);
+        }
+
+        foreach (var entity in _world.Store.Query<Zone>().Entities)
+        {
+            ref var z = ref entity.GetComponent<Zone>();
+            if (z.Type != ZoneType.Stockpile) continue;
+            var priority = entity.HasComponent<StockpileSettings>()
+                ? entity.GetComponent<StockpileSettings>().Priority : 0;
+            if (priority < bestPriority) continue;
+
+            for (var ty = z.Rect.MinY; ty <= z.Rect.MaxY; ty++)
+            {
+                for (var tx = z.Rect.MinX; tx <= z.Rect.MaxX; tx++)
+                {
+                    if ((uint)tx >= (uint)_grid.Width || (uint)ty >= (uint)_grid.Height) continue;
+                    if (_grid.IsBlocked(tx, ty)) continue;
+                    var partial = -1;
+                    if (itemsByTile.TryGetValue((tx, ty), out var existing))
+                    {
+                        if (existing.kind != kind) continue;
+                        if (existing.capacity - existing.count <= 0) continue;
+                        partial = existing.count;
+                    }
+                    var better = priority > bestPriority
+                        || (priority == bestPriority && partial > bestPartialFill);
+                    if (!better) continue;
+                    bestPriority = priority;
+                    bestPartialFill = partial;
+                    bestX = tx;
+                    bestY = ty;
+                    found = true;
+                }
+            }
+        }
+        if (!found) return false;
+        dropX = bestX;
+        dropY = bestY;
+        return true;
+    }
+
+    private static void ResetWorkJob(ref WorkJob work, ref PathFollower pf)
+    {
+        work.Active = false;
+        work.Kind = WorkKind.None;
+        work.TargetEntityId = 0;
+        work.Progress = 0f;
+        work.Forced = false;
+        work.Carrying = false;
+        work.CarryKind = ItemKind.None;
+        work.CarryCount = 0;
+        pf.Tiles = null;
+        pf.Index = 0;
     }
 
     private void Apply(PrioritizeChopCommand cmd)

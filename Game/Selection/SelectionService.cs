@@ -28,6 +28,7 @@ public partial class SelectionService : Node
     public int? SelectedEntityId { get; private set; }
     public int? SelectedZoneId { get; private set; }
     public int? SelectedTreeId { get; private set; }
+    public int? SelectedItemId { get; private set; }
     public Vector2? SelectedGroundXZUnits { get; private set; }
 
     public event System.Action? SelectionChanged;
@@ -64,6 +65,7 @@ public partial class SelectionService : Node
         {
             if (SelectColonistNearRay(camera, mb.Position)) return;
             if (SelectTreeNearRay(camera, mb.Position)) return;
+            if (SelectItemNearRay(camera, mb.Position)) return;
             var tx = (int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile);
             var ty = (int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile);
             SelectZoneAtTile(tx, ty);
@@ -71,6 +73,7 @@ public partial class SelectionService : Node
         else if (mb.ButtonIndex == MouseButton.Right)
         {
             if (TryOpenTreeContextMenu(camera, mb.Position)) return;
+            if (TryOpenItemContextMenu(camera, mb.Position)) return;
             if (SelectedEntityId is int id)
             {
                 var tx = (int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile);
@@ -105,15 +108,18 @@ public partial class SelectionService : Node
         var changed = false;
         if (SelectedEntityId is not null) { SelectedEntityId = null; changed = true; }
         if (SelectedTreeId is not null) { SelectedTreeId = null; changed = true; }
+        if (SelectedItemId is not null) { SelectedItemId = null; changed = true; }
         if (changed) SelectionChanged?.Invoke();
     }
 
     private void ClearAll()
     {
-        var changed = SelectedEntityId is not null || SelectedZoneId is not null || SelectedTreeId is not null;
+        var changed = SelectedEntityId is not null || SelectedZoneId is not null
+            || SelectedTreeId is not null || SelectedItemId is not null;
         SelectedEntityId = null;
         SelectedZoneId = null;
         SelectedTreeId = null;
+        SelectedItemId = null;
         if (changed) SelectionChanged?.Invoke();
     }
 
@@ -150,6 +156,57 @@ public partial class SelectionService : Node
             {
                 bestDist = tHit;
                 best = t.EntityId;
+            }
+        }
+        return best == -1 ? null : best;
+    }
+
+    private bool TryOpenItemContextMenu(Camera3D camera, Vector2 mousePos)
+    {
+        if (_contextMenu is null) return false;
+        var id = PickItemId(camera, mousePos);
+        if (id is null) return false;
+        _contextMenu.OpenForItem(id.Value, mousePos);
+        return true;
+    }
+
+    private bool SelectItemNearRay(Camera3D camera, Vector2 mousePos)
+    {
+        var id = PickItemId(camera, mousePos);
+        if (id is null) return false;
+        if (SelectedItemId == id) return true;
+        SelectedItemId = id;
+        if (SelectedEntityId is not null) SelectedEntityId = null;
+        if (SelectedZoneId is not null) SelectedZoneId = null;
+        if (SelectedTreeId is not null) SelectedTreeId = null;
+        SelectionChanged?.Invoke();
+        return true;
+    }
+
+    private int? PickItemId(Camera3D camera, Vector2 mousePos)
+    {
+        var origin = camera.ProjectRayOrigin(mousePos);
+        var dir = camera.ProjectRayNormal(mousePos).Normalized();
+
+        var snap = _publisher.Current;
+        var best = -1;
+        var bestDist = float.PositiveInfinity;
+        var radiusUnits = 0.5f * _unitsPerMeter;
+        var heightUnits = 0.6f * _unitsPerMeter;
+        for (var i = 0; i < snap.Items.Count; i++)
+        {
+            var it = snap.Items[i];
+            var metersX = (it.TileX + 0.5f) * SimConstants.MetersPerTile;
+            var metersY = (it.TileY + 0.5f) * SimConstants.MetersPerTile;
+            var cx = metersX * _unitsPerMeter;
+            var cz = metersY * _unitsPerMeter;
+            var y0 = SampleGroundUnits(metersX, metersY);
+            var y1 = y0 + heightUnits;
+            if (!RayCylinderHit(origin, dir, cx, cz, radiusUnits, y0, y1, out var tHit)) continue;
+            if (tHit < bestDist)
+            {
+                bestDist = tHit;
+                best = it.EntityId;
             }
         }
         return best == -1 ? null : best;

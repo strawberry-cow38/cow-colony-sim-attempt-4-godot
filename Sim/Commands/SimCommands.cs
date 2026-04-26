@@ -28,6 +28,16 @@ public readonly record struct StampDesignationsCommand(DesignationKind Kind, Til
 // model. Cleared automatically when the tree is felled or destroyed.
 public readonly record struct PrioritizeChopCommand(int ColonistId, int TreeEntityId) : ISimCommand;
 
+// Pin a colonist to haul a specific item stack to the best stockpile.
+// Same model as PrioritizeChopCommand — clears any other colonist
+// already targeting the stack, picks a drop tile, sets WorkJob.Forced.
+public readonly record struct PrioritizeHaulCommand(int ColonistId, int ItemEntityId) : ISimCommand;
+
+// Flip Item.Forbidden. When set to true, also clears every WorkJob
+// that's hauling this item. If a carrier had already picked the stack
+// up, the payload is dropped at the carrier's tile so we don't leak.
+public readonly record struct SetItemForbiddenCommand(int ItemEntityId, bool Forbidden) : ISimCommand;
+
 public readonly record struct PlaceBlueprintGhostCommand(string DefId, int OriginTileX, int OriginTileY, int Rotation, int BaseLayer) : ISimCommand;
 
 // Wipes any zone/designation/blueprint-ghost entity that overlaps the

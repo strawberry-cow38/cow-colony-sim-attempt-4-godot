@@ -25,6 +25,10 @@ public partial class ItemsRenderer : Node3D
     private Heightfield _heightfield = null!;
     private float _unitsPerMeter;
     private readonly MultiMeshInstance3D?[] _woodTiers = new MultiMeshInstance3D?[3];
+    // Per-tier vertical offset so the mesh's lowest vert sits on the
+    // ground instead of clipping through it. Pulled from each merged
+    // mesh's AABB at load time.
+    private readonly float[] _woodGroundOffsetUnits = new float[3];
 
     public void Configure(SnapshotPublisher publisher, Heightfield heightfield)
     {
@@ -56,6 +60,11 @@ public partial class ItemsRenderer : Node3D
             };
             AddChild(bucket);
             _woodTiers[i] = bucket;
+            // mesh aabb is in the glb's authored space (meters). Lift the
+            // instance by -minY so the lowest vertex meets the ground;
+            // add 1cm so we don't z-fight the terrain.
+            var aabb = mesh.GetAabb();
+            _woodGroundOffsetUnits[i] = (-aabb.Position.Y + 0.01f) * _unitsPerMeter;
         }
     }
 
@@ -88,7 +97,6 @@ public partial class ItemsRenderer : Node3D
         }
 
         var idx = new int[3];
-        var hoverUnits = 0.05f * _unitsPerMeter;
         for (var i = 0; i < items.Count; i++)
         {
             var it = items[i];
@@ -101,7 +109,7 @@ public partial class ItemsRenderer : Node3D
             var metersY = (it.TileY + 0.5f) * SimConstants.MetersPerTile;
             var x = metersX * _unitsPerMeter;
             var z = metersY * _unitsPerMeter;
-            var y = SampleGround(metersX, metersY) + hoverUnits;
+            var y = SampleGround(metersX, metersY) + _woodGroundOffsetUnits[tier];
 
             var seed = unchecked((uint)it.EntityId * 2654435761u);
             var angle = (seed % 3600u) * 0.1f * Mathf.Pi / 180f;

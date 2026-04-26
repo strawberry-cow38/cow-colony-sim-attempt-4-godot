@@ -77,6 +77,22 @@ public partial class SelectionRing : MeshInstance3D
                 return;
             }
         }
+        if (_selection.SelectedItemId is int itemId)
+        {
+            for (var i = 0; i < snap.Items.Count; i++)
+            {
+                var it = snap.Items[i];
+                if (it.EntityId != itemId) continue;
+                var metersX = (it.TileX + 0.5f) * SimConstants.MetersPerTile;
+                var metersY = (it.TileY + 0.5f) * SimConstants.MetersPerTile;
+                var x = metersX * _unitsPerMeter;
+                var z = metersY * _unitsPerMeter;
+                var y = SampleGroundUnits(metersX, metersY) + 1f;
+                Position = new Vector3(x, y, z);
+                Visible = true;
+                return;
+            }
+        }
         Visible = false;
     }
 

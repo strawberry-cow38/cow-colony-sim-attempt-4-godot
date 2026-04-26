@@ -43,6 +43,7 @@ public partial class Bootstrap : Node3D
         _runtime.Scheduler.Register(new NeedDecaySystem(_runtime.World));
         _runtime.Scheduler.Register(new JobSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new ChopJobSystem(_runtime.World, planner, grid));
+        _runtime.Scheduler.Register(new HaulSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new WanderSystem(_runtime.World, planner, grid));
         SpawnColonists(_runtime);
         SpawnNeedSpots(_runtime);
@@ -70,6 +71,7 @@ public partial class Bootstrap : Node3D
         AddSelectionRing(selection, _runtime, _heightfield);
         AddInfoPanel(selection, _runtime);
         AddContextMenu(selection, _runtime);
+        AddItemHoverLabel(_runtime, _heightfield);
         AddZoneSettingsPanel(selection, _runtime);
         AddPerfHud(_runtime);
         AddTimeHud(_runtime);
@@ -347,6 +349,13 @@ public partial class Bootstrap : Node3D
         menu.Configure(selection, runtime.Publisher, runtime.Commands);
         AddChild(menu);
         selection.SetContextMenu(menu);
+    }
+
+    private void AddItemHoverLabel(SimRuntime runtime, Heightfield heightfield)
+    {
+        var hover = new ItemHoverLabel { Name = "ItemHoverLabel" };
+        hover.Configure(runtime.Publisher, heightfield);
+        AddChild(hover);
     }
 
     private void AddZoneSettingsPanel(SelectionService selection, SimRuntime runtime)

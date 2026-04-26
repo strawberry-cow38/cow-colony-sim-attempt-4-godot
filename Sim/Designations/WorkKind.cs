@@ -7,4 +7,5 @@ public enum WorkKind
 {
     None = 0,
     ChopTree = 1,
+    HaulItem = 2,
 }

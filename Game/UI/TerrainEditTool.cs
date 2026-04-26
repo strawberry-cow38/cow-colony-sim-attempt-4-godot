@@ -1,4 +1,5 @@
 using CowColonySim.Game.Terrain;
+using CowColonySim.Sim.Commands;
 using CowColonySim.Sim.Terrain;
 using Godot;
 
@@ -15,6 +16,7 @@ public partial class TerrainEditTool : Node
     private TerrainEditOverlay _overlay = null!;
     private Heightfield _field = null!;
     private ChunkedTerrainRenderer _terrain = null!;
+    private CommandBus _commands = null!;
 
     private Vector2I? _flattenStart;
     private short _flattenHeight;
@@ -23,12 +25,14 @@ public partial class TerrainEditTool : Node
         BuildToolService tools,
         TerrainEditOverlay overlay,
         Heightfield field,
-        ChunkedTerrainRenderer terrain)
+        ChunkedTerrainRenderer terrain,
+        CommandBus commands)
     {
         _tools = tools;
         _overlay = overlay;
         _field = field;
         _terrain = terrain;
+        _commands = commands;
     }
 
     public override void _UnhandledInput(InputEvent ev)
@@ -109,6 +113,11 @@ public partial class TerrainEditTool : Node
     {
         if (!_field.TryConsumeDirtyRegion(out var minVx, out var minVy, out var maxVx, out var maxVy)) return;
         _terrain.RebuildVertexBbox(minVx, minVy, maxVx, maxVy);
+
+        // Vert (vx,vy) corners up to 4 tiles → tile bbox is [vx-1, vx] inflated.
+        // CommandSystem clamps against the actual grid bounds.
+        _commands.Submit(new InvalidatePathsInRegion(
+            minVx - 1, minVy - 1, maxVx, maxVy));
     }
 
 }

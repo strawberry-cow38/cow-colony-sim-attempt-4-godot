@@ -19,7 +19,12 @@ namespace CowColonySim.Sim.Pathfinding;
 // as the underlying Heightfield isn't being mutated concurrently.
 public sealed class HeightGrid
 {
-    private const int MaxStepQuanta = 2;
+    // 1 quantum = 0.75 m vertical step over a 1.5 m tile = ~26° max grade.
+    // Anything steeper is treated as a cliff and pathing routes around it
+    // even if a player MoveCommand targeted the top — the existing path
+    // is also cancelled when a fresh edit raises the slope past this
+    // threshold (see InvalidatePathsInRegion in CommandSystem).
+    private const int MaxStepQuanta = 1;
     private const float SlopeCostPerQuanta = 0.4f;
 
     private readonly Heightfield _field;

@@ -258,7 +258,7 @@ public partial class Bootstrap : Node3D
         AddChild(overlay);
 
         var tool = new TerrainEditTool { Name = "TerrainEditTool" };
-        tool.Configure(tools, overlay, _heightfield!, _terrain!);
+        tool.Configure(tools, overlay, _heightfield!, _terrain!, _runtime!.Commands);
         AddChild(tool);
     }
 

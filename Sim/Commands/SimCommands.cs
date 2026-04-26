@@ -11,6 +11,11 @@ public interface ISimCommand { }
 
 public readonly record struct MoveCommand(int EntityId, TileCoord Target) : ISimCommand;
 
+// Tile bbox (inclusive) where the heightfield just changed. CommandSystem
+// drops any active path intersecting it so colonists re-plan instead of
+// happily walking into a freshly-raised cliff.
+public readonly record struct InvalidatePathsInRegion(int MinTileX, int MinTileY, int MaxTileX, int MaxTileY) : ISimCommand;
+
 public sealed class CommandBus
 {
     private readonly ConcurrentQueue<ISimCommand> _queue = new();

@@ -33,6 +33,30 @@ public sealed class CommandSystem : ITickSystem
                 case MoveCommand move:
                     Apply(move);
                     break;
+                case InvalidatePathsInRegion region:
+                    Apply(region);
+                    break;
+            }
+        }
+    }
+
+    private void Apply(InvalidatePathsInRegion region)
+    {
+        var query = _world.Store.Query<PathFollower>();
+        foreach (var entity in query.Entities)
+        {
+            ref var pf = ref entity.GetComponent<PathFollower>();
+            if (pf.Tiles is null) continue;
+            for (var i = pf.Index; i < pf.Tiles.Length; i++)
+            {
+                var t = pf.Tiles[i];
+                if (t.X >= region.MinTileX && t.X <= region.MaxTileX
+                    && t.Y >= region.MinTileY && t.Y <= region.MaxTileY)
+                {
+                    pf.Tiles = null;
+                    pf.Index = 0;
+                    break;
+                }
             }
         }
     }

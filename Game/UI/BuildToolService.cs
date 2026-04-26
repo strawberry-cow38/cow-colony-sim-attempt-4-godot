@@ -7,14 +7,17 @@ namespace CowColonySim.Game.UI;
 // ToolChanged and react when the active id matches one they own. Empty
 // string means "no tool selected" — left-click reverts to plain selection.
 //
-// ActiveBuildLayer is the Z-stacking offset used for placing blueprint
-// ghosts on upper storeys. Layer 0 = on terrain. +1 / -1 nudges via Q/E.
-// One layer = one full-wall height (3 m) so a wall-top is exactly one
-// layer up.
+// ActiveBuildLayer is a manual offset (in 0.75 m quanta) the player
+// stacks on top of the auto-detected build base. PlacementTool reads
+// the topmost ghost overlapping the cursor footprint and uses
+// (autoBase + ActiveBuildLayer) as the placement layer — so just
+// clicking on a wall-top stacks the next blueprint on the floor above
+// without touching Q/E. Q/E nudges ±1 quantum (= 1 quarter wall) for
+// when the player wants to lift the ghost off the auto stack.
 public partial class BuildToolService : Node
 {
     public const int MinBuildLayer = 0;
-    public const int MaxBuildLayer = 8;
+    public const int MaxBuildLayer = 32;
 
     public string ActiveToolId { get; private set; } = string.Empty;
     public int ActiveBuildLayer { get; private set; }

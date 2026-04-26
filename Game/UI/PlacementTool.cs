@@ -124,12 +124,13 @@ public partial class PlacementTool : Node
                 return;
             }
             var origin = OriginForFootprintCenter(def, _blueprintRotation, hovered.Value);
+            var baseLayer = ResolveBaseLayer(def, _blueprintRotation, origin);
             _ghostPreview.DefId = def.Id;
             _ghostPreview.OriginTileX = origin.X;
             _ghostPreview.OriginTileY = origin.Y;
             _ghostPreview.RotationSteps = _blueprintRotation;
-            _ghostPreview.BaseLayer = _tools.ActiveBuildLayer;
-            _ghostPreview.Valid = IsFootprintPlaceable(def, _blueprintRotation, origin);
+            _ghostPreview.BaseLayer = baseLayer;
+            _ghostPreview.Valid = IsFootprintPlaceable(def, _blueprintRotation, origin, baseLayer);
         }
     }
 
@@ -222,8 +223,10 @@ public partial class PlacementTool : Node
             {
                 for (var x = line.MinX; x <= line.MaxX; x++)
                 {
-                    if (!IsFootprintInBounds(def, 0, new Vector2I(x, y))) continue;
-                    _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, x, y, 0, _tools.ActiveBuildLayer));
+                    var lineOrigin = new Vector2I(x, y);
+                    if (!IsFootprintInBounds(def, 0, lineOrigin)) continue;
+                    var lineLayer = ResolveBaseLayer(def, 0, lineOrigin);
+                    _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, x, y, 0, lineLayer));
                 }
             }
         }
@@ -236,9 +239,10 @@ public partial class PlacementTool : Node
         if (def.Placement == PlacementMode.LineDrag) return;
 
         var origin = OriginForFootprintCenter(def, _blueprintRotation, tile);
-        if (!IsFootprintPlaceable(def, _blueprintRotation, origin)) return;
+        var baseLayer = ResolveBaseLayer(def, _blueprintRotation, origin);
+        if (!IsFootprintPlaceable(def, _blueprintRotation, origin, baseLayer)) return;
 
-        _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, origin.X, origin.Y, _blueprintRotation, _tools.ActiveBuildLayer));
+        _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, origin.X, origin.Y, _blueprintRotation, baseLayer));
     }
 
     // Reduces a (start, end) pair to a 1-tile-thick rect along the axis
@@ -274,14 +278,38 @@ public partial class PlacementTool : Node
         return true;
     }
 
-    private bool IsFootprintPlaceable(BlueprintDef def, int rotation, Vector2I origin)
+    private bool IsFootprintPlaceable(BlueprintDef def, int rotation, Vector2I origin, int baseLayer)
     {
         if (!IsFootprintInBounds(def, rotation, origin)) return false;
         var (w, h) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
-        var layer = _tools.ActiveBuildLayer;
-        if (layer == 0 && !IsFootprintLevel(origin.X, origin.Y, w, h)) return false;
-        if (IsFootprintObstructed(origin.X, origin.Y, w, h, layer)) return false;
+        if (baseLayer == 0 && !IsFootprintLevel(origin.X, origin.Y, w, h)) return false;
+        if (IsFootprintObstructed(origin.X, origin.Y, w, h, baseLayer, def.HeightQuanta)) return false;
         return true;
+    }
+
+    // Stack height at the cursor: top of the tallest existing ghost
+    // overlapping the footprint. Adds the player's manual offset
+    // (Q/E nudges via BuildToolService) so they can lift the ghost
+    // off the auto-detected stack base.
+    private int ResolveBaseLayer(BlueprintDef def, int rotation, Vector2I origin)
+    {
+        var (w, h) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+        var minX = origin.X; var minY = origin.Y;
+        var maxX = origin.X + w - 1; var maxY = origin.Y + h - 1;
+        var snap = _publisher.Current;
+        var top = 0;
+        for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+        {
+            var g = snap.BlueprintGhosts[i];
+            if (!BlueprintCatalog.TryGet(g.DefId, out var od) || od is null) continue;
+            var (ow, oh) = (g.Rotation & 1) == 0 ? (od.FootprintW, od.FootprintH) : (od.FootprintH, od.FootprintW);
+            var omx = g.OriginTileX + ow - 1;
+            var omy = g.OriginTileY + oh - 1;
+            if (minX > omx || maxX < g.OriginTileX || minY > omy || maxY < g.OriginTileY) continue;
+            var ghostTop = g.BaseLayer + od.HeightQuanta;
+            if (ghostTop > top) top = ghostTop;
+        }
+        return top + _tools.ActiveBuildLayer;
     }
 
     private bool IsFootprintLevel(int ox, int oy, int w, int h)
@@ -297,16 +325,18 @@ public partial class PlacementTool : Node
         return true;
     }
 
-    private bool IsFootprintObstructed(int ox, int oy, int w, int h, int layer)
+    private bool IsFootprintObstructed(int ox, int oy, int w, int h, int baseLayer, int heightQuanta)
     {
         var minX = ox; var minY = oy;
         var maxX = ox + w - 1; var maxY = oy + h - 1;
+        var topLayer = baseLayer + heightQuanta;
         var snap = _publisher.Current;
         for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
         {
             var g = snap.BlueprintGhosts[i];
-            if (g.BaseLayer != layer) continue;
             if (!BlueprintCatalog.TryGet(g.DefId, out var od) || od is null) continue;
+            var existingTop = g.BaseLayer + od.HeightQuanta;
+            if (baseLayer >= existingTop || topLayer <= g.BaseLayer) continue;
             var (ow, oh) = (g.Rotation & 1) == 0 ? (od.FootprintW, od.FootprintH) : (od.FootprintH, od.FootprintW);
             var omx = g.OriginTileX + ow - 1;
             var omy = g.OriginTileY + oh - 1;

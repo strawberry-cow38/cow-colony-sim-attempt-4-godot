@@ -13,7 +13,7 @@ namespace CowColonySim.Game.Render;
 // will ghost the actual asset mesh.
 public partial class BlueprintGhostsRenderer : Node3D
 {
-    private const float LayerStepMeters = 3.0f;
+    private const float LayerStepMeters = 0.75f;
     private const float HoverUnits = 0.4f;
 
     private SnapshotPublisher _publisher = null!;

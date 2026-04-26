@@ -95,7 +95,7 @@ public partial class BuildBar : CanvasLayer
 
         _layerLabel = new Label
         {
-            Text = "layer 0  (Q/E)",
+            Text = "stack +0  (Q/E)",
             AnchorLeft = 0.5f, AnchorRight = 0.5f,
             AnchorTop = 1f, AnchorBottom = 1f,
             OffsetLeft = 56f, OffsetRight = 240f,
@@ -162,7 +162,7 @@ public partial class BuildBar : CanvasLayer
 
     private void OnBuildLayerChanged(int layer)
     {
-        _layerLabel.Text = $"layer {layer}  (Q/E)";
+        _layerLabel.Text = $"stack +{layer}  (Q/E)";
     }
 
     private void OnToolChangedForLayer(string toolId)

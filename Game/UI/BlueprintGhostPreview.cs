@@ -10,7 +10,7 @@ namespace CowColonySim.Game.UI;
 // + OriginTile each frame. Color flips to red when Valid is false.
 public partial class BlueprintGhostPreview : Node3D
 {
-    private const float LayerStepMeters = 3.0f;
+    private const float LayerStepMeters = 0.75f;
     private const float HoverUnits = 0.4f;
 
     private Heightfield _field = null!;

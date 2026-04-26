@@ -31,6 +31,8 @@ public partial class CameraRig : Node3D
     private float _distance = Distance;
     private float _distanceTarget = Distance;
     private Vector2 _boundsMax = new(2048f, 2048f);
+    private bool _loggedFirstMove;
+    private bool _loggedFirstKey;
 
     public void Configure(Vector2 boundsMax, Vector2 startCenter)
     {
@@ -63,14 +65,22 @@ public partial class CameraRig : Node3D
     {
         var dt = (float)delta;
 
-        var inputX = (Input.IsKeyPressed(Key.D) ? 1f : 0f) - (Input.IsKeyPressed(Key.A) ? 1f : 0f);
-        var inputZ = (Input.IsKeyPressed(Key.S) ? 1f : 0f) - (Input.IsKeyPressed(Key.W) ? 1f : 0f);
+        var inputX = (Input.IsPhysicalKeyPressed(Key.D) ? 1f : 0f) - (Input.IsPhysicalKeyPressed(Key.A) ? 1f : 0f);
+        var inputZ = (Input.IsPhysicalKeyPressed(Key.S) ? 1f : 0f) - (Input.IsPhysicalKeyPressed(Key.W) ? 1f : 0f);
         if (inputX != 0f || inputZ != 0f)
         {
             var yawBasis = Basis.FromEuler(new Vector3(0f, _yaw, 0f));
             var move = yawBasis * new Vector3(inputX, 0f, inputZ);
             Position += move * MoveSpeed * dt;
             ClampToBounds();
+
+            if (!_loggedFirstMove)
+            {
+                _loggedFirstMove = true;
+                SimLog.Logger.Information(
+                    "CameraRig WASD detected (X={X}, Z={Z}). Pivot now {Pos}.",
+                    inputX, inputZ, Position);
+            }
         }
 
         if (_yawTweening)
@@ -96,13 +106,21 @@ public partial class CameraRig : Node3D
         }
     }
 
-    public override void _Input(InputEvent ev)
+    public override void _UnhandledInput(InputEvent ev)
     {
+        if (ev is InputEventKey ke && ke.Pressed && !ke.Echo && !_loggedFirstKey)
+        {
+            _loggedFirstKey = true;
+            SimLog.Logger.Information(
+                "CameraRig first key event: keycode={KC}, physical={PK}.",
+                ke.Keycode, ke.PhysicalKeycode);
+        }
+
         switch (ev)
         {
             case InputEventKey k when k.Pressed && !k.Echo:
-                if (k.Keycode == Key.Q) StartYawTween(+SnapStepRad);
-                else if (k.Keycode == Key.E) StartYawTween(-SnapStepRad);
+                if (k.PhysicalKeycode == Key.Q) StartYawTween(+SnapStepRad);
+                else if (k.PhysicalKeycode == Key.E) StartYawTween(-SnapStepRad);
                 break;
 
             case InputEventMouseButton mb when mb.ButtonIndex == MouseButton.Middle:

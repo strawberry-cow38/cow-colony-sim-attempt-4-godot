@@ -181,9 +181,16 @@ public partial class InfoPanel : CanvasLayer
             _hungerBar.Value = c.Hunger;
             _thirstBar.Value = c.Thirst;
             _energyBar.Value = c.Energy;
-            _jobLabel.Text = c.JobActive
+            var jobText = c.JobActive
                 ? $"job: satisfy {KindName(c.JobKind)}"
-                : "job: idle";
+                : c.WorkActive
+                    ? $"job: {WorkLabel(c.WorkKind)}"
+                    : "job: idle";
+            if (c.Carrying && c.CarryCount > 0)
+            {
+                jobText += $"\ncarrying: {KindLabel(c.CarryKind)} ×{c.CarryCount}";
+            }
+            _jobLabel.Text = jobText;
             return;
         }
         _colonistHeader.Text = $"colonist #{id} (offline)";
@@ -306,5 +313,12 @@ public partial class InfoPanel : CanvasLayer
         NeedKind.Thirst => "thirst",
         NeedKind.Energy => "energy",
         _ => "?",
+    };
+
+    private static string WorkLabel(WorkKind kind) => kind switch
+    {
+        WorkKind.ChopTree => "chopping",
+        WorkKind.HaulItem => "hauling",
+        _ => "working",
     };
 }

@@ -1,5 +1,6 @@
 using CowColonySim.Game.Selection;
 using CowColonySim.Sim.Commands;
+using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Zones;
 using Godot;
@@ -23,6 +24,8 @@ public partial class ZoneSettingsPanel : CanvasLayer
     private HBoxContainer _cropRow = null!;
     private SpinBox _cropDefId = null!;
     private Button _apply = null!;
+    private Button _delete = null!;
+    private TileRect _boundRect;
 
     private int _boundZoneId = -1;
     private bool _userEdited;
@@ -77,6 +80,10 @@ public partial class ZoneSettingsPanel : CanvasLayer
         _apply = new Button { Text = "Apply" };
         _apply.Pressed += OnApply;
         box.AddChild(_apply);
+
+        _delete = new Button { Text = "Delete zone" };
+        _delete.Pressed += OnDelete;
+        box.AddChild(_delete);
     }
 
     public override void _Process(double delta)
@@ -117,7 +124,12 @@ public partial class ZoneSettingsPanel : CanvasLayer
             _priorityRow.Visible = z.Type == ZoneType.Stockpile;
             _cropRow.Visible = z.Type == ZoneType.Farm;
             _boundZoneId = z.ZoneId;
+            _boundRect = new TileRect(z.MinTileX, z.MinTileY, z.MaxTileX, z.MaxTileY);
             _userEdited = false;
+        }
+        else
+        {
+            _boundRect = new TileRect(z.MinTileX, z.MinTileY, z.MaxTileX, z.MaxTileY);
         }
     }
 
@@ -130,6 +142,12 @@ public partial class ZoneSettingsPanel : CanvasLayer
             (int)_priority.Value,
             (int)_cropDefId.Value));
         _userEdited = false;
+    }
+
+    private void OnDelete()
+    {
+        if (_boundZoneId < 0) return;
+        _commands.Submit(new EraseInRectCommand(_boundRect));
     }
 
     private static Label MakeLabel(string text)

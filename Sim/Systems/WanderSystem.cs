@@ -44,6 +44,11 @@ public sealed class WanderSystem : ITickSystem
             {
                 pf.Tiles = result.Tiles;
                 pf.Index = 1;
+                pf.LastPathFailed = false;
+            }
+            else if (!result.Found)
+            {
+                pf.LastPathFailed = true;
             }
         }
     }

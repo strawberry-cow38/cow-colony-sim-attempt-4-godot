@@ -15,4 +15,8 @@ public struct PathFollower : IComponent
     // Wander/Job paths leave this false. Path overlay only renders
     // player-forced paths.
     public bool PlayerForced;
+    // Set true when DrainResults receives Found=false from the planner.
+    // Cleared when a new request is issued. Job systems read this to
+    // give up gracefully instead of re-requesting forever.
+    public bool LastPathFailed;
 }

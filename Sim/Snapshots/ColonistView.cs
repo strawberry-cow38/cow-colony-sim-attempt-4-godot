@@ -1,3 +1,5 @@
+using CowColonySim.Sim.Designations;
+using CowColonySim.Sim.Items;
 using CowColonySim.Sim.World.Components;
 
 namespace CowColonySim.Sim.Snapshots;
@@ -13,4 +15,9 @@ public readonly record struct ColonistView(
     float Thirst,
     float Energy,
     bool JobActive,
-    NeedKind JobKind);
+    NeedKind JobKind,
+    bool WorkActive,
+    WorkKind WorkKind,
+    bool Carrying,
+    ItemKind CarryKind,
+    int CarryCount);

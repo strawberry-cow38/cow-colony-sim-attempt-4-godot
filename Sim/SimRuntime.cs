@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using CowColonySim.Sim.Commands;
+using CowColonySim.Sim.Designations;
+using CowColonySim.Sim.Items;
 using CowColonySim.Sim.Logging;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.Snapshots;
@@ -130,7 +132,7 @@ public sealed class SimRuntime : IDisposable
 
     private ColonistView[] BuildColonistViews()
     {
-        var query = _world.Store.Query<Colonist, TilePosition, Needs, Job>();
+        var query = _world.Store.Query<Colonist, TilePosition, Needs, Job, WorkJob>();
         var views = new ColonistView[query.Count];
         var i = 0;
         foreach (var entity in query.Entities)
@@ -138,10 +140,12 @@ public sealed class SimRuntime : IDisposable
             ref var p = ref entity.GetComponent<TilePosition>();
             ref var n = ref entity.GetComponent<Needs>();
             ref var j = ref entity.GetComponent<Job>();
+            ref var w = ref entity.GetComponent<WorkJob>();
             views[i++] = new ColonistView(
                 entity.Id, p.MetersX, p.MetersY,
                 n.Hunger, n.Thirst, n.Energy,
-                j.Active, j.NeedKind);
+                j.Active, j.NeedKind,
+                w.Active, w.Kind, w.Carrying, w.CarryKind, w.CarryCount);
         }
         return views;
     }

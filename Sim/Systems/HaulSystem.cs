@@ -114,6 +114,11 @@ public sealed class HaulSystem : ITickSystem
             }
             if (pos.TileX != item.TileX || pos.TileY != item.TileY)
             {
+                if (pf.LastPathFailed)
+                {
+                    ClearWork(ref work, ref pf);
+                    return;
+                }
                 EnsurePath(entity, ref pf, pos.TileX, pos.TileY, item.TileX, item.TileY);
                 return;
             }
@@ -130,12 +135,18 @@ public sealed class HaulSystem : ITickSystem
 
         if (pos.TileX != work.DropTileX || pos.TileY != work.DropTileY)
         {
+            // Drop tile unreachable (stockpile fenced in, etc). Don't loop
+            // forever re-requesting — drop the carry at the colonist's
+            // current tile so it lives somewhere visible.
+            if (pf.LastPathFailed)
+            {
+                _deposits.Add(new DepositAction(pos.TileX, pos.TileY, work.CarryKind, work.CarryCount));
+                ClearWork(ref work, ref pf);
+                return;
+            }
             EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
             return;
         }
-        // At drop tile. If the original drop is no longer inside any
-        // stockpile (zone deleted mid-haul), drop where we stand anyway —
-        // don't black-hole the carried payload.
         _deposits.Add(new DepositAction(work.DropTileX, work.DropTileY, work.CarryKind, work.CarryCount));
         ClearWork(ref work, ref pf);
     }
@@ -263,6 +274,7 @@ public sealed class HaulSystem : ITickSystem
         pf.Index = 0;
         pf.PendingRequest = true;
         pf.PlayerForced = false;
+        pf.LastPathFailed = false;
         _planner.Request(entity.Id, start, goal);
     }
 

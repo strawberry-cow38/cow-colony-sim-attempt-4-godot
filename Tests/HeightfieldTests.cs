@@ -114,10 +114,12 @@ public class HeightfieldTests
         hf.Set(0, 1, 20);
         hf.Set(1, 1, 4);
         var q = TerrainConstants.VerticalQuantumMetres;
-        // (u, v) = (0.75, 0.75), u + v > 1 → triangle TR/BR/BL only
-        var u1 = 1f - 0.75f;
-        var v1 = 1f - 0.75f;
-        Assert.Equal((4 + u1 * 20 + v1 * 10) * q, hf.SurfaceMetresAt(0.75f, 0.75f), 4);
+        // (u, v) = (0.75, 0.75), u + v > 1 → triangle TR/BR/BL only.
+        // Barycentric: w_TR = 1-v, w_BR = u+v-1, w_BL = 1-u.
+        const float u = 0.75f;
+        const float v = 0.75f;
+        var expected = ((1f - v) * 10 + (u + v - 1f) * 4 + (1f - u) * 20) * q;
+        Assert.Equal(expected, hf.SurfaceMetresAt(u, v), 4);
     }
 
     [Fact]
@@ -139,9 +141,11 @@ public class HeightfieldTests
         hf.Set(1, 0, 30);
         hf.Set(0, 1, 70);
         hf.Set(1, 1, 100);
-        // Approach diagonal u + v = 1 from both sides — heights must agree.
-        var a = hf.SurfaceMetresAt(0.5f - 1e-4f, 0.5f);
-        var b = hf.SurfaceMetresAt(0.5f + 1e-4f, 0.5f);
+        // Approach diagonal u + v = 1 from both sides — heights must agree
+        // in the limit. Use a very small epsilon so the 60*eps gap is below
+        // the assertion tolerance.
+        var a = hf.SurfaceMetresAt(0.5f - 1e-6f, 0.5f);
+        var b = hf.SurfaceMetresAt(0.5f + 1e-6f, 0.5f);
         Assert.Equal(a, b, 3);
     }
 }

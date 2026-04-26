@@ -15,7 +15,7 @@ public partial class CameraRig : Node3D
     private const float PitchDeg = -50f;
     private const float Distance = 120f;
     private const float MinDistance = 30f;
-    private const float MaxDistance = 900f;
+    private const float DefaultMaxDistance = 900f;
     private const float ZoomStep = 1.18f;
     private const float ZoomLerp = 12f;
     private const float OrbitYawDegPerPx = 0.3f;
@@ -35,12 +35,14 @@ public partial class CameraRig : Node3D
     private float _distance = Distance;
     private float _distanceTarget = Distance;
     private Vector2 _boundsMax = new(2048f, 2048f);
+    private float _maxDistance = DefaultMaxDistance;
     private bool _loggedFirstMove;
     private bool _loggedFirstKey;
 
-    public void Configure(Vector2 boundsMax, Vector2 startCenter)
+    public void Configure(Vector2 boundsMax, Vector2 startCenter, float? maxDistance = null)
     {
         _boundsMax = boundsMax;
+        _maxDistance = maxDistance ?? DefaultMaxDistance;
         Position = new Vector3(startCenter.X, 0f, startCenter.Y);
     }
 
@@ -135,11 +137,11 @@ public partial class CameraRig : Node3D
                 break;
 
             case InputEventMouseButton wheel when wheel.Pressed && wheel.ButtonIndex == MouseButton.WheelUp:
-                _distanceTarget = Mathf.Clamp(_distanceTarget / ZoomStep, MinDistance, MaxDistance);
+                _distanceTarget = Mathf.Clamp(_distanceTarget / ZoomStep, MinDistance, _maxDistance);
                 break;
 
             case InputEventMouseButton wheel when wheel.Pressed && wheel.ButtonIndex == MouseButton.WheelDown:
-                _distanceTarget = Mathf.Clamp(_distanceTarget * ZoomStep, MinDistance, MaxDistance);
+                _distanceTarget = Mathf.Clamp(_distanceTarget * ZoomStep, MinDistance, _maxDistance);
                 break;
 
             case InputEventMouseMotion mm when _middleHeld:

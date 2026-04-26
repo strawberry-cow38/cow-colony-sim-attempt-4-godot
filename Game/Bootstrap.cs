@@ -13,10 +13,11 @@ namespace CowColonySim.Game;
 
 public partial class Bootstrap : Node3D
 {
-    private const int PreviewTileCount = 64;
+    private const int PreviewTileCount = 256;
 
     private SimRuntime? _runtime;
     private Heightfield? _heightfield;
+    private HeightfieldGenerator.Settings _genSettings;
 
     public override void _Ready()
     {
@@ -24,7 +25,8 @@ public partial class Bootstrap : Node3D
         _runtime = new SimRuntime();
 
         _heightfield = new Heightfield(PreviewTileCount, PreviewTileCount);
-        HeightfieldGenerator.Generate(_heightfield, new HeightfieldGenerator.Settings());
+        _genSettings = new HeightfieldGenerator.Settings();
+        HeightfieldGenerator.Generate(_heightfield, _genSettings);
 
         var grid = new HeightGrid(_heightfield);
         var planner = new PathPlanner(grid);
@@ -35,6 +37,7 @@ public partial class Bootstrap : Node3D
         AddSun();
         AddCameraRig();
         AddTerrain(_heightfield);
+        AddBackground(_genSettings);
         AddVertexOverlay(_heightfield);
         AddColonists(_runtime, _heightfield);
         AddPerfHud(_runtime);
@@ -73,8 +76,16 @@ public partial class Bootstrap : Node3D
         var span = PreviewTileCount * SimConstants.GodotUnitsPerTile;
         var rig = new CameraRig { Name = "CameraRig" };
         rig.Configure(boundsMax: new Vector2(span, span),
-                      startCenter: new Vector2(span * 0.5f, span * 0.5f));
+                      startCenter: new Vector2(span * 0.5f, span * 0.5f),
+                      maxDistance: span * 0.6f);
         AddChild(rig);
+    }
+
+    private void AddBackground(HeightfieldGenerator.Settings settings)
+    {
+        var bg = new LODBackground { Name = "LODBackground" };
+        AddChild(bg);
+        bg.Build(PreviewTileCount, settings);
     }
 
     private void AddTerrain(Heightfield field)

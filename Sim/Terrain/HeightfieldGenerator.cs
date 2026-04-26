@@ -11,7 +11,10 @@ public static class HeightfieldGenerator
         int Octaves = 4,
         float Lacunarity = 2.0f,
         float Persistence = 0.5f,
-        short Amplitude = 32);
+        short Amplitude = 32,
+        float OriginTilesX = 0f,
+        float OriginTilesY = 0f,
+        float TileSpacing = 1f);
 
     public static void Generate(Heightfield field, Settings settings)
     {
@@ -19,7 +22,9 @@ public static class HeightfieldGenerator
         {
             for (var vx = 0; vx < field.VertWidth; vx++)
             {
-                var n = Fbm(vx, vy, settings);
+                var sx = settings.OriginTilesX + vx * settings.TileSpacing;
+                var sy = settings.OriginTilesY + vy * settings.TileSpacing;
+                var n = Fbm(sx, sy, settings);
                 var h = (short)Math.Round(n * settings.Amplitude);
                 field.Set(vx, vy, h);
             }
@@ -27,7 +32,7 @@ public static class HeightfieldGenerator
         field.MarkChanged();
     }
 
-    private static float Fbm(int vx, int vy, Settings s)
+    private static float Fbm(float vx, float vy, Settings s)
     {
         var freq = s.BaseFrequency;
         var amp = 1f;

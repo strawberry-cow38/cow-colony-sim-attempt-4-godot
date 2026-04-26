@@ -11,7 +11,7 @@ namespace CowColonySim.Game.Terrain;
 // and let only props/walls cast.
 public static class TerrainMeshBuilder
 {
-    public static ArrayMesh Build(Heightfield field)
+    public static ArrayMesh Build(Heightfield field, float? unitsPerTileOverride = null)
     {
         var tilesX = field.VertWidth - 1;
         var tilesY = field.VertHeight - 1;
@@ -24,7 +24,7 @@ public static class TerrainMeshBuilder
         var uvs = new Vector2[vertCount];
         var indices = new int[indexCount];
 
-        var unitsPerTile = SimConstants.GodotUnitsPerTile;
+        var unitsPerTile = unitsPerTileOverride ?? SimConstants.GodotUnitsPerTile;
         var unitsPerQuanta = TerrainConstants.VerticalQuantumMetres
                            * (SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile);
 

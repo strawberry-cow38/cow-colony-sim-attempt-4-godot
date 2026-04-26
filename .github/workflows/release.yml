@@ -73,8 +73,8 @@ jobs:
           # Import sometimes exits non-zero on first run; verify .godot exists.
           if (-not (Test-Path .godot)) { throw "Godot import failed" }
 
-      - name: Build .NET (Release)
-        run: dotnet build CowColonySim.sln -c Release --nologo
+      - name: Build .NET (ExportRelease)
+        run: dotnet build CowColonySim.sln -c ExportRelease --nologo
 
       - name: Export Windows Desktop
         shell: pwsh

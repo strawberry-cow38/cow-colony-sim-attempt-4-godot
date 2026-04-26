@@ -84,9 +84,14 @@ public sealed class ChopJobSystem : ITickSystem
         // Apply structural changes outside the colonist iteration. Spawning
         // an Item entity or deleting a Tree mid-foreach can invalidate
         // Friflo's archetype storage and crash the sim thread.
+        // Dedupe by tree id: two colonists could finish the same trunk on
+        // the same tick under odd assignment churn. Without this we'd
+        // double-spawn the wood pile and double-delete the entity.
+        var seenTrees = new HashSet<int>();
         for (var i = 0; i < _felled.Count; i++)
         {
             var f = _felled[i];
+            if (!seenTrees.Add(f.TreeId)) continue;
             _grid.MarkBlocked(f.TileX, f.TileY, false);
             _world.AddOrMergeItem(f.TileX, f.TileY, ItemKind.Wood, WoodPerTree);
             var tree = _world.Store.GetEntityById(f.TreeId);

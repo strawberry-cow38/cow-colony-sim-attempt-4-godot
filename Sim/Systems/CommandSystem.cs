@@ -74,6 +74,26 @@ public sealed class CommandSystem : ITickSystem
         var tx = treePos.TileX;
         var ty = treePos.TileY;
 
+        // Clear any other colonist already targeting this tree. Two
+        // colonists chopping the same trunk both reach Health<=0 on the
+        // same tick, push duplicate FelledTree entries, and the second
+        // pass crashed the sim thread. Single-assignment per tree is
+        // also what the player asked for ergonomically.
+        foreach (var other in _world.Store.Query<Colonist, WorkJob, PathFollower>().Entities)
+        {
+            if (other.Id == cmd.ColonistId) continue;
+            ref var ow = ref other.GetComponent<WorkJob>();
+            if (!ow.Active || ow.TargetEntityId != cmd.TreeEntityId) continue;
+            ref var opf = ref other.GetComponent<PathFollower>();
+            ow.Active = false;
+            ow.Kind = WorkKind.None;
+            ow.TargetEntityId = 0;
+            ow.Progress = 0f;
+            ow.Forced = false;
+            opf.Tiles = null;
+            opf.Index = 0;
+        }
+
         // Stamp a chop designation if one isn't there yet so ChopJobSystem's
         // CollectChopDesignations sees the tile. Players using prioritize
         // shouldn't have to also click "designate".

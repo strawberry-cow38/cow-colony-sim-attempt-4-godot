@@ -47,7 +47,7 @@ public partial class Bootstrap : Node3D
         SpawnColonists(_runtime);
         SpawnNeedSpots(_runtime);
         SpawnDummyFrameworkObjects(_runtime);
-        SpawnTrees(_runtime, _heightfield);
+        SpawnTrees(_runtime, _heightfield, grid);
         _runtime.Start();
 
         var env = AddEnvironment();
@@ -64,6 +64,7 @@ public partial class Bootstrap : Node3D
         AddDesignations(_runtime, _heightfield);
         AddBlueprintGhosts(_runtime, _heightfield);
         AddTrees(_runtime, _heightfield);
+        AddItems(_runtime, _heightfield);
         AddPathOverlay(_runtime, _heightfield);
         var selection = AddSelectionService(_runtime, _heightfield);
         AddSelectionRing(selection, _runtime, _heightfield);
@@ -124,7 +125,7 @@ public partial class Bootstrap : Node3D
     // Scatter pines deterministically across the map. Avoid a radius around
     // the colonist/zone cluster so the play area stays uncluttered while we
     // still get a forest backdrop for chop testing.
-    private static void SpawnTrees(SimRuntime runtime, Heightfield field)
+    private static void SpawnTrees(SimRuntime runtime, Heightfield field, HeightGrid grid)
     {
         const int target = 250;
         const int clearRadius = 16;
@@ -140,7 +141,9 @@ public partial class Bootstrap : Node3D
             var dx = tx - center;
             var dy = ty - center;
             if (dx * dx + dy * dy < clearRadius * clearRadius) continue;
+            if (grid.IsBlocked(tx, ty)) continue;
             runtime.World.SpawnTree(tx, ty, unchecked((uint)rng.Next()));
+            grid.MarkBlocked(tx, ty, true);
             placed++;
         }
     }
@@ -148,6 +151,13 @@ public partial class Bootstrap : Node3D
     private void AddTrees(SimRuntime runtime, Heightfield field)
     {
         var renderer = new TreesRenderer { Name = "Trees" };
+        renderer.Configure(runtime.Publisher, field);
+        AddChild(renderer);
+    }
+
+    private void AddItems(SimRuntime runtime, Heightfield field)
+    {
+        var renderer = new ItemsRenderer { Name = "Items" };
         renderer.Configure(runtime.Publisher, field);
         AddChild(renderer);
     }

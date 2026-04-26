@@ -28,6 +28,7 @@ public sealed class HeightGrid
     private const float SlopeCostPerQuanta = 0.4f;
 
     private readonly Heightfield _field;
+    private readonly byte[] _blocked;
 
     public int Width { get; }
     public int Height { get; }
@@ -37,6 +38,24 @@ public sealed class HeightGrid
         _field = field;
         Width = field.VertWidth - 1;
         Height = field.VertHeight - 1;
+        _blocked = new byte[Width * Height];
+    }
+
+    // Per-tile dynamic blocker. Trees, walls, and other tile-occupiers set
+    // this; A* sees blocked tiles as impassable. Mutations happen on the
+    // sim thread between path requests — not synchronized for in-flight A*
+    // workers, so a tree felled mid-search may produce a one-tick stale
+    // path that gets rerouted next path request.
+    public bool IsBlocked(int x, int y)
+    {
+        if ((uint)x >= (uint)Width || (uint)y >= (uint)Height) return false;
+        return _blocked[y * Width + x] != 0;
+    }
+
+    public void MarkBlocked(int x, int y, bool blocked)
+    {
+        if ((uint)x >= (uint)Width || (uint)y >= (uint)Height) return;
+        _blocked[y * Width + x] = blocked ? (byte)1 : (byte)0;
     }
 
     public bool InBounds(TileCoord t) =>
@@ -66,6 +85,7 @@ public sealed class HeightGrid
     public bool CanStep(TileCoord from, TileCoord to)
     {
         if (!InBounds(from) || !InBounds(to)) return false;
+        if (IsBlocked(to.X, to.Y)) return false;
         var dx = to.X - from.X;
         var dy = to.Y - from.Y;
         if (Math.Abs(dx) > 1 || Math.Abs(dy) > 1 || (dx == 0 && dy == 0)) return false;

@@ -85,7 +85,8 @@ public sealed class SimRuntime : IDisposable
                 Zones: BuildZoneViews(),
                 Designations: BuildDesignationViews(),
                 BlueprintGhosts: BuildBlueprintGhostViews(),
-                Trees: BuildTreeViews()));
+                Trees: BuildTreeViews(),
+                Items: BuildItemViews()));
 
             nextTick += stepTicks;
             var now = Stopwatch.GetTimestamp();
@@ -208,6 +209,20 @@ public sealed class SimRuntime : IDisposable
             ref var t = ref entity.GetComponent<Tree>();
             ref var p = ref entity.GetComponent<TilePosition>();
             views[i++] = new TreeView(entity.Id, p.TileX, p.TileY, t.Health, t.VariantSeed);
+        }
+        return views;
+    }
+
+    private ItemView[] BuildItemViews()
+    {
+        var query = _world.Store.Query<Item, TilePosition>();
+        var views = new ItemView[query.Count];
+        var i = 0;
+        foreach (var entity in query.Entities)
+        {
+            ref var it = ref entity.GetComponent<Item>();
+            ref var p = ref entity.GetComponent<TilePosition>();
+            views[i++] = new ItemView(entity.Id, it.Kind, it.Count, it.Capacity, p.TileX, p.TileY, it.Forbidden);
         }
         return views;
     }

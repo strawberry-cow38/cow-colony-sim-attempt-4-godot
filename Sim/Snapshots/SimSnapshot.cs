@@ -12,7 +12,8 @@ public sealed record SimSnapshot(
     IReadOnlyList<ZoneView> Zones,
     IReadOnlyList<DesignationView> Designations,
     IReadOnlyList<BlueprintGhostView> BlueprintGhosts,
-    IReadOnlyList<TreeView> Trees)
+    IReadOnlyList<TreeView> Trees,
+    IReadOnlyList<ItemView> Items)
 {
     public static SimSnapshot Empty { get; } =
         new(0, 0.0, 0,
@@ -22,5 +23,6 @@ public sealed record SimSnapshot(
             Array.Empty<ZoneView>(),
             Array.Empty<DesignationView>(),
             Array.Empty<BlueprintGhostView>(),
-            Array.Empty<TreeView>());
+            Array.Empty<TreeView>(),
+            Array.Empty<ItemView>());
 }

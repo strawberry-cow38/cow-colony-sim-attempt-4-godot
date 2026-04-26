@@ -1,4 +1,5 @@
 using CowColonySim.Sim.Designations;
+using CowColonySim.Sim.Items;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.World;
 using CowColonySim.Sim.World.Components;
@@ -16,6 +17,7 @@ namespace CowColonySim.Sim.Systems;
 public sealed class ChopJobSystem : ITickSystem
 {
     private const float ChopRatePerSec = 2f;
+    private const int WoodPerTree = 5;
 
     private readonly SimWorld _world;
     private readonly PathPlanner _planner;
@@ -78,21 +80,25 @@ public sealed class ChopJobSystem : ITickSystem
             return;
         }
 
-        if (pos.TileX != work.TargetTileX || pos.TileY != work.TargetTileY)
+        if (!IsAdjacent(pos.TileX, pos.TileY, work.TargetTileX, work.TargetTileY))
         {
             if (pf.Tiles is null && !pf.PendingRequest)
             {
-                var start = _grid.At(
-                    Math.Clamp(pos.TileX, 0, _grid.Width - 1),
-                    Math.Clamp(pos.TileY, 0, _grid.Height - 1));
-                var goal = _grid.At(
-                    Math.Clamp(work.TargetTileX, 0, _grid.Width - 1),
-                    Math.Clamp(work.TargetTileY, 0, _grid.Height - 1));
-                if (start != goal)
+                if (TryFindStandTile(work.TargetTileX, work.TargetTileY, pos.TileX, pos.TileY, out var stand))
                 {
-                    pf.PendingRequest = true;
-                    pf.PlayerForced = false;
-                    _planner.Request(entity.Id, start, goal);
+                    var start = _grid.At(
+                        Math.Clamp(pos.TileX, 0, _grid.Width - 1),
+                        Math.Clamp(pos.TileY, 0, _grid.Height - 1));
+                    if (start != stand)
+                    {
+                        pf.PendingRequest = true;
+                        pf.PlayerForced = false;
+                        _planner.Request(entity.Id, start, stand);
+                    }
+                }
+                else
+                {
+                    ClearWork(ref work, ref pf);
                 }
             }
             return;
@@ -114,11 +120,47 @@ public sealed class ChopJobSystem : ITickSystem
         }
         if (t.Health <= 0)
         {
+            _grid.MarkBlocked(work.TargetTileX, work.TargetTileY, false);
+            _world.AddOrMergeItem(work.TargetTileX, work.TargetTileY, ItemKind.Wood, WoodPerTree);
             tree.DeleteEntity();
             var designation = _world.Store.GetEntityById(designationId);
             if (designation != default) designation.DeleteEntity();
             ClearWork(ref work, ref pf);
         }
+    }
+
+    private static bool IsAdjacent(int ax, int ay, int bx, int by) =>
+        Math.Abs(ax - bx) <= 1 && Math.Abs(ay - by) <= 1;
+
+    private bool TryFindStandTile(int treeX, int treeY, int fromX, int fromY, out TileCoord stand)
+    {
+        var bestDistSq = int.MaxValue;
+        var bestX = 0;
+        var bestY = 0;
+        var found = false;
+        for (var dy = -1; dy <= 1; dy++)
+        {
+            for (var dx = -1; dx <= 1; dx++)
+            {
+                if (dx == 0 && dy == 0) continue;
+                var nx = treeX + dx;
+                var ny = treeY + dy;
+                if ((uint)nx >= (uint)_grid.Width || (uint)ny >= (uint)_grid.Height) continue;
+                if (_grid.IsBlocked(nx, ny)) continue;
+                var ddx = nx - fromX;
+                var ddy = ny - fromY;
+                var d = ddx * ddx + ddy * ddy;
+                if (d < bestDistSq)
+                {
+                    bestDistSq = d;
+                    bestX = nx;
+                    bestY = ny;
+                    found = true;
+                }
+            }
+        }
+        stand = found ? _grid.At(bestX, bestY) : default;
+        return found;
     }
 
     private void TryAssignChop(
@@ -153,20 +195,22 @@ public sealed class ChopJobSystem : ITickSystem
         work.Progress = 0f;
         claimedTrees.Add(bestTreeId);
 
-        if (pos.TileX == bestKey.Item1 && pos.TileY == bestKey.Item2) return;
+        if (IsAdjacent(pos.TileX, pos.TileY, bestKey.Item1, bestKey.Item2)) return;
 
+        if (!TryFindStandTile(bestKey.Item1, bestKey.Item2, pos.TileX, pos.TileY, out var stand))
+        {
+            ClearWork(ref work, ref pf);
+            return;
+        }
         var start = _grid.At(
             Math.Clamp(pos.TileX, 0, _grid.Width - 1),
             Math.Clamp(pos.TileY, 0, _grid.Height - 1));
-        var goal = _grid.At(
-            Math.Clamp(bestKey.Item1, 0, _grid.Width - 1),
-            Math.Clamp(bestKey.Item2, 0, _grid.Height - 1));
-        if (start == goal) return;
+        if (start == stand) return;
         pf.Tiles = null;
         pf.Index = 0;
         pf.PendingRequest = true;
         pf.PlayerForced = false;
-        _planner.Request(entity.Id, start, goal);
+        _planner.Request(entity.Id, start, stand);
     }
 
     private static void ClearWork(ref WorkJob work, ref PathFollower pf)

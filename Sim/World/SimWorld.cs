@@ -1,5 +1,6 @@
 using CowColonySim.Sim.Blueprints;
 using CowColonySim.Sim.Designations;
+using CowColonySim.Sim.Items;
 using CowColonySim.Sim.World.Components;
 using CowColonySim.Sim.Zones;
 using Friflo.Engine.ECS;
@@ -57,6 +58,33 @@ public sealed class SimWorld
         var e = Store.CreateEntity();
         e.AddComponent(new TilePosition(tileX, tileY, 0, 0.5f, 0.5f));
         e.AddComponent(new Tree { Health = health, VariantSeed = variantSeed });
+        return e;
+    }
+
+    // Drop a fresh stack of `kind` on the tile, or merge into the first
+    // existing stack at that tile that has room. Returns the affected
+    // entity (new or updated). Mirrors attempt-2's addItemToTile so chop
+    // yields collapse onto one stack instead of pebble-spamming entities.
+    public Entity AddOrMergeItem(int tileX, int tileY, ItemKind kind, int count, int capacity = 50)
+    {
+        if (count <= 0) return default;
+        var query = Store.Query<Item, TilePosition>();
+        foreach (var entity in query.Entities)
+        {
+            ref var it = ref entity.GetComponent<Item>();
+            if (it.Kind != kind) continue;
+            ref var pos = ref entity.GetComponent<TilePosition>();
+            if (pos.TileX != tileX || pos.TileY != tileY) continue;
+            var room = it.Capacity - it.Count;
+            if (room <= 0) continue;
+            var add = Math.Min(room, count);
+            it.Count += add;
+            count -= add;
+            if (count <= 0) return entity;
+        }
+        var e = Store.CreateEntity();
+        e.AddComponent(new TilePosition(tileX, tileY, 0, 0.5f, 0.5f));
+        e.AddComponent(new Item { Kind = kind, Count = Math.Min(count, capacity), Capacity = capacity });
         return e;
     }
 

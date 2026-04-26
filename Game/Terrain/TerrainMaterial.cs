@@ -13,10 +13,9 @@ public static class TerrainMaterial
     public static StandardMaterial3D Get()
     {
         if (_cached is not null) return _cached;
-        var tex = GD.Load<Texture2D>("res://assets/grass05.jpg");
         _cached = new StandardMaterial3D
         {
-            AlbedoTexture = tex,
+            AlbedoTexture = LoadGrass(),
             Uv1Scale = new Vector3(2f, 2f, 1f),
             Roughness = 0.95f,
             Metallic = 0.0f,
@@ -24,5 +23,18 @@ public static class TerrainMaterial
             TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
         };
         return _cached;
+    }
+
+    // Source-pull launcher means assets ship as raw files (no .import). Read
+    // the JPG straight off disk and build an ImageTexture so we don't need
+    // Godot's import pipeline to have run.
+    private static ImageTexture LoadGrass()
+    {
+        var path = ProjectSettings.GlobalizePath("res://assets/grass05.jpg");
+        var img = new Image();
+        var err = img.Load(path);
+        if (err != Error.Ok) GD.PushError($"Failed to load grass texture at {path}: {err}");
+        img.GenerateMipmaps();
+        return ImageTexture.CreateFromImage(img);
     }
 }

@@ -10,10 +10,13 @@ namespace CowColonySim.Sim.Terrain;
 public sealed class Heightfield
 {
     private readonly short[] _heights;
+    private int _dirtyMinX, _dirtyMinY, _dirtyMaxX, _dirtyMaxY;
+    private bool _hasDirty;
 
     public int VertWidth { get; }
     public int VertHeight { get; }
     public int Version { get; private set; }
+    public bool HasDirtyRegion => _hasDirty;
 
     public Heightfield(int tileWidth, int tileHeight)
     {
@@ -46,6 +49,7 @@ public sealed class Heightfield
         {
             _heights[idx] = clamped;
             Version++;
+            ExpandDirty(vx, vy);
         }
     }
 
@@ -54,11 +58,47 @@ public sealed class Heightfield
         var clamped = Clamp(quanta);
         Array.Fill(_heights, clamped);
         Version++;
+        ExpandDirty(0, 0);
+        ExpandDirty(VertWidth - 1, VertHeight - 1);
     }
 
     // Bulk writers (e.g. generators) call this after a sweep to guarantee
     // a Version bump even when individual Set() calls happened to be no-ops.
     public void MarkChanged() => Version++;
+
+    // Pulls and clears the smallest axis-aligned vertex bbox that contains
+    // every Set() since the last consume. Game-side terrain + nav rebuilds
+    // touch only this region. Returns false (no out values) when nothing
+    // has changed since the last call. Bbox is inclusive on both ends.
+    public bool TryConsumeDirtyRegion(out int minVx, out int minVy, out int maxVx, out int maxVy)
+    {
+        if (!_hasDirty)
+        {
+            minVx = minVy = maxVx = maxVy = 0;
+            return false;
+        }
+        minVx = _dirtyMinX;
+        minVy = _dirtyMinY;
+        maxVx = _dirtyMaxX;
+        maxVy = _dirtyMaxY;
+        _hasDirty = false;
+        return true;
+    }
+
+    private void ExpandDirty(int vx, int vy)
+    {
+        if (!_hasDirty)
+        {
+            _dirtyMinX = _dirtyMaxX = vx;
+            _dirtyMinY = _dirtyMaxY = vy;
+            _hasDirty = true;
+            return;
+        }
+        if (vx < _dirtyMinX) _dirtyMinX = vx;
+        else if (vx > _dirtyMaxX) _dirtyMaxX = vx;
+        if (vy < _dirtyMinY) _dirtyMinY = vy;
+        else if (vy > _dirtyMaxY) _dirtyMaxY = vy;
+    }
 
     public float MetresAt(int vx, int vy) =>
         Get(vx, vy) * TerrainConstants.VerticalQuantumMetres;

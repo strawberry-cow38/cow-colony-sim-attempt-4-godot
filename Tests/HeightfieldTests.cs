@@ -148,4 +148,50 @@ public class HeightfieldTests
         var b = hf.SurfaceMetresAt(0.5f + 1e-6f, 0.5f);
         Assert.Equal(a, b, 3);
     }
+
+    [Fact]
+    public void Dirty_region_starts_empty_and_clears_on_consume()
+    {
+        var hf = new Heightfield(8, 8);
+        Assert.False(hf.HasDirtyRegion);
+        Assert.False(hf.TryConsumeDirtyRegion(out _, out _, out _, out _));
+    }
+
+    [Fact]
+    public void Dirty_region_tracks_bbox_of_changed_vertices()
+    {
+        var hf = new Heightfield(8, 8);
+        hf.Set(2, 3, 5);
+        hf.Set(6, 1, 5);
+        hf.Set(4, 4, 5);
+        Assert.True(hf.HasDirtyRegion);
+        Assert.True(hf.TryConsumeDirtyRegion(out var minX, out var minY, out var maxX, out var maxY));
+        Assert.Equal(2, minX);
+        Assert.Equal(1, minY);
+        Assert.Equal(6, maxX);
+        Assert.Equal(4, maxY);
+        Assert.False(hf.HasDirtyRegion);
+    }
+
+    [Fact]
+    public void Dirty_region_ignores_no_op_sets()
+    {
+        var hf = new Heightfield(4, 4);
+        hf.Set(2, 2, 0);
+        Assert.False(hf.HasDirtyRegion);
+    }
+
+    [Fact]
+    public void Dirty_region_after_consume_only_tracks_subsequent_writes()
+    {
+        var hf = new Heightfield(8, 8);
+        hf.Set(0, 0, 5);
+        hf.TryConsumeDirtyRegion(out _, out _, out _, out _);
+        hf.Set(7, 7, 5);
+        Assert.True(hf.TryConsumeDirtyRegion(out var minX, out var minY, out var maxX, out var maxY));
+        Assert.Equal(7, minX);
+        Assert.Equal(7, minY);
+        Assert.Equal(7, maxX);
+        Assert.Equal(7, maxY);
+    }
 }

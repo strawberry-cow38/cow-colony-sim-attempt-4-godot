@@ -76,17 +76,8 @@ internal static class Program
                 Console.WriteLine($"  local:  {(string.IsNullOrEmpty(localVersion) ? "(none)" : localVersion)}");
 
                 var tmpZip = Path.Combine(baseDir, "update.zip");
-                if (File.Exists(tmpZip)) File.Delete(tmpZip);
-
                 Console.WriteLine("Downloading...");
-                using (var dlResp = await http.GetAsync(zipUrl, HttpCompletionOption.ResponseHeadersRead))
-                {
-                    dlResp.EnsureSuccessStatusCode();
-                    var total = dlResp.Content.Headers.ContentLength ?? -1L;
-                    await using var src = await dlResp.Content.ReadAsStreamAsync();
-                    await using var dst = File.Create(tmpZip);
-                    await CopyWithProgress(src, dst, total);
-                }
+                await DownloadWithRetry(http, zipUrl, tmpZip, expectedSize: assetSize, maxAttempts: 4);
                 Console.WriteLine();
 
                 Console.WriteLine("Extracting...");
@@ -135,6 +126,46 @@ internal static class Program
         Console.WriteLine("Press any key to close...");
         try { Console.ReadKey(intercept: true); } catch { }
         return code;
+    }
+
+    private static async Task DownloadWithRetry(HttpClient http, string url, string dst, long expectedSize, int maxAttempts)
+    {
+        Exception? last = null;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                if (File.Exists(dst)) File.Delete(dst);
+                using var dlResp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+                dlResp.EnsureSuccessStatusCode();
+                var total = dlResp.Content.Headers.ContentLength ?? expectedSize;
+                await using (var src = await dlResp.Content.ReadAsStreamAsync())
+                await using (var fs = File.Create(dst))
+                {
+                    await CopyWithProgress(src, fs, total);
+                }
+                var actual = new FileInfo(dst).Length;
+                if (expectedSize > 0 && actual != expectedSize)
+                {
+                    throw new IOException($"Downloaded {actual} bytes but expected {expectedSize}.");
+                }
+                return;
+            }
+            catch (Exception ex) when (ex is HttpIOException or IOException or HttpRequestException or TaskCanceledException)
+            {
+                last = ex;
+                Console.WriteLine();
+                Console.WriteLine($"  attempt {attempt}/{maxAttempts} failed: {ex.GetType().Name}: {ex.Message}");
+                if (attempt < maxAttempts)
+                {
+                    var waitMs = 1500 * attempt;
+                    Console.WriteLine($"  retrying in {waitMs}ms...");
+                    await Task.Delay(waitMs);
+                }
+            }
+        }
+        if (File.Exists(dst)) try { File.Delete(dst); } catch { }
+        throw new IOException($"Download failed after {maxAttempts} attempts.", last);
     }
 
     private static async Task CopyWithProgress(Stream src, Stream dst, long total)

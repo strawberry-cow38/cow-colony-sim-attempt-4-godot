@@ -98,8 +98,8 @@ public partial class Bootstrap : Node3D
             AmbientLightSkyContribution = 1.0f,
             AmbientLightEnergy = 1.0f,
             ReflectedLightSource = Godot.Environment.ReflectionSource.Sky,
-            TonemapMode = Godot.Environment.ToneMapper.Filmic,
-            TonemapExposure = 1.3f,
+            TonemapMode = Godot.Environment.ToneMapper.Linear,
+            TonemapExposure = 1.0f,
         };
         var node = new WorldEnvironment { Name = "World", Environment = env };
         AddChild(node);
@@ -111,7 +111,7 @@ public partial class Bootstrap : Node3D
         {
             Name = "Sun",
             ShadowEnabled = true,
-            LightEnergy = 2.0f,
+            LightEnergy = 4.0f,
             ShadowBias = 0.5f,
             ShadowNormalBias = 2.5f,
         };

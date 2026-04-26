@@ -6,8 +6,8 @@ namespace CowColonySim.Game.Time;
 
 // Top-right HUD showing in-game date + clock + active speed multiplier.
 // Also owns the speed/pause hotkeys:
-//   space  → toggle pause
-//   1/2/3  → 1× / 2× / 4×
+//   space    → toggle pause
+//   1/2/3/4  → 1× / 2× / 3× / 6×
 public partial class TimeHud : CanvasLayer
 {
     private SimRuntime _runtime = null!;
@@ -62,7 +62,8 @@ public partial class TimeHud : CanvasLayer
                 break;
             case Key.Key1: _runtime.Speed = 1; _lastNonZeroSpeed = 1; GetViewport().SetInputAsHandled(); break;
             case Key.Key2: _runtime.Speed = 2; _lastNonZeroSpeed = 2; GetViewport().SetInputAsHandled(); break;
-            case Key.Key3: _runtime.Speed = 4; _lastNonZeroSpeed = 4; GetViewport().SetInputAsHandled(); break;
+            case Key.Key3: _runtime.Speed = 3; _lastNonZeroSpeed = 3; GetViewport().SetInputAsHandled(); break;
+            case Key.Key4: _runtime.Speed = 6; _lastNonZeroSpeed = 6; GetViewport().SetInputAsHandled(); break;
         }
     }
 
@@ -74,6 +75,6 @@ public partial class TimeHud : CanvasLayer
         _label.Text =
             $"{dt:yyyy-MM-dd}\n" +
             $"{dt:HH:mm:ss}\n" +
-            $"{speedTag}  [space pause · 1/2/3 speed]";
+            $"{speedTag}  [space pause · 1/2/3/4 = 1/2/3/6×]";
     }
 }

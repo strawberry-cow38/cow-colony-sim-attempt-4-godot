@@ -31,7 +31,7 @@ public class SnapshotPublisherTests
         {
             for (var i = 1; i <= 10_000; i++)
             {
-                pub.Publish(new SimSnapshot(i, i / 60.0, 0, Array.Empty<ColonistView>(), Array.Empty<SpotView>(), Array.Empty<PathView>()));
+                pub.Publish(new SimSnapshot(i, i / 60.0, 0, Array.Empty<ColonistView>(), Array.Empty<SpotView>(), Array.Empty<PathView>(), Array.Empty<ZoneView>(), Array.Empty<DesignationView>(), Array.Empty<BlueprintGhostView>()));
             }
             done.Set();
         });

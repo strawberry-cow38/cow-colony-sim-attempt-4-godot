@@ -20,7 +20,7 @@ public partial class BlueprintGhostPreview : Node3D
     public string? DefId { get; set; }
     public int OriginTileX { get; set; }
     public int OriginTileY { get; set; }
-    public int Rotation { get; set; }
+    public int RotationSteps { get; set; }
     public bool Valid { get; set; } = true;
 
     public void Configure(Heightfield field) => _field = field;
@@ -55,7 +55,7 @@ public partial class BlueprintGhostPreview : Node3D
             return;
         }
 
-        var (footW, footH) = (Rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+        var (footW, footH) = (RotationSteps & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
         var unitsPerTile = SimConstants.GodotUnitsPerTile;
         var sizeUnitsX = footW * unitsPerTile;
         var sizeUnitsZ = footH * unitsPerTile;

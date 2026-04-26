@@ -137,7 +137,7 @@ public partial class PlacementTool : Node
             _ghostPreview.DefId = def.Id;
             _ghostPreview.OriginTileX = origin.X;
             _ghostPreview.OriginTileY = origin.Y;
-            _ghostPreview.Rotation = _blueprintRotation;
+            _ghostPreview.RotationSteps = _blueprintRotation;
             _ghostPreview.Valid = IsFootprintInBounds(def, _blueprintRotation, origin);
         }
     }

@@ -1,7 +1,7 @@
 using CowColonySim.Game.Selection;
 using CowColonySim.Sim.Commands;
 using CowColonySim.Sim.Designations;
-using CowColonySim.Sim.Pathfinding;
+using CowColonySim.Sim.Zones;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.World.Components;
 using Godot;

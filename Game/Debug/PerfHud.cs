@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text;
+using CowColonySim.Game.Camera;
 using CowColonySim.Sim;
 using Godot;
 
@@ -13,6 +14,7 @@ public partial class PerfHud : CanvasLayer
     private const float SampleSeconds = 0.5f;
 
     private SimRuntime _runtime = null!;
+    private CameraRig? _rig;
     private Label _summary = null!;
     private Label _detail = null!;
     private long _lastTick;
@@ -21,7 +23,11 @@ public partial class PerfHud : CanvasLayer
     private float _tps;
     private bool _detailVisible;
 
-    public void Configure(SimRuntime runtime) => _runtime = runtime;
+    public void Configure(SimRuntime runtime, CameraRig? rig = null)
+    {
+        _runtime = runtime;
+        _rig = rig;
+    }
 
     public override void _Ready()
     {
@@ -67,7 +73,10 @@ public partial class PerfHud : CanvasLayer
         _lastTick = tickNow;
         _accum = 0f;
 
-        _summary.Text = $"FPS: {_fps:F0}   TPS: {_tps:F0}   [F3 detail · F4 reset max]";
+        var zoomTxt = _rig is null
+            ? string.Empty
+            : $"   ZOOM: {_rig.ZoomPercent:F1}% ({_rig.CurrentDistance:F0}u)";
+        _summary.Text = $"FPS: {_fps:F0}   TPS: {_tps:F0}{zoomTxt}   [F3 detail · F4 reset max]";
 
         if (!_detailVisible) return;
 

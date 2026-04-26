@@ -226,6 +226,8 @@ public partial class Bootstrap : Node3D
         AddChild(cycle);
     }
 
+    private CameraRig? _cameraRig;
+
     private void AddCameraRig()
     {
         var span = PreviewTileCount * SimConstants.GodotUnitsPerTile;
@@ -234,6 +236,7 @@ public partial class Bootstrap : Node3D
                       startCenter: new Vector2(span * 0.5f, span * 0.5f),
                       maxDistance: span * 0.6f);
         AddChild(rig);
+        _cameraRig = rig;
     }
 
     private void AddBackground(HeightfieldGenerator.Settings settings)
@@ -268,7 +271,7 @@ public partial class Bootstrap : Node3D
     private void AddPerfHud(SimRuntime runtime)
     {
         var hud = new PerfHud { Name = "PerfHud" };
-        hud.Configure(runtime);
+        hud.Configure(runtime, _cameraRig);
         AddChild(hud);
     }
 

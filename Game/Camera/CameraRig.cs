@@ -36,6 +36,15 @@ public partial class CameraRig : Node3D
     private float _distanceTarget = Distance;
     private Vector2 _boundsMax = new(2048f, 2048f);
     private float _maxDistance = DefaultMaxDistance;
+
+    public float CurrentDistance => _distance;
+    public float MinZoomDistance => MinDistance;
+    public float MaxZoomDistance => _maxDistance;
+    // 0% = fully zoomed out (max distance), 100% = max zoom in (min distance).
+    public float ZoomPercent =>
+        _maxDistance > MinDistance
+            ? Mathf.Clamp(100f * (_maxDistance - _distance) / (_maxDistance - MinDistance), 0f, 100f)
+            : 0f;
     private bool _loggedFirstMove;
     private bool _loggedFirstKey;
 

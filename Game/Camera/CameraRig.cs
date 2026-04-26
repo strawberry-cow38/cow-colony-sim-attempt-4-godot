@@ -10,7 +10,6 @@ namespace CowColonySim.Game.Camera;
 public partial class CameraRig : Node3D
 {
     private const float MoveSpeed = 80f;
-    private const float MiddleDragSpeed = 1.2f;
     private const float SnapRotateSeconds = 0.18f;
     private const float SnapStepRad = Mathf.Pi / 2f;
     private const float PitchDeg = -50f;
@@ -19,6 +18,10 @@ public partial class CameraRig : Node3D
     private const float MaxDistance = 600f;
     private const float ZoomStep = 1.18f;
     private const float ZoomLerp = 12f;
+    private const float OrbitYawDegPerPx = 0.3f;
+    private const float OrbitPitchDegPerPx = 0.2f;
+    private const float MinPitchDeg = -85f;
+    private const float MaxPitchDeg = -10f;
 
     private Camera3D _camera = null!;
     private Node3D _pitchPivot = null!;
@@ -28,6 +31,7 @@ public partial class CameraRig : Node3D
     private float _yawTweenT;
     private bool _yawTweening;
     private bool _middleHeld;
+    private float _pitchDeg = PitchDeg;
     private float _distance = Distance;
     private float _distanceTarget = Distance;
     private Vector2 _boundsMax = new(2048f, 2048f);
@@ -43,7 +47,7 @@ public partial class CameraRig : Node3D
     public override void _Ready()
     {
         _pitchPivot = new Node3D { Name = "Pitch" };
-        _pitchPivot.RotationDegrees = new Vector3(PitchDeg, 0f, 0f);
+        _pitchPivot.RotationDegrees = new Vector3(_pitchDeg, 0f, 0f);
         AddChild(_pitchPivot);
 
         _camera = new Camera3D
@@ -136,10 +140,17 @@ public partial class CameraRig : Node3D
                 break;
 
             case InputEventMouseMotion mm when _middleHeld:
-                var yawBasis = Basis.FromEuler(new Vector3(0f, _yaw, 0f));
-                var pan = yawBasis * new Vector3(-mm.Relative.X, 0f, -mm.Relative.Y) * MiddleDragSpeed;
-                Position += pan;
-                ClampToBounds();
+                if (_yawTweening)
+                {
+                    _yawTweening = false;
+                    _yawTarget = _yaw;
+                }
+                _yaw -= Mathf.DegToRad(mm.Relative.X * OrbitYawDegPerPx);
+                Rotation = new Vector3(0f, _yaw, 0f);
+                _pitchDeg = Mathf.Clamp(
+                    _pitchDeg - mm.Relative.Y * OrbitPitchDegPerPx,
+                    MinPitchDeg, MaxPitchDeg);
+                _pitchPivot.RotationDegrees = new Vector3(_pitchDeg, 0f, 0f);
                 break;
         }
     }

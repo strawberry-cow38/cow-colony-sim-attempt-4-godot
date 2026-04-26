@@ -6,6 +6,15 @@
     <AssemblyName>CowColonySim</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Godot.NET.Sdk globs all .cs under repo root by default; exclude
+         the Sim and Tests projects so they don't get compiled into the
+         Godot assembly. -->
+    <Compile Remove="Sim\**\*.cs" />
+    <Compile Remove="Tests\**\*.cs" />
+    <None Remove="Sim\**\*" />
+    <None Remove="Tests\**\*" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="Sim\CowColonySim.Sim.csproj" />
   </ItemGroup>
 </Project>

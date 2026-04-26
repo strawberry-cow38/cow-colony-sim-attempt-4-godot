@@ -28,6 +28,7 @@ public sealed class SimWorld
         e.AddComponent(new PathFollower());
         e.AddComponent(Needs.Full());
         e.AddComponent(new Job());
+        e.AddComponent(new WorkJob());
         return e;
     }
 

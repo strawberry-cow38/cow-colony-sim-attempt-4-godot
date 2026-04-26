@@ -42,6 +42,7 @@ public partial class Bootstrap : Node3D
             _runtime.Commands, _runtime.World, planner, grid));
         _runtime.Scheduler.Register(new NeedDecaySystem(_runtime.World));
         _runtime.Scheduler.Register(new JobSystem(_runtime.World, planner, grid));
+        _runtime.Scheduler.Register(new ChopJobSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new WanderSystem(_runtime.World, planner, grid));
         SpawnColonists(_runtime);
         SpawnNeedSpots(_runtime);

@@ -36,13 +36,27 @@ public sealed class JobSystem : ITickSystem
         var dt = (float)ctx.FixedDeltaSeconds;
         var spots = CollectSpots();
 
-        var query = _world.Store.Query<Colonist, Needs, Job, TilePosition, PathFollower>();
+        var query = _world.Store.Query<Colonist, Needs, Job, TilePosition, PathFollower, WorkJob>();
         foreach (var entity in query.Entities)
         {
             ref var needs = ref entity.GetComponent<Needs>();
             ref var job = ref entity.GetComponent<Job>();
             ref var pos = ref entity.GetComponent<TilePosition>();
             ref var pf = ref entity.GetComponent<PathFollower>();
+            ref var work = ref entity.GetComponent<WorkJob>();
+
+            // Player-forced work overrides everything — they'll work until
+            // they die before we let needs hijack the colonist.
+            if (work.Active && work.Forced)
+            {
+                if (job.Active)
+                {
+                    job.Active = false;
+                    pf.Tiles = null;
+                    pf.Index = 0;
+                }
+                continue;
+            }
 
             if (job.Active)
             {

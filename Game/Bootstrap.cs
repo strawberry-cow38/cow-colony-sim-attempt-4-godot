@@ -1,6 +1,7 @@
 using CowColonySim.Game.Camera;
 using CowColonySim.Game.Colonists;
 using CowColonySim.Game.Debug;
+using CowColonySim.Game.Render;
 using CowColonySim.Game.Selection;
 using CowColonySim.Game.Terrain;
 using CowColonySim.Game.UI;
@@ -9,6 +10,7 @@ using CowColonySim.Sim.Logging;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.Systems;
 using CowColonySim.Sim.Terrain;
+using CowColonySim.Sim.World.Components;
 using Godot;
 
 namespace CowColonySim.Game;
@@ -34,8 +36,11 @@ public partial class Bootstrap : Node3D
         var planner = new PathPlanner(grid);
         _runtime.Scheduler.Register(new CommandSystem(
             _runtime.Commands, _runtime.World, planner, grid));
+        _runtime.Scheduler.Register(new NeedDecaySystem(_runtime.World));
+        _runtime.Scheduler.Register(new JobSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new WanderSystem(_runtime.World, planner, grid));
         SpawnColonists(_runtime);
+        SpawnNeedSpots(_runtime);
         _runtime.Start();
 
         AddSun();
@@ -44,6 +49,7 @@ public partial class Bootstrap : Node3D
         AddBackground(_genSettings);
         AddVertexOverlay(_heightfield);
         AddColonists(_runtime, _heightfield);
+        AddSpots(_runtime, _heightfield);
         var selection = AddSelectionService(_runtime, _heightfield);
         AddSelectionRing(selection, _runtime, _heightfield);
         AddInfoPanel(selection, _runtime);
@@ -62,6 +68,14 @@ public partial class Bootstrap : Node3D
         runtime.World.SpawnColonist(0xCAFEBABE, center - 2, center - 2);
         runtime.World.SpawnColonist(0xDEADC0DE, center,     center);
         runtime.World.SpawnColonist(0xFACEFEED, center + 2, center + 2);
+    }
+
+    private static void SpawnNeedSpots(SimRuntime runtime)
+    {
+        var center = PreviewTileCount / 2;
+        runtime.World.SpawnNeedSpot(NeedKind.Hunger, center - 6, center);
+        runtime.World.SpawnNeedSpot(NeedKind.Thirst, center + 6, center);
+        runtime.World.SpawnNeedSpot(NeedKind.Energy, center, center + 6);
     }
 
     private void AddSun()
@@ -119,6 +133,13 @@ public partial class Bootstrap : Node3D
     private void AddColonists(SimRuntime runtime, Heightfield field)
     {
         var renderer = new ColonistsRenderer { Name = "Colonists" };
+        renderer.Configure(runtime.Publisher, field);
+        AddChild(renderer);
+    }
+
+    private void AddSpots(SimRuntime runtime, Heightfield field)
+    {
+        var renderer = new SpotsRenderer { Name = "Spots" };
         renderer.Configure(runtime.Publisher, field);
         AddChild(renderer);
     }

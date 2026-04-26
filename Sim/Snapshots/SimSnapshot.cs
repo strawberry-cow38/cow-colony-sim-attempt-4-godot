@@ -6,8 +6,9 @@ public sealed record SimSnapshot(
     long TickNumber,
     double ElapsedSeconds,
     int EntityCount,
-    IReadOnlyList<ColonistView> Colonists)
+    IReadOnlyList<ColonistView> Colonists,
+    IReadOnlyList<SpotView> Spots)
 {
     public static SimSnapshot Empty { get; } =
-        new(0, 0.0, 0, Array.Empty<ColonistView>());
+        new(0, 0.0, 0, Array.Empty<ColonistView>(), Array.Empty<SpotView>());
 }

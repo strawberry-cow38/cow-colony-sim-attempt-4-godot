@@ -57,7 +57,8 @@ public sealed class SimRuntime : IDisposable
                 TickNumber: current,
                 ElapsedSeconds: GameClock.SecondsAt(current),
                 EntityCount: _world.EntityCount,
-                Colonists: BuildColonistViews()));
+                Colonists: BuildColonistViews(),
+                Spots: BuildSpotViews()));
 
             var now = Stopwatch.GetTimestamp();
             var remaining = nextTick - now;
@@ -82,13 +83,32 @@ public sealed class SimRuntime : IDisposable
 
     private ColonistView[] BuildColonistViews()
     {
-        var query = _world.Store.Query<Colonist, TilePosition>();
+        var query = _world.Store.Query<Colonist, TilePosition, Needs, Job>();
         var views = new ColonistView[query.Count];
         var i = 0;
         foreach (var entity in query.Entities)
         {
             ref var p = ref entity.GetComponent<TilePosition>();
-            views[i++] = new ColonistView(entity.Id, p.MetersX, p.MetersY);
+            ref var n = ref entity.GetComponent<Needs>();
+            ref var j = ref entity.GetComponent<Job>();
+            views[i++] = new ColonistView(
+                entity.Id, p.MetersX, p.MetersY,
+                n.Hunger, n.Thirst, n.Energy,
+                j.Active, j.NeedKind);
+        }
+        return views;
+    }
+
+    private SpotView[] BuildSpotViews()
+    {
+        var query = _world.Store.Query<NeedSpot, TilePosition>();
+        var views = new SpotView[query.Count];
+        var i = 0;
+        foreach (var entity in query.Entities)
+        {
+            ref var s = ref entity.GetComponent<NeedSpot>();
+            ref var p = ref entity.GetComponent<TilePosition>();
+            views[i++] = new SpotView(s.Kind, p.TileX, p.TileY);
         }
         return views;
     }

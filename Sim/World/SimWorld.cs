@@ -23,6 +23,16 @@ public sealed class SimWorld
             Rng = rngSeed == 0 ? 0xC0FFEE01u : rngSeed,
         });
         e.AddComponent(new PathFollower());
+        e.AddComponent(Needs.Full());
+        e.AddComponent(new Job());
+        return e;
+    }
+
+    public Entity SpawnNeedSpot(NeedKind kind, int tileX, int tileY, float satisfyPerSec = 25f)
+    {
+        var e = Store.CreateEntity();
+        e.AddComponent(new TilePosition(tileX, tileY, 0, 0.5f, 0.5f));
+        e.AddComponent(new NeedSpot { Kind = kind, SatisfyPerSec = satisfyPerSec });
         return e;
     }
 }

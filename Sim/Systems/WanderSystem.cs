@@ -50,15 +50,16 @@ public sealed class WanderSystem : ITickSystem
 
     private void StepColonists(float dt)
     {
-        var query = _world.Store.Query<Colonist, TilePosition, PathFollower>();
+        var query = _world.Store.Query<Colonist, TilePosition, PathFollower, Job>();
         foreach (var entity in query.Entities)
         {
             ref var pos = ref entity.GetComponent<TilePosition>();
             ref var pf = ref entity.GetComponent<PathFollower>();
+            ref var job = ref entity.GetComponent<Job>();
 
             if (pf.Tiles is null || pf.Index >= pf.Tiles.Length)
             {
-                if (!pf.PendingRequest)
+                if (!pf.PendingRequest && !job.Active)
                 {
                     RequestRandomPath(entity, pos);
                     pf.PendingRequest = true;

@@ -1,7 +1,9 @@
+using CowColonySim.Sim.Blueprints;
 using CowColonySim.Sim.Commands;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.World;
 using CowColonySim.Sim.World.Components;
+using CowColonySim.Sim.Zones;
 
 namespace CowColonySim.Sim.Systems;
 
@@ -36,8 +38,56 @@ public sealed class CommandSystem : ITickSystem
                 case InvalidatePathsInRegion region:
                     Apply(region);
                     break;
+                case CreateZoneCommand cz:
+                    Apply(cz);
+                    break;
+                case StampDesignationsCommand sd:
+                    Apply(sd);
+                    break;
+                case PlaceBlueprintGhostCommand pb:
+                    Apply(pb);
+                    break;
             }
         }
+    }
+
+    private void Apply(CreateZoneCommand cmd)
+    {
+        var rect = ClampRect(cmd.Rect);
+        if (rect.Width <= 0 || rect.Height <= 0) return;
+        var entity = _world.SpawnZone(0, cmd.Type, rect, cmd.Name);
+        ref var z = ref entity.GetComponent<Zone>();
+        z.ZoneId = entity.Id;
+    }
+
+    private void Apply(StampDesignationsCommand cmd)
+    {
+        var rect = ClampRect(cmd.Rect);
+        for (var y = rect.MinY; y <= rect.MaxY; y++)
+        {
+            for (var x = rect.MinX; x <= rect.MaxX; x++)
+            {
+                _world.SpawnDesignation(x, y, cmd.Kind);
+            }
+        }
+    }
+
+    private void Apply(PlaceBlueprintGhostCommand cmd)
+    {
+        if (!BlueprintCatalog.TryGet(cmd.DefId, out var def) || def is null) return;
+        if (!_grid.InBounds(new TileCoord(cmd.OriginTileX, cmd.OriginTileY, 0))) return;
+        _world.SpawnBlueprintGhost(cmd.DefId, cmd.OriginTileX, cmd.OriginTileY, cmd.Rotation);
+    }
+
+    private TileRect ClampRect(TileRect rect)
+    {
+        var w = _grid.Width;
+        var h = _grid.Height;
+        var minX = Math.Clamp(rect.MinX, 0, w - 1);
+        var minY = Math.Clamp(rect.MinY, 0, h - 1);
+        var maxX = Math.Clamp(rect.MaxX, 0, w - 1);
+        var maxY = Math.Clamp(rect.MaxY, 0, h - 1);
+        return new TileRect(minX, minY, maxX, maxY);
     }
 
     private void Apply(InvalidatePathsInRegion region)

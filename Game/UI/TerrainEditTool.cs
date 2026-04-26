@@ -37,12 +37,13 @@ public partial class TerrainEditTool : Node
 
     public override void _UnhandledInput(InputEvent ev)
     {
-        if (string.IsNullOrEmpty(_tools.ActiveToolId)) return;
+        var tool = _tools.ActiveToolId;
+        if (string.IsNullOrEmpty(tool)) return;
+        if (!tool.StartsWith("debug_terrain.")) return;
         if (ev is not InputEventMouseButton mb) return;
         if (mb.ButtonIndex != MouseButton.Left) return;
 
         var v = _overlay.SnappedVertex;
-        var tool = _tools.ActiveToolId;
 
         if (tool == "debug_terrain.flatten_rect")
         {

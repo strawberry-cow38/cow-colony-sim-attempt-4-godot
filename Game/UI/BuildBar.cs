@@ -1,3 +1,4 @@
+using CowColonySim.Sim.Blueprints;
 using Godot;
 
 namespace CowColonySim.Game.UI;
@@ -19,15 +20,46 @@ public partial class BuildBar : CanvasLayer
     private VBoxContainer _toolList = null!;
     private Label _toolHeader = null!;
 
-    private readonly List<Category> _categories = new()
+    private readonly List<Category> _categories = BuildCategories();
+
+    private static List<Category> BuildCategories()
     {
-        new Category("debug_terrain", "Debug Terrain", new[]
+        var cats = new List<Category>
         {
-            new Tool("debug_terrain.raise_vertex",  "Raise Vertex (+0.75m)"),
-            new Tool("debug_terrain.lower_vertex",  "Lower Vertex (-0.75m)"),
-            new Tool("debug_terrain.flatten_rect",  "Flatten Rect"),
-        }),
-    };
+            new Category("debug_terrain", "Debug Terrain", new[]
+            {
+                new Tool("debug_terrain.raise_vertex",  "Raise Vertex (+0.75m)"),
+                new Tool("debug_terrain.lower_vertex",  "Lower Vertex (-0.75m)"),
+                new Tool("debug_terrain.flatten_rect",  "Flatten Rect"),
+            }),
+            new Category("zones", "Zones", new[]
+            {
+                new Tool("zone.stockpile", "Stockpile (drag rect)"),
+                new Tool("zone.farm",      "Farm (drag rect)"),
+            }),
+            new Category("designators", "Designators", new[]
+            {
+                new Tool("designate.chop_tree", "Chop Trees (drag rect)"),
+                new Tool("designate.mine",      "Mine (drag rect)"),
+                new Tool("designate.harvest",   "Harvest (drag rect)"),
+            }),
+        };
+
+        var blueprintTools = new List<Tool>();
+        foreach (var def in BlueprintCatalog.All.Values)
+        {
+            var modeHint = def.Placement switch
+            {
+                PlacementMode.Single => "click",
+                PlacementMode.LineDrag => "line drag",
+                PlacementMode.Footprint => def.Rotatable ? "click, R rotate" : "click",
+                _ => "",
+            };
+            blueprintTools.Add(new Tool($"blueprint.{def.Id}", $"{def.DisplayName} ({modeHint})"));
+        }
+        cats.Add(new Category("blueprints", "Blueprints", blueprintTools));
+        return cats;
+    }
 
     private string _activeCategoryId = string.Empty;
     private readonly Dictionary<string, Button> _toolButtons = new();

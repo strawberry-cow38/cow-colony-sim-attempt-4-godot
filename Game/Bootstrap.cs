@@ -312,6 +312,18 @@ public partial class Bootstrap : Node3D
         var tool = new TerrainEditTool { Name = "TerrainEditTool" };
         tool.Configure(tools, overlay, _heightfield!, _terrain!, _runtime!.Commands);
         AddChild(tool);
+
+        var rectOverlay = new RectDragOverlay { Name = "RectDragOverlay" };
+        rectOverlay.Configure(_heightfield!);
+        AddChild(rectOverlay);
+
+        var ghostPreview = new BlueprintGhostPreview { Name = "BlueprintGhostPreview" };
+        ghostPreview.Configure(_heightfield!);
+        AddChild(ghostPreview);
+
+        var placement = new PlacementTool { Name = "PlacementTool" };
+        placement.Configure(tools, rectOverlay, ghostPreview, _heightfield!, _runtime!.Commands);
+        AddChild(placement);
     }
 
     public override void _ExitTree()

@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using CowColonySim.Sim.Designations;
 using CowColonySim.Sim.Pathfinding;
+using CowColonySim.Sim.Zones;
 
 namespace CowColonySim.Sim.Commands;
 
@@ -15,6 +17,12 @@ public readonly record struct MoveCommand(int EntityId, TileCoord Target) : ISim
 // drops any active path intersecting it so colonists re-plan instead of
 // happily walking into a freshly-raised cliff.
 public readonly record struct InvalidatePathsInRegion(int MinTileX, int MinTileY, int MaxTileX, int MaxTileY) : ISimCommand;
+
+public readonly record struct CreateZoneCommand(ZoneType Type, TileRect Rect, string Name) : ISimCommand;
+
+public readonly record struct StampDesignationsCommand(DesignationKind Kind, TileRect Rect) : ISimCommand;
+
+public readonly record struct PlaceBlueprintGhostCommand(string DefId, int OriginTileX, int OriginTileY, int Rotation) : ISimCommand;
 
 public sealed class CommandBus
 {

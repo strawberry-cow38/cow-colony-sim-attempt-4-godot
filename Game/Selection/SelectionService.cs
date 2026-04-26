@@ -1,3 +1,4 @@
+using CowColonySim.Game.Terrain;
 using CowColonySim.Game.UI;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Commands;
@@ -50,7 +51,7 @@ public partial class SelectionService : Node
         var camera = GetViewport().GetCamera3D();
         if (camera is null) return;
 
-        var groundHit = ProjectMouseToGround(camera, mb.Position);
+        var groundHit = TerrainRayCast.Project(camera, mb.Position, _heightfield);
         if (groundHit is null) return;
         var hit = groundHit.Value;
 
@@ -106,16 +107,6 @@ public partial class SelectionService : Node
         }
         SelectedEntityId = best;
         SelectionChanged?.Invoke();
-    }
-
-    private Vector3? ProjectMouseToGround(Camera3D camera, Vector2 mousePos)
-    {
-        var origin = camera.ProjectRayOrigin(mousePos);
-        var dir = camera.ProjectRayNormal(mousePos);
-        if (MathF.Abs(dir.Y) < 1e-5f) return null;
-        var t = -origin.Y / dir.Y;
-        if (t <= 0f) return null;
-        return origin + dir * t;
     }
 
     private float SampleGroundUnits(float metersX, float metersY)

@@ -1,3 +1,4 @@
+using CowColonySim.Game.Terrain;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Terrain;
 using Godot;
@@ -160,7 +161,7 @@ public partial class TerrainEditOverlay : Node3D
         if (camera is null) { HideAll(); return; }
 
         var mousePos = GetViewport().GetMousePosition();
-        var ground = ProjectMouseToGround(camera, mousePos);
+        var ground = TerrainRayCast.Project(camera, mousePos, _field);
         if (ground is null) { HideAll(); return; }
 
         var vx = (int)MathF.Round(ground.Value.X / _unitsPerTile);
@@ -240,13 +241,4 @@ public partial class TerrainEditOverlay : Node3D
         _orangeDots.Multimesh.VisibleInstanceCount = 0;
     }
 
-    private static Vector3? ProjectMouseToGround(Camera3D camera, Vector2 mousePos)
-    {
-        var origin = camera.ProjectRayOrigin(mousePos);
-        var dir = camera.ProjectRayNormal(mousePos);
-        if (MathF.Abs(dir.Y) < 1e-5f) return null;
-        var t = -origin.Y / dir.Y;
-        if (t <= 0f) return null;
-        return origin + dir * t;
-    }
 }

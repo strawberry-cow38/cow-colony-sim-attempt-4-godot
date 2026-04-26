@@ -9,7 +9,7 @@ namespace CowColonySim.Game.Terrain;
 // straddle the outer edge so the inside face sits exactly on the boundary.
 public partial class BorderWall : Node3D
 {
-    private const float WallHeightMeters = 4f;
+    private const float WallHeightMeters = 32f;
     private const float WallThicknessMeters = 0.25f;
 
     public void Build(int tilesPerSide)

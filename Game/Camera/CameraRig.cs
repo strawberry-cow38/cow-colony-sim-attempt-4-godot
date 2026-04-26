@@ -75,7 +75,10 @@ public partial class CameraRig : Node3D
         {
             var yawBasis = Basis.FromEuler(new Vector3(0f, _yaw, 0f));
             var move = yawBasis * new Vector3(inputX, 0f, inputZ);
-            Position += move * MoveSpeed * dt;
+            var distRatio = Mathf.Clamp(_distance / Distance, 0.25f, 5f);
+            var shift = Input.IsPhysicalKeyPressed(Key.Shift) || Input.IsKeyPressed(Key.Shift);
+            var speed = MoveSpeed * distRatio * (shift ? 2f : 1f);
+            Position += move * speed * dt;
             ClampToBounds();
 
             if (!_loggedFirstMove)

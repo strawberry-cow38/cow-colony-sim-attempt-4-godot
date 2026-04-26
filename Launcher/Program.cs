@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace CowColonySim.Launcher;
@@ -10,6 +11,9 @@ internal static class Program
     private const string GameDirName = "game";
     private const string VersionFileName = "version.txt";
     private const string GameExeName = "CowColonySim.exe";
+    private const string ManifestAssetName = "manifest.json";
+    private const string ZipAssetSuffix = "-windows.zip";
+    private const int ParallelDownloads = 6;
 
     private static async Task<int> Main()
     {
@@ -21,7 +25,7 @@ internal static class Program
             var versionPath = Path.Combine(baseDir, VersionFileName);
 
             using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("CowColonyLauncher/1.0");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("CowColonyLauncher/1.1");
             http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
 
             Console.WriteLine($"Checking {Repo} @ tag '{ReleaseTag}' ...");
@@ -35,82 +39,58 @@ internal static class Program
 
             await using var apiStream = await resp.Content.ReadAsStreamAsync();
             using var doc = await JsonDocument.ParseAsync(apiStream);
-            var root = doc.RootElement;
+            var assets = BuildAssetMap(doc.RootElement);
 
-            string? zipUrl = null;
-            string? zipName = null;
-            string assetUpdatedAt = "";
-            long assetSize = 0;
-            if (root.TryGetProperty("assets", out var assets))
+            if (!assets.TryGetValue(ManifestAssetName, out var manifestAsset))
             {
-                foreach (var asset in assets.EnumerateArray())
-                {
-                    var name = asset.GetProperty("name").GetString();
-                    if (name is null || !name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!name.Contains("windows", StringComparison.OrdinalIgnoreCase)) continue;
-                    zipName = name;
-                    zipUrl = asset.GetProperty("browser_download_url").GetString();
-                    assetUpdatedAt = asset.TryGetProperty("updated_at", out var u) ? u.GetString() ?? "" : "";
-                    assetSize = asset.TryGetProperty("size", out var s) ? s.GetInt64() : 0;
-                    break;
-                }
-            }
-            // Use asset.updated_at + size as the version key. release.published_at
-            // does NOT change when softprops/action-gh-release@v2 replaces assets
-            // on an existing tag, so it can't be used to detect new builds.
-            var remoteVersion = $"{assetUpdatedAt}|{assetSize}";
-            if (zipUrl is null)
-            {
-                Console.Error.WriteLine("No Windows zip asset on the 'latest' release yet.");
-                return Bail(1);
+                Console.WriteLine("No manifest.json on release — falling back to full zip.");
+                return await FullZipPath(http, assets, baseDir, gameDir, versionPath);
             }
 
+            // Use manifest.updated_at|size as the short-circuit version key.
+            var remoteVersion = $"manifest:{manifestAsset.UpdatedAt}|{manifestAsset.Size}";
             var localVersion = File.Exists(versionPath) ? File.ReadAllText(versionPath).Trim() : "";
             var hasGame = Directory.Exists(gameDir) &&
                           Directory.EnumerateFiles(gameDir, GameExeName, SearchOption.AllDirectories).Any();
 
-            if (localVersion != remoteVersion || !hasGame)
-            {
-                Console.WriteLine($"Update available: {zipName}");
-                Console.WriteLine($"  remote: {remoteVersion}");
-                Console.WriteLine($"  local:  {(string.IsNullOrEmpty(localVersion) ? "(none)" : localVersion)}");
-
-                var tmpZip = Path.Combine(baseDir, "update.zip");
-                Console.WriteLine("Downloading...");
-                await DownloadWithRetry(http, zipUrl, tmpZip, expectedSize: assetSize, maxAttempts: 4);
-                Console.WriteLine();
-
-                Console.WriteLine("Extracting...");
-                if (Directory.Exists(gameDir)) Directory.Delete(gameDir, recursive: true);
-                Directory.CreateDirectory(gameDir);
-                ZipFile.ExtractToDirectory(tmpZip, gameDir, overwriteFiles: true);
-                File.Delete(tmpZip);
-
-                File.WriteAllText(versionPath, remoteVersion);
-                Console.WriteLine("Update complete.");
-            }
-            else
+            if (localVersion == remoteVersion && hasGame)
             {
                 Console.WriteLine($"Up to date: {remoteVersion}");
+                return Launch(gameDir);
             }
 
-            var exePath = Directory
-                .EnumerateFiles(gameDir, GameExeName, SearchOption.AllDirectories)
-                .FirstOrDefault();
-            if (exePath is null)
+            Console.WriteLine($"Update available.");
+            Console.WriteLine($"  remote: {remoteVersion}");
+            Console.WriteLine($"  local:  {(string.IsNullOrEmpty(localVersion) ? "(none)" : localVersion)}");
+
+            // First install (no game files yet) → bulk zip is the fastest path.
+            if (!hasGame)
             {
-                Console.Error.WriteLine($"{GameExeName} not found after extract.");
-                return Bail(1);
+                if (!await TryFullZipUpdate(http, assets, baseDir, gameDir))
+                {
+                    return Bail(1);
+                }
+                File.WriteAllText(versionPath, remoteVersion);
+                return Launch(gameDir);
             }
 
-            Console.WriteLine($"Launching: {exePath}");
-            var psi = new System.Diagnostics.ProcessStartInfo(exePath)
+            // Differential update via manifest.
+            Console.WriteLine("Fetching manifest ...");
+            var manifest = await FetchManifest(http, manifestAsset.Url);
+            if (manifest is null)
             {
-                UseShellExecute = true,
-                WorkingDirectory = Path.GetDirectoryName(exePath)!,
-            };
-            System.Diagnostics.Process.Start(psi);
-            return 0;
+                Console.Error.WriteLine("Failed to read manifest. Falling back to full zip.");
+                if (!await TryFullZipUpdate(http, assets, baseDir, gameDir))
+                {
+                    return Bail(1);
+                }
+                File.WriteAllText(versionPath, remoteVersion);
+                return Launch(gameDir);
+            }
+
+            await ApplyManifest(http, assets, manifest, gameDir);
+            File.WriteAllText(versionPath, remoteVersion);
+            return Launch(gameDir);
         }
         catch (Exception ex)
         {
@@ -120,75 +100,270 @@ internal static class Program
         }
     }
 
-    private static int Bail(int code)
+    private static int Launch(string gameDir)
     {
-        Console.WriteLine();
-        Console.WriteLine("Press any key to close...");
-        try { Console.ReadKey(intercept: true); } catch { }
-        return code;
+        var exePath = Directory
+            .EnumerateFiles(gameDir, GameExeName, SearchOption.AllDirectories)
+            .FirstOrDefault();
+        if (exePath is null)
+        {
+            Console.Error.WriteLine($"{GameExeName} not found after update.");
+            return Bail(1);
+        }
+        Console.WriteLine($"Launching: {exePath}");
+        var psi = new System.Diagnostics.ProcessStartInfo(exePath)
+        {
+            UseShellExecute = true,
+            WorkingDirectory = Path.GetDirectoryName(exePath)!,
+        };
+        System.Diagnostics.Process.Start(psi);
+        return 0;
     }
 
-    private static async Task DownloadWithRetry(HttpClient http, string url, string dst, long expectedSize, int maxAttempts)
+    private record AssetInfo(string Url, string UpdatedAt, long Size);
+
+    private static Dictionary<string, AssetInfo> BuildAssetMap(JsonElement root)
+    {
+        var map = new Dictionary<string, AssetInfo>(StringComparer.OrdinalIgnoreCase);
+        if (!root.TryGetProperty("assets", out var assets)) return map;
+        foreach (var asset in assets.EnumerateArray())
+        {
+            var name = asset.GetProperty("name").GetString();
+            if (name is null) continue;
+            var url = asset.GetProperty("browser_download_url").GetString() ?? "";
+            var updatedAt = asset.TryGetProperty("updated_at", out var u) ? u.GetString() ?? "" : "";
+            var size = asset.TryGetProperty("size", out var s) ? s.GetInt64() : 0;
+            map[name] = new AssetInfo(url, updatedAt, size);
+        }
+        return map;
+    }
+
+    private record Manifest(string Version, string BlobPrefix, string BlobSuffix, IReadOnlyList<ManifestEntry> Files);
+    private record ManifestEntry(string Path, long Size, string Sha256);
+
+    private static async Task<Manifest?> FetchManifest(HttpClient http, string url)
+    {
+        using var resp = await http.GetAsync(url);
+        if (!resp.IsSuccessStatusCode) return null;
+        var json = await resp.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        var entries = new List<ManifestEntry>();
+        foreach (var f in root.GetProperty("files").EnumerateArray())
+        {
+            entries.Add(new ManifestEntry(
+                f.GetProperty("path").GetString() ?? "",
+                f.GetProperty("size").GetInt64(),
+                (f.GetProperty("sha256").GetString() ?? "").ToLowerInvariant()));
+        }
+        return new Manifest(
+            root.TryGetProperty("version", out var v) ? v.GetString() ?? "" : "",
+            root.TryGetProperty("blob_prefix", out var bp) ? bp.GetString() ?? "blob-" : "blob-",
+            root.TryGetProperty("blob_suffix", out var bs) ? bs.GetString() ?? ".bin" : ".bin",
+            entries);
+    }
+
+    private static async Task ApplyManifest(
+        HttpClient http, Dictionary<string, AssetInfo> assets, Manifest manifest, string gameDir)
+    {
+        Console.WriteLine($"Manifest: {manifest.Files.Count} files. Hashing local copy ...");
+        var manifestPaths = new HashSet<string>(
+            manifest.Files.Select(f => NormalizePath(f.Path)),
+            StringComparer.OrdinalIgnoreCase);
+
+        var diffs = new List<ManifestEntry>();
+        long bytesNeeded = 0;
+        foreach (var entry in manifest.Files)
+        {
+            var localPath = Path.Combine(gameDir, entry.Path.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(localPath) && new FileInfo(localPath).Length == entry.Size)
+            {
+                var localHash = await Sha256Async(localPath);
+                if (string.Equals(localHash, entry.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+            }
+            diffs.Add(entry);
+            bytesNeeded += entry.Size;
+        }
+
+        Console.WriteLine($"  unchanged: {manifest.Files.Count - diffs.Count}, to fetch: {diffs.Count} ({bytesNeeded / 1024.0 / 1024.0:F1} MiB)");
+
+        if (diffs.Count > 0)
+        {
+            await DownloadDiffs(http, assets, manifest, diffs, gameDir);
+        }
+
+        // Remove files that no longer appear in the manifest.
+        if (Directory.Exists(gameDir))
+        {
+            foreach (var existing in Directory.EnumerateFiles(gameDir, "*", SearchOption.AllDirectories))
+            {
+                var rel = NormalizePath(Path.GetRelativePath(gameDir, existing));
+                if (!manifestPaths.Contains(rel))
+                {
+                    try { File.Delete(existing); } catch { }
+                }
+            }
+        }
+
+        Console.WriteLine("Update complete.");
+    }
+
+    private static async Task DownloadDiffs(
+        HttpClient http, Dictionary<string, AssetInfo> assets, Manifest manifest,
+        List<ManifestEntry> diffs, string gameDir)
+    {
+        // Group by sha so blobs shared by multiple paths download once.
+        var byHash = diffs.GroupBy(d => d.Sha256).ToList();
+
+        var sem = new SemaphoreSlim(ParallelDownloads);
+        var done = 0;
+        var total = byHash.Count;
+        var lockObj = new object();
+
+        var tasks = byHash.Select(async group =>
+        {
+            await sem.WaitAsync();
+            try
+            {
+                var hash = group.Key;
+                var blobName = $"{manifest.BlobPrefix}{hash}{manifest.BlobSuffix}";
+                if (!assets.TryGetValue(blobName, out var asset))
+                {
+                    throw new IOException($"Blob asset missing on release: {blobName}");
+                }
+                var firstPath = Path.Combine(gameDir, group.First().Path.Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(Path.GetDirectoryName(firstPath)!);
+                await DownloadFile(http, asset.Url, firstPath, asset.Size);
+
+                // Copy to any other paths sharing this hash.
+                foreach (var dup in group.Skip(1))
+                {
+                    var dst = Path.Combine(gameDir, dup.Path.Replace('/', Path.DirectorySeparatorChar));
+                    Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
+                    File.Copy(firstPath, dst, overwrite: true);
+                }
+
+                lock (lockObj)
+                {
+                    done++;
+                    Console.Write($"\r  {done}/{total} blobs   ");
+                }
+            }
+            finally
+            {
+                sem.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks);
+        Console.WriteLine();
+    }
+
+    private static async Task DownloadFile(HttpClient http, string url, string dst, long expectedSize)
     {
         Exception? last = null;
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        for (var attempt = 1; attempt <= 4; attempt++)
         {
             try
             {
                 if (File.Exists(dst)) File.Delete(dst);
-                using var dlResp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-                dlResp.EnsureSuccessStatusCode();
-                var total = dlResp.Content.Headers.ContentLength ?? expectedSize;
-                await using (var src = await dlResp.Content.ReadAsStreamAsync())
-                await using (var fs = File.Create(dst))
+                using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+                resp.EnsureSuccessStatusCode();
+                await using var src = await resp.Content.ReadAsStreamAsync();
+                await using var fs = File.Create(dst);
+                await src.CopyToAsync(fs);
+                if (expectedSize > 0 && new FileInfo(dst).Length != expectedSize)
                 {
-                    await CopyWithProgress(src, fs, total);
-                }
-                var actual = new FileInfo(dst).Length;
-                if (expectedSize > 0 && actual != expectedSize)
-                {
-                    throw new IOException($"Downloaded {actual} bytes but expected {expectedSize}.");
+                    throw new IOException($"Downloaded {new FileInfo(dst).Length} bytes but expected {expectedSize}.");
                 }
                 return;
             }
             catch (Exception ex) when (ex is HttpIOException or IOException or HttpRequestException or TaskCanceledException)
             {
                 last = ex;
-                Console.WriteLine();
-                Console.WriteLine($"  attempt {attempt}/{maxAttempts} failed: {ex.GetType().Name}: {ex.Message}");
-                if (attempt < maxAttempts)
+                if (attempt < 4)
                 {
-                    var waitMs = 1500 * attempt;
-                    Console.WriteLine($"  retrying in {waitMs}ms...");
-                    await Task.Delay(waitMs);
+                    await Task.Delay(800 * attempt);
                 }
             }
         }
-        if (File.Exists(dst)) try { File.Delete(dst); } catch { }
-        throw new IOException($"Download failed after {maxAttempts} attempts.", last);
+        throw new IOException($"Download failed: {url}", last);
     }
 
-    private static async Task CopyWithProgress(Stream src, Stream dst, long total)
+    private static async Task<string> Sha256Async(string path)
     {
-        var buffer = new byte[81920];
-        long copied = 0;
-        var lastReport = DateTime.UtcNow;
-        int read;
-        while ((read = await src.ReadAsync(buffer)) > 0)
+        await using var fs = File.OpenRead(path);
+        using var sha = SHA256.Create();
+        var hash = await sha.ComputeHashAsync(fs);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static string NormalizePath(string p) => p.Replace('\\', '/');
+
+    private static async Task<bool> TryFullZipUpdate(
+        HttpClient http, Dictionary<string, AssetInfo> assets, string baseDir, string gameDir)
+    {
+        var zipAsset = assets
+            .Where(kv => kv.Key.EndsWith(ZipAssetSuffix, StringComparison.OrdinalIgnoreCase))
+            .Select(kv => kv.Value)
+            .FirstOrDefault();
+        if (zipAsset is null)
         {
-            await dst.WriteAsync(buffer.AsMemory(0, read));
-            copied += read;
-            if ((DateTime.UtcNow - lastReport).TotalMilliseconds < 250) continue;
-            lastReport = DateTime.UtcNow;
-            if (total > 0)
-            {
-                var pct = (double)copied / total * 100.0;
-                Console.Write($"\r  {copied / 1024.0 / 1024.0:F1} / {total / 1024.0 / 1024.0:F1} MiB ({pct:F0}%)   ");
-            }
-            else
-            {
-                Console.Write($"\r  {copied / 1024.0 / 1024.0:F1} MiB   ");
-            }
+            Console.Error.WriteLine("No Windows zip asset on the 'latest' release yet.");
+            return false;
         }
+        var tmpZip = Path.Combine(baseDir, "update.zip");
+        Console.WriteLine($"Downloading zip ({zipAsset.Size / 1024.0 / 1024.0:F1} MiB) ...");
+        await DownloadFile(http, zipAsset.Url, tmpZip, zipAsset.Size);
+        Console.WriteLine();
+        Console.WriteLine("Extracting...");
+        if (Directory.Exists(gameDir)) Directory.Delete(gameDir, recursive: true);
+        Directory.CreateDirectory(gameDir);
+        ZipFile.ExtractToDirectory(tmpZip, gameDir, overwriteFiles: true);
+        File.Delete(tmpZip);
+        Console.WriteLine("Update complete.");
+        return true;
+    }
+
+    private static async Task<int> FullZipPath(
+        HttpClient http, Dictionary<string, AssetInfo> assets,
+        string baseDir, string gameDir, string versionPath)
+    {
+        var zipAsset = assets
+            .Where(kv => kv.Key.EndsWith(ZipAssetSuffix, StringComparison.OrdinalIgnoreCase))
+            .Select(kv => (KeyValuePair<string, AssetInfo>?)kv)
+            .FirstOrDefault();
+        if (zipAsset is null)
+        {
+            Console.Error.WriteLine("No Windows zip asset on the 'latest' release yet.");
+            return Bail(1);
+        }
+        var info = zipAsset.Value.Value;
+        var remoteVersion = $"zip:{info.UpdatedAt}|{info.Size}";
+        var localVersion = File.Exists(versionPath) ? File.ReadAllText(versionPath).Trim() : "";
+        var hasGame = Directory.Exists(gameDir) &&
+                      Directory.EnumerateFiles(gameDir, GameExeName, SearchOption.AllDirectories).Any();
+        if (localVersion != remoteVersion || !hasGame)
+        {
+            Console.WriteLine("Update available (zip).");
+            if (!await TryFullZipUpdate(http, assets, baseDir, gameDir)) return Bail(1);
+            File.WriteAllText(versionPath, remoteVersion);
+        }
+        else
+        {
+            Console.WriteLine($"Up to date: {remoteVersion}");
+        }
+        return Launch(gameDir);
+    }
+
+    private static int Bail(int code)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Press any key to close...");
+        try { Console.ReadKey(intercept: true); } catch { }
+        return code;
     }
 }

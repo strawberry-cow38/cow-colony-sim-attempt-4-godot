@@ -25,6 +25,14 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj','**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
       - name: Cache Godot
         id: cache-godot
         uses: actions/cache@v4
@@ -33,6 +41,14 @@ jobs:
             godot
             templates
           key: godot-${{ env.GODOT_VERSION }}-mono-win
+
+      - name: Cache .godot import
+        uses: actions/cache@v4
+        with:
+          path: .godot
+          key: godot-import-${{ env.GODOT_VERSION }}-${{ hashFiles('project.godot','**/*.import','**/*.tscn','**/*.tres','assets/**') }}
+          restore-keys: |
+            godot-import-${{ env.GODOT_VERSION }}-
 
       - name: Download Godot + export templates
         if: steps.cache-godot.outputs.cache-hit != 'true'
@@ -70,7 +86,6 @@ jobs:
         shell: pwsh
         run: |
           & "${{ steps.gd.outputs.exe }}" --headless --import --path . 2>&1 | Out-Host
-          # Import sometimes exits non-zero on first run; verify .godot exists.
           if (-not (Test-Path .godot)) { throw "Godot import failed" }
 
       - name: Export Windows Desktop
@@ -88,18 +103,52 @@ jobs:
             throw "Export missing CowColonySim.exe (godot exit $code)"
           }
 
-      - name: Package zip
+      - name: Build manifest + per-file blobs
+        shell: pwsh
+        run: |
+          $src = Resolve-Path build/win
+          $blobsDir = "release-blobs"
+          New-Item -ItemType Directory -Force -Path $blobsDir | Out-Null
+          $entries = New-Object System.Collections.Generic.List[object]
+          $seen = @{}
+          Get-ChildItem -Path $src -Recurse -File | ForEach-Object {
+            $rel = [IO.Path]::GetRelativePath($src, $_.FullName) -replace '\\','/'
+            $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant()
+            $entries.Add([pscustomobject]@{
+              path   = $rel
+              size   = $_.Length
+              sha256 = $hash
+            })
+            if (-not $seen.ContainsKey($hash)) {
+              Copy-Item $_.FullName -Destination (Join-Path $blobsDir "blob-$hash.bin") -Force
+              $seen[$hash] = $true
+            }
+          }
+          $manifest = [pscustomobject]@{
+            version       = "${{ github.sha }}"
+            built         = "${{ github.run_started_at }}"
+            blob_prefix   = "blob-"
+            blob_suffix   = ".bin"
+            files         = $entries
+          }
+          $manifest | ConvertTo-Json -Depth 6 | Out-File manifest.json -Encoding utf8
+          Write-Host "manifest entries: $($entries.Count); unique blobs: $($seen.Count)"
+
+      - name: Package zip (fast)
         shell: pwsh
         run: |
           $zip = "CowColonySim-windows.zip"
           if (Test-Path $zip) { Remove-Item $zip }
-          Compress-Archive -Path build/win/* -DestinationPath $zip
+          # 7z preinstalled on windows-latest. -mx1 = fast deflate, multithreaded.
+          7z a -tzip -mx1 -mmt=on $zip ./build/win/* | Out-Host
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: CowColonySim-windows
-          path: CowColonySim-windows.zip
+          path: |
+            CowColonySim-windows.zip
+            manifest.json
 
       - name: Publish "latest" release
         uses: softprops/action-gh-release@v2
@@ -109,6 +158,9 @@ jobs:
           body: |
             Auto-build from ${{ github.sha }}
             Built: ${{ github.run_started_at }}
-          files: CowColonySim-windows.zip
+          files: |
+            CowColonySim-windows.zip
+            manifest.json
+            release-blobs/blob-*.bin
           prerelease: false
           make_latest: 'true'

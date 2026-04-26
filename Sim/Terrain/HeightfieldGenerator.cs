@@ -7,14 +7,15 @@ public static class HeightfieldGenerator
 {
     public readonly record struct Settings(
         int Seed = 1337,
-        float BaseFrequency = 0.05f,
-        int Octaves = 4,
+        float BaseFrequency = 0.018f,
+        int Octaves = 3,
         float Lacunarity = 2.0f,
-        float Persistence = 0.5f,
-        short Amplitude = 32,
+        float Persistence = 0.4f,
+        short Amplitude = 18,
         float OriginTilesX = 0f,
         float OriginTilesY = 0f,
-        float TileSpacing = 1f);
+        float TileSpacing = 1f,
+        int SmoothingPasses = 2);
 
     public static void Generate(Heightfield field, Settings settings)
     {
@@ -29,7 +30,43 @@ public static class HeightfieldGenerator
                 field.Set(vx, vy, h);
             }
         }
+        for (var pass = 0; pass < settings.SmoothingPasses; pass++)
+        {
+            BoxBlur(field);
+        }
         field.MarkChanged();
+    }
+
+    // 3×3 box blur over the vertex grid. Edges clamp to in-bounds samples.
+    // Faceted rendering is unaffected — the per-tile 4-corner copy lives in
+    // the mesh builder, not the source data — so smoothing the source just
+    // softens the hill shapes the renderer faces off of.
+    private static void BoxBlur(Heightfield field)
+    {
+        var w = field.VertWidth;
+        var h = field.VertHeight;
+        var src = field.AsReadOnlySpan().ToArray();
+        for (var vy = 0; vy < h; vy++)
+        {
+            for (var vx = 0; vx < w; vx++)
+            {
+                var sum = 0;
+                var count = 0;
+                for (var oy = -1; oy <= 1; oy++)
+                {
+                    var sy = vy + oy;
+                    if ((uint)sy >= (uint)h) continue;
+                    for (var ox = -1; ox <= 1; ox++)
+                    {
+                        var sx = vx + ox;
+                        if ((uint)sx >= (uint)w) continue;
+                        sum += src[sy * w + sx];
+                        count++;
+                    }
+                }
+                field.Set(vx, vy, (short)(sum / count));
+            }
+        }
     }
 
     private static float Fbm(float vx, float vy, Settings s)

@@ -85,6 +85,7 @@ public partial class Bootstrap : Node3D
         AddPathOverlay(_runtime, _heightfield);
         var selection = AddSelectionService(_runtime, _heightfield);
         AddSelectionRing(selection, _runtime, _heightfield);
+        AddReservationOverlay(selection, _runtime, _heightfield);
         AddInfoPanel(selection, _runtime);
         AddContextMenu(selection, _runtime);
         AddItemHoverLabel(_runtime, _heightfield);
@@ -376,6 +377,13 @@ public partial class Bootstrap : Node3D
         var ring = new SelectionRing { Name = "SelectionRing" };
         ring.Configure(selection, runtime.Publisher, field);
         AddChild(ring);
+    }
+
+    private void AddReservationOverlay(SelectionService selection, SimRuntime runtime, Heightfield field)
+    {
+        var overlay = new ReservationOverlay { Name = "ReservationOverlay" };
+        overlay.Configure(selection, runtime.Publisher, field);
+        AddChild(overlay);
     }
 
     private void AddInfoPanel(SelectionService selection, SimRuntime runtime)

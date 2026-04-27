@@ -29,6 +29,8 @@ public partial class SelectionService : Node
     public int? SelectedZoneId { get; private set; }
     public int? SelectedTreeId { get; private set; }
     public int? SelectedItemId { get; private set; }
+    public int? SelectedBlueprintId { get; private set; }
+    public int? SelectedStructureId { get; private set; }
     public Vector2? SelectedGroundXZUnits { get; private set; }
 
     public event System.Action? SelectionChanged;
@@ -53,6 +55,34 @@ public partial class SelectionService : Node
     {
         DropStaleTreeSelection();
         DropStaleItemSelection();
+        DropStaleBlueprintSelection();
+        DropStaleStructureSelection();
+    }
+
+    private void DropStaleBlueprintSelection()
+    {
+        if (SelectedBlueprintId is not int id) return;
+        var ghosts = _publisher.Current.BlueprintGhosts;
+        for (var i = 0; i < ghosts.Count; i++)
+        {
+            if (ghosts[i].EntityId == id) return;
+        }
+        SelectedBlueprintId = null;
+        _contextMenu?.CloseIfOpen();
+        SelectionChanged?.Invoke();
+    }
+
+    private void DropStaleStructureSelection()
+    {
+        if (SelectedStructureId is not int id) return;
+        var structures = _publisher.Current.Structures;
+        for (var i = 0; i < structures.Count; i++)
+        {
+            if (structures[i].EntityId == id) return;
+        }
+        SelectedStructureId = null;
+        _contextMenu?.CloseIfOpen();
+        SelectionChanged?.Invoke();
     }
 
     // When a tree is felled (or an item is consumed) the snapshot stops
@@ -104,6 +134,8 @@ public partial class SelectionService : Node
             if (SelectItemNearRay(camera, mb.Position)) return;
             var tx = (int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile);
             var ty = (int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile);
+            if (SelectStructureAtTile(tx, ty)) return;
+            if (SelectBlueprintAtTile(tx, ty)) return;
             SelectZoneAtTile(tx, ty);
         }
         else if (mb.ButtonIndex == MouseButton.Right)
@@ -144,18 +176,73 @@ public partial class SelectionService : Node
         if (SelectedEntityId is not null) { SelectedEntityId = null; changed = true; }
         if (SelectedTreeId is not null) { SelectedTreeId = null; changed = true; }
         if (SelectedItemId is not null) { SelectedItemId = null; changed = true; }
+        if (SelectedBlueprintId is not null) { SelectedBlueprintId = null; changed = true; }
+        if (SelectedStructureId is not null) { SelectedStructureId = null; changed = true; }
         if (changed) SelectionChanged?.Invoke();
     }
 
     private void ClearAll()
     {
         var changed = SelectedEntityId is not null || SelectedZoneId is not null
-            || SelectedTreeId is not null || SelectedItemId is not null;
+            || SelectedTreeId is not null || SelectedItemId is not null
+            || SelectedBlueprintId is not null || SelectedStructureId is not null;
         SelectedEntityId = null;
         SelectedZoneId = null;
         SelectedTreeId = null;
         SelectedItemId = null;
+        SelectedBlueprintId = null;
+        SelectedStructureId = null;
         if (changed) SelectionChanged?.Invoke();
+    }
+
+    private bool SelectStructureAtTile(int tx, int ty)
+    {
+        var snap = _publisher.Current;
+        var bestId = 0;
+        var bestLayer = -1;
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            var s = snap.Structures[i];
+            if (!Sim.Blueprints.BlueprintCatalog.TryGet(s.DefId, out var def) || def is null) continue;
+            var (w, h) = (s.Rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+            if (tx < s.TileX || ty < s.TileY || tx >= s.TileX + w || ty >= s.TileY + h) continue;
+            if (s.BaseLayer > bestLayer) { bestLayer = s.BaseLayer; bestId = s.EntityId; }
+        }
+        if (bestId == 0) return false;
+        if (SelectedStructureId == bestId) return true;
+        SelectedStructureId = bestId;
+        SelectedBlueprintId = null;
+        SelectedEntityId = null;
+        SelectedZoneId = null;
+        SelectedTreeId = null;
+        SelectedItemId = null;
+        SelectionChanged?.Invoke();
+        return true;
+    }
+
+    private bool SelectBlueprintAtTile(int tx, int ty)
+    {
+        var snap = _publisher.Current;
+        var bestId = 0;
+        var bestLayer = -1;
+        for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+        {
+            var g = snap.BlueprintGhosts[i];
+            if (!Sim.Blueprints.BlueprintCatalog.TryGet(g.DefId, out var def) || def is null) continue;
+            var (w, h) = (g.Rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+            if (tx < g.OriginTileX || ty < g.OriginTileY || tx >= g.OriginTileX + w || ty >= g.OriginTileY + h) continue;
+            if (g.BaseLayer > bestLayer) { bestLayer = g.BaseLayer; bestId = g.EntityId; }
+        }
+        if (bestId == 0) return false;
+        if (SelectedBlueprintId == bestId) return true;
+        SelectedBlueprintId = bestId;
+        SelectedStructureId = null;
+        SelectedEntityId = null;
+        SelectedZoneId = null;
+        SelectedTreeId = null;
+        SelectedItemId = null;
+        SelectionChanged?.Invoke();
+        return true;
     }
 
     private bool TryOpenTreeContextMenu(Camera3D camera, Vector2 mousePos)

@@ -208,7 +208,8 @@ public partial class InfoPanel : CanvasLayer
             if (t.EntityId != id) continue;
             _treeHeader.Text =
                 $"pine #{id}\n" +
-                $"tile ({t.TileX}, {t.TileY})";
+                $"tile ({t.TileX}, {t.TileY})\n" +
+                $"growth {t.Growth:F0}%";
             _treeHealthBar.MaxValue = 30;
             _treeHealthBar.Value = t.Health;
             var designated = HasChopDesignation(snap, t.TileX, t.TileY);

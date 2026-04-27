@@ -139,7 +139,11 @@ public partial class TreesRenderer : Node3D
             // units (43u per 1.5m tile), so the mesh has to be scaled by
             // unitsPerMeter or the whole forest reads as a few cm tall.
             var jitter = 0.85f + ((seed >> 10) % 30u) / 100f;
-            var scale = jitter * _unitsPerMeter;
+            // Saplings render small and grow toward full size as Plant.Growth
+            // climbs to 100. Floor at 0.15 so 0% trees still poke out of the
+            // ground enough to see + click on.
+            var growthScale = 0.15f + 0.85f * Math.Clamp(t.Growth, 0f, 100f) / 100f;
+            var scale = jitter * growthScale * _unitsPerMeter;
             var basis = Basis.Identity
                 .Rotated(Vector3.Up, angle)
                 .Scaled(new Vector3(scale, scale, scale));

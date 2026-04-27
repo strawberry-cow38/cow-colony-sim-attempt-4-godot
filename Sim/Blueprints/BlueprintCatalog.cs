@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CowColonySim.Sim.Items;
 
 namespace CowColonySim.Sim.Blueprints;
 
@@ -28,7 +29,8 @@ public static class BlueprintCatalog
                 FootprintW: 1, FootprintH: 1,
                 Rotatable: false,
                 Requirements: System.Array.Empty<FootprintRequirement>(),
-                HeightMeters: 3.0f),
+                HeightMeters: 3.0f,
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 5) }),
 
             new BlueprintDef(
                 Id: "structure.wall_half",
@@ -38,7 +40,8 @@ public static class BlueprintCatalog
                 FootprintW: 1, FootprintH: 1,
                 Rotatable: false,
                 Requirements: System.Array.Empty<FootprintRequirement>(),
-                HeightMeters: 1.5f),
+                HeightMeters: 1.5f,
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 2) }),
 
             new BlueprintDef(
                 Id: "structure.wall_quarter",
@@ -48,7 +51,8 @@ public static class BlueprintCatalog
                 FootprintW: 1, FootprintH: 1,
                 Rotatable: false,
                 Requirements: System.Array.Empty<FootprintRequirement>(),
-                HeightMeters: 0.75f),
+                HeightMeters: 0.75f,
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 1) }),
 
             new BlueprintDef(
                 Id: "structure.door",
@@ -57,7 +61,8 @@ public static class BlueprintCatalog
                 Placement: PlacementMode.Single,
                 FootprintW: 1, FootprintH: 1,
                 Rotatable: true,
-                Requirements: System.Array.Empty<FootprintRequirement>()),
+                Requirements: System.Array.Empty<FootprintRequirement>(),
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 2) }),
 
             new BlueprintDef(
                 Id: "workstation.crafting_table",

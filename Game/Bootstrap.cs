@@ -49,6 +49,7 @@ public partial class Bootstrap : Node3D
         _runtime.Scheduler.Register(new FarmAutoDesignateSystem(_runtime.World));
         _runtime.Scheduler.Register(new SowJobSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new HaulSystem(_runtime.World, planner, grid));
+        _runtime.Scheduler.Register(new ConstructionJobSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new WanderSystem(_runtime.World, planner, grid));
         var lighting = new LightingSystem(_runtime.World, grid.Width, grid.Height);
         _runtime.Scheduler.Register(lighting);
@@ -76,6 +77,7 @@ public partial class Bootstrap : Node3D
         AddZones(_runtime, _heightfield);
         AddDesignations(_runtime, _heightfield);
         AddBlueprintGhosts(_runtime, _heightfield);
+        AddStructures(_runtime, _heightfield);
         AddTrees(_runtime, _heightfield);
         AddChopAudio(_runtime, _heightfield);
         AddTreeFallAudio(_runtime, _heightfield);
@@ -350,6 +352,13 @@ public partial class Bootstrap : Node3D
     private void AddBlueprintGhosts(SimRuntime runtime, Heightfield field)
     {
         var renderer = new BlueprintGhostsRenderer { Name = "BlueprintGhosts" };
+        renderer.Configure(runtime.Publisher, field);
+        AddChild(renderer);
+    }
+
+    private void AddStructures(SimRuntime runtime, Heightfield field)
+    {
+        var renderer = new StructuresRenderer { Name = "Structures" };
         renderer.Configure(runtime.Publisher, field);
         AddChild(renderer);
     }

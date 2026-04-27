@@ -16,6 +16,7 @@ public sealed record SimSnapshot(
     IReadOnlyList<BlueprintGhostView> BlueprintGhosts,
     IReadOnlyList<TreeView> Trees,
     IReadOnlyList<ItemView> Items,
+    IReadOnlyList<StructureView> Structures,
     IReadOnlyList<TileCoord> TreeFalls,
     LightingView Lighting,
     WeatherView Weather)
@@ -30,6 +31,7 @@ public sealed record SimSnapshot(
             Array.Empty<BlueprintGhostView>(),
             Array.Empty<TreeView>(),
             Array.Empty<ItemView>(),
+            Array.Empty<StructureView>(),
             Array.Empty<TileCoord>(),
             LightingView.Empty,
             WeatherView.Empty);

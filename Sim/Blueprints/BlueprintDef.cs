@@ -17,10 +17,14 @@ public sealed record BlueprintDef(
     int FootprintH,
     bool Rotatable,
     IReadOnlyList<FootprintRequirement> Requirements,
-    float HeightMeters = 1.5f)
+    float HeightMeters = 1.5f,
+    IReadOnlyList<MaterialCost>? Materials = null)
 {
     // Height converted to 0.75 m vertical quanta — matches the terrain
     // quantum + the build-layer step. Quarter wall = 1, half wall = 2,
     // full wall = 4.
     public int HeightQuanta => System.Math.Max(1, (int)System.MathF.Round(HeightMeters / 0.75f));
+
+    public IReadOnlyList<MaterialCost> MaterialsOrEmpty =>
+        Materials ?? System.Array.Empty<MaterialCost>();
 }

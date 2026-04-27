@@ -15,6 +15,10 @@ public struct BlueprintGhost : IComponent
     public int Rotation;
     public int BaseLayer;
     public float BuildProgress;
+    // Total units of material delivered toward this ghost. Walls have a
+    // single Wood cost so one counter is enough; multi-material recipes
+    // can grow this into a per-kind dictionary later.
+    public int MaterialDeposited;
 
     public BlueprintGhost() { }
 }

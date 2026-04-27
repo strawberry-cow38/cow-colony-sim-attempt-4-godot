@@ -11,4 +11,6 @@ public enum WorkKind
     CutPlant = 3,
     HarvestPlant = 4,
     Sow = 5,
+    HaulToBlueprint = 6,
+    Construct = 7,
 }

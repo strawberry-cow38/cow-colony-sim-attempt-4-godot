@@ -101,6 +101,7 @@ public sealed class SimRuntime : IDisposable
                     BlueprintGhosts: BuildBlueprintGhostViews(),
                     Trees: BuildTreeViews(),
                     Items: BuildItemViews(),
+                    Structures: BuildStructureViews(),
                     TreeFalls: _world.DrainTreeFalls(),
                     Lighting: BuildLightingView(),
                     Weather: BuildWeatherView()));
@@ -304,9 +305,27 @@ public sealed class SimRuntime : IDisposable
         foreach (var entity in query.Entities)
         {
             ref var g = ref entity.GetComponent<BlueprintGhost>();
+            var def = Blueprints.BlueprintCatalog.Get(g.DefId);
+            var required = 0;
+            foreach (var m in def.MaterialsOrEmpty) required += m.Count;
             views[i++] = new BlueprintGhostView(
                 entity.Id, g.DefId, g.OriginTileX, g.OriginTileY,
-                g.Rotation, g.BaseLayer, g.BuildProgress);
+                g.Rotation, g.BaseLayer, g.BuildProgress,
+                g.MaterialDeposited, required);
+        }
+        return views;
+    }
+
+    private StructureView[] BuildStructureViews()
+    {
+        var query = _world.Store.Query<Structure, TilePosition>();
+        var views = new StructureView[query.Count];
+        var i = 0;
+        foreach (var entity in query.Entities)
+        {
+            ref var s = ref entity.GetComponent<Structure>();
+            ref var p = ref entity.GetComponent<TilePosition>();
+            views[i++] = new StructureView(entity.Id, s.DefId, p.TileX, p.TileY, s.Rotation, s.BaseLayer);
         }
         return views;
     }

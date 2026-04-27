@@ -63,7 +63,7 @@ public class HaulSystemTests
                 trace.AppendLine($"t={ticked} pos=({p.TileX},{p.TileY}) sub=({p.SubX:F2},{p.SubY:F2}) work.A={w0.Active}/{w0.Kind} tgt={w0.TargetEntityId} drop=({w0.DropTileX},{w0.DropTileY}) pf.pend={pf0.PendingRequest} pf={pd}");
             }
 
-            if (IsDone(world, item, stockpileRect)) return; // success
+            if (IsDone(world, item.Id, stockpileRect)) return; // success
         }
 
         // Diagnose
@@ -84,10 +84,14 @@ public class HaulSystemTests
             $"After {maxTicks} ticks. colonist pos=({pos2.TileX},{pos2.TileY}) sub=({pos2.SubX:F2},{pos2.SubY:F2}) work.Active={work.Active} kind={work.Kind} carry={work.CarryKind} drop=({work.DropTileX},{work.DropTileY}) inv-stacks={(inv.Stacks?.Count ?? 0)} world-wood={totalWood} pf.pending={pf.PendingRequest} pf.failed={pf.LastPathFailed} pf.tiles=[{pathDesc}]\nTRACE:\n{trace}");
     }
 
-    private static bool IsDone(SimWorld world, Friflo.Engine.ECS.Entity item, TileRect stockpileRect)
+    private static bool IsDone(SimWorld world, int sourceId, TileRect stockpileRect)
     {
-        ref var it = ref item.GetComponent<Item>();
-        if (it.Count != 0) return false;
+        var src = world.Store.GetEntityById(sourceId);
+        if (src != default && src.HasComponent<Item>())
+        {
+            ref var it = ref src.GetComponent<Item>();
+            if (it.Count != 0) return false;
+        }
         foreach (var e in world.Store.Query<Item, TilePosition>().Entities)
         {
             ref var pos = ref e.GetComponent<TilePosition>();

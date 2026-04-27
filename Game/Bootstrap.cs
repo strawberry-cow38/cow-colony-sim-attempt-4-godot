@@ -13,6 +13,7 @@ using CowColonySim.Sim.Logging;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.Systems;
 using CowColonySim.Sim.Terrain;
+using CowColonySim.Sim.Weather;
 using CowColonySim.Sim.World.Components;
 using CowColonySim.Sim.Zones;
 using Godot;
@@ -52,7 +53,7 @@ public partial class Bootstrap : Node3D
         var lighting = new LightingSystem(_runtime.World, grid.Width, grid.Height);
         _runtime.Scheduler.Register(lighting);
         _runtime.Lighting = lighting;
-        var weather = new WeatherSystem(_runtime.World, grid.Width, grid.Height);
+        var weather = new WeatherSystem(_runtime.World, grid.Width, grid.Height, MapClimate.Temperate);
         _runtime.Scheduler.Register(weather);
         _runtime.Weather = weather;
         _runtime.Scheduler.Register(new PlantGrowthSystem(_runtime.World, lighting, weather));

@@ -2,6 +2,7 @@ using System.Linq;
 using System.Text;
 using CowColonySim.Game.Camera;
 using CowColonySim.Sim;
+using CowColonySim.Sim.Time;
 using Godot;
 
 namespace CowColonySim.Game.Debug;
@@ -80,7 +81,10 @@ public partial class PerfHud : CanvasLayer
         var sun = snap.Lighting.SunFraction;
         var temp = snap.Weather.CurrentCelsius;
         var rain = snap.Weather.CurrentRainfall;
-        _summary.Text = $"FPS: {_fps:F0}   TPS: {_tps:F0}{zoomTxt}   SUN: {sun * 100f:F0}%   TEMP: {temp:F1}\u00b0C   RAIN: {rain * 100f:F0}%   [F3 detail · F4 reset max]";
+        var rainMm = snap.Weather.AnnualRainfallMm;
+        var dt = GameClock.DateTimeAt(snap.TickNumber);
+        var season = SeasonName(dt.Month);
+        _summary.Text = $"FPS: {_fps:F0}   TPS: {_tps:F0}{zoomTxt}   SUN: {sun * 100f:F0}%   TEMP: {temp:F1}\u00b0C   {season} {dt:MMM\u00a0d}   RAIN: {rain * 100f:F0}% ({rainMm:F0}mm/yr)   [F3 detail \u00b7 F4 reset max]";
 
         if (!_detailVisible) return;
 
@@ -122,6 +126,14 @@ public partial class PerfHud : CanvasLayer
             sb.Append($"  {name,-22} {s.LastMs,6:F2}  avg {s.AvgMs,6:F2}  max {s.MaxMs,6:F2}\n");
         }
     }
+
+    private static string SeasonName(int month) => month switch
+    {
+        12 or 1 or 2 => "winter",
+        3 or 4 or 5 => "spring",
+        6 or 7 or 8 => "summer",
+        _ => "autumn",
+    };
 
     private static Label MakeLabel(Vector2 pos, int fontSize)
     {

@@ -1,19 +1,22 @@
 using CowColonySim.Sim.Lighting;
+using CowColonySim.Sim.Time;
 
 namespace CowColonySim.Sim.Weather;
 
-// Maps tick → ambient temperature in Celsius. Today this is a simple
-// lerp over the same SunCurve fraction the lighting uses, so the
-// coldest moment is deep night and the warmest is solar noon. Future:
-// seasonal curve, biome offsets, indoor heating.
+// Maps tick → ambient temperature in Celsius. Combines a yearly
+// seasonal cosine (peaks at climate.PeakSummerDayOfYear, troughs half
+// a year off) with a daily swing driven by SunCurve. Future: biome
+// offsets, indoor heating, weather-front deltas.
 public static class TempCurve
 {
-    private const float NightLowC = 5f;
-    private const float DayHighC  = 22f;
-
-    public static float CelsiusAtTick(long tickNumber)
+    public static float CelsiusAtTick(long tickNumber, MapClimate climate)
     {
+        var dt = GameClock.DateTimeAt(tickNumber);
+        var seasonPhase = (dt.DayOfYear - climate.PeakSummerDayOfYear) / 365.0;
+        var seasonal = climate.AnnualMeanCelsius
+            + climate.AnnualAmplitudeC * (float)Math.Cos(seasonPhase * 2.0 * Math.PI);
         var sun = SunCurve.FractionAtTick(tickNumber);
-        return NightLowC + (DayHighC - NightLowC) * sun;
+        var daily = climate.DailyAmplitudeC * (sun - 0.5f) * 2f;
+        return seasonal + daily;
     }
 }

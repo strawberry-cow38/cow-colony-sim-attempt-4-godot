@@ -292,7 +292,8 @@ public sealed class SimRuntime : IDisposable
         return new WeatherView(
             Weather.Temperature.Width, Weather.Temperature.Height,
             Weather.Temperature.Clone(), Weather.Rainfall.Clone(),
-            Weather.CurrentCelsius, Weather.CurrentRainfall);
+            Weather.CurrentCelsius, Weather.CurrentRainfall,
+            Weather.Climate.AnnualRainfallMm);
     }
 
     private BlueprintGhostView[] BuildBlueprintGhostViews()

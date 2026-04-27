@@ -24,7 +24,9 @@ public readonly record struct CropDef(
     float MinSunlightFraction,
     int LifespanTicks,
     ItemKind YieldItemKind,
-    int YieldCount);
+    int YieldCount,
+    float MinTempC,
+    float MaxTempC);
 
 public static class CropCatalog
 {
@@ -43,13 +45,17 @@ public static class CropCatalog
                 MinSunlightFraction: 0.51f,
                 LifespanTicks: 60 * 60 * 30, // ~30 min real-time fully grown before wither
                 YieldItemKind: ItemKind.Wood,
-                YieldCount: 5),
+                YieldCount: 5,
+                MinTempC: -10f,
+                MaxTempC: 35f),
             [CropDefIds.Wheat] = new(CropDefIds.Wheat, "Wheat", IsTree: false,
                 GrowthPerTickAtFullSun: 0.20f,
                 MinSunlightFraction: 0.51f,
                 LifespanTicks: 60 * 60 * 5,
                 YieldItemKind: ItemKind.Wheat,
-                YieldCount: 1),
+                YieldCount: 1,
+                MinTempC: 5f,
+                MaxTempC: 30f),
         };
         return d;
     }

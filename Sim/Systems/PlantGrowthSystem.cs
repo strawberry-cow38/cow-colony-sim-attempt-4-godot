@@ -1,4 +1,5 @@
 using CowColonySim.Sim.Plants;
+using CowColonySim.Sim.Weather;
 using CowColonySim.Sim.World;
 using CowColonySim.Sim.World.Components;
 
@@ -18,16 +19,19 @@ public sealed class PlantGrowthSystem : ITickSystem
 {
     private readonly SimWorld _world;
     private readonly LightingSystem _lighting;
+    private readonly WeatherSystem _weather;
 
-    public PlantGrowthSystem(SimWorld world, LightingSystem lighting)
+    public PlantGrowthSystem(SimWorld world, LightingSystem lighting, WeatherSystem weather)
     {
         _world = world;
         _lighting = lighting;
+        _weather = weather;
     }
 
     public void Tick(TickContext ctx)
     {
-        var grid = _lighting.Grid;
+        var lightGrid = _lighting.Grid;
+        var tempGrid = _weather.Temperature;
         foreach (var entity in _world.Store.Query<Plant, TilePosition>().Entities)
         {
             ref var plant = ref entity.GetComponent<Plant>();
@@ -41,8 +45,11 @@ public sealed class PlantGrowthSystem : ITickSystem
                 continue;
             }
 
-            var sun = grid.Get(pos.TileX, pos.TileY);
+            var sun = lightGrid.Get(pos.TileX, pos.TileY);
             if (sun < def.MinSunlightFraction) continue;
+
+            var temp = tempGrid.Get(pos.TileX, pos.TileY);
+            if (temp < def.MinTempC || temp > def.MaxTempC) continue;
 
             // Linear growth scaled by current sunlight. Floor at 0 just in
             // case some crop def ships with a negative growth rate.

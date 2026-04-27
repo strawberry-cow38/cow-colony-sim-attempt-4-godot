@@ -39,6 +39,10 @@ public sealed class SimRuntime : IDisposable
     // until set; LightingView falls back to Empty in that case.
     public LightingSystem? Lighting { get; set; }
 
+    // Same pattern for the weather grids — temperature + rainfall.
+    // WeatherView falls back to Empty when null.
+    public WeatherSystem? Weather { get; set; }
+
     // 0 = paused, otherwise tick-rate multiplier. Loop reads this each tick
     // so it can change live from the main thread.
     public int Speed
@@ -98,7 +102,8 @@ public sealed class SimRuntime : IDisposable
                     Trees: BuildTreeViews(),
                     Items: BuildItemViews(),
                     TreeFalls: _world.DrainTreeFalls(),
-                    Lighting: BuildLightingView()));
+                    Lighting: BuildLightingView(),
+                    Weather: BuildWeatherView()));
             }
             catch (Exception ex)
             {
@@ -279,6 +284,15 @@ public sealed class SimRuntime : IDisposable
         return new LightingView(
             Lighting.Grid.Width, Lighting.Grid.Height,
             Lighting.Grid.Clone(), Lighting.SunFraction);
+    }
+
+    private WeatherView BuildWeatherView()
+    {
+        if (Weather is null) return WeatherView.Empty;
+        return new WeatherView(
+            Weather.Temperature.Width, Weather.Temperature.Height,
+            Weather.Temperature.Clone(), Weather.Rainfall.Clone(),
+            Weather.CurrentCelsius, Weather.CurrentRainfall);
     }
 
     private BlueprintGhostView[] BuildBlueprintGhostViews()

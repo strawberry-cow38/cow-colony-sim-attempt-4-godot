@@ -17,7 +17,8 @@ public sealed record SimSnapshot(
     IReadOnlyList<TreeView> Trees,
     IReadOnlyList<ItemView> Items,
     IReadOnlyList<TileCoord> TreeFalls,
-    LightingView Lighting)
+    LightingView Lighting,
+    WeatherView Weather)
 {
     public static SimSnapshot Empty { get; } =
         new(0, 0.0, 0,
@@ -30,5 +31,6 @@ public sealed record SimSnapshot(
             Array.Empty<TreeView>(),
             Array.Empty<ItemView>(),
             Array.Empty<TileCoord>(),
-            LightingView.Empty);
+            LightingView.Empty,
+            WeatherView.Empty);
 }

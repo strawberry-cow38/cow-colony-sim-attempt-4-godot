@@ -76,8 +76,11 @@ public partial class PerfHud : CanvasLayer
         var zoomTxt = _rig is null
             ? string.Empty
             : $"   ZOOM: {_rig.ZoomPercent:F1}% ({_rig.CurrentDistance:F0}u)";
-        var sun = _runtime.Publisher.Current.Lighting.SunFraction;
-        _summary.Text = $"FPS: {_fps:F0}   TPS: {_tps:F0}{zoomTxt}   SUN: {sun * 100f:F0}%   [F3 detail · F4 reset max]";
+        var snap = _runtime.Publisher.Current;
+        var sun = snap.Lighting.SunFraction;
+        var temp = snap.Weather.CurrentCelsius;
+        var rain = snap.Weather.CurrentRainfall;
+        _summary.Text = $"FPS: {_fps:F0}   TPS: {_tps:F0}{zoomTxt}   SUN: {sun * 100f:F0}%   TEMP: {temp:F1}\u00b0C   RAIN: {rain * 100f:F0}%   [F3 detail · F4 reset max]";
 
         if (!_detailVisible) return;
 

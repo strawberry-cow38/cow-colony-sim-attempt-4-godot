@@ -117,7 +117,7 @@ public partial class InfoPanel : CanvasLayer
             HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
         };
         _colonistBox.AddChild(invScroll);
-        _inventoryList = new VBoxContainer { SizeFlagsHorizontal = (int)Control.SizeFlags.ExpandFill };
+        _inventoryList = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         invScroll.AddChild(_inventoryList);
 
         _itemInfoDialog = new AcceptDialog { Title = "item" };
@@ -362,10 +362,10 @@ public partial class InfoPanel : CanvasLayer
         for (var i = 0; i < inv.Count; i++)
         {
             var stack = inv[i];
-            var row = new HBoxContainer { SizeFlagsHorizontal = (int)Control.SizeFlags.ExpandFill };
+            var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
             var tag = stack.Equipped ? " [E]" : stack.Locked ? " [L]" : string.Empty;
             var nameLabel = MakeLabel($"{stack.DisplayName} ×{stack.Count}{tag}");
-            nameLabel.SizeFlagsHorizontal = (int)Control.SizeFlags.ExpandFill;
+            nameLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
             row.AddChild(nameLabel);
 
             if (stack.IsWeapon || stack.IsClothing)

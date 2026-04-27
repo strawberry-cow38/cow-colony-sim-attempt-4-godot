@@ -60,14 +60,18 @@ public class HaulSystemTests
         ref var inv = ref colonist.GetComponent<Inventory>();
         ref var pos2 = ref colonist.GetComponent<TilePosition>();
         ref var work = ref colonist.GetComponent<WorkJob>();
+        ref var pf = ref colonist.GetComponent<PathFollower>();
         var totalWood = 0;
         foreach (var e in world.Store.Query<Item, TilePosition>().Entities)
         {
             ref var it = ref e.GetComponent<Item>();
             totalWood += it.Count;
         }
+        var pathDesc = pf.Tiles is null
+            ? "null"
+            : $"len={pf.Tiles.Length} idx={pf.Index} last=({pf.Tiles[pf.Tiles.Length - 1].X},{pf.Tiles[pf.Tiles.Length - 1].Y})";
         Assert.Fail(
-            $"After {maxTicks} ticks. colonist pos=({pos2.TileX},{pos2.TileY}) work.Active={work.Active} kind={work.Kind} carry={work.CarryKind} drop=({work.DropTileX},{work.DropTileY}) inv-stacks={(inv.Stacks?.Count ?? 0)} world-wood={totalWood}");
+            $"After {maxTicks} ticks. colonist pos=({pos2.TileX},{pos2.TileY}) sub=({pos2.SubX:F2},{pos2.SubY:F2}) work.Active={work.Active} kind={work.Kind} carry={work.CarryKind} drop=({work.DropTileX},{work.DropTileY}) inv-stacks={(inv.Stacks?.Count ?? 0)} world-wood={totalWood} pf.pending={pf.PendingRequest} pf.failed={pf.LastPathFailed} pf.tiles=[{pathDesc}]");
     }
 
     private static bool IsDone(SimWorld world, Friflo.Engine.ECS.Entity item, TileRect stockpileRect)

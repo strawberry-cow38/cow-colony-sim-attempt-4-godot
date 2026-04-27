@@ -11,4 +11,5 @@ public enum DesignationKind
     Mine = 1,
     Harvest = 2,
     CutPlant = 3,
+    Sow = 4,
 }

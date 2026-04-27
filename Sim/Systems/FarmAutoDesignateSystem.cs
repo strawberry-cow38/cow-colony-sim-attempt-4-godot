@@ -59,7 +59,17 @@ public sealed class FarmAutoDesignateSystem : ITickSystem
                 for (var tx = z.Rect.MinX; tx <= z.Rect.MaxX; tx++)
                 {
                     if (!z.ContainsTile(tx, ty)) continue;
-                    if (!plantByTile.TryGetValue((tx, ty), out var plantId)) continue;
+                    if (!plantByTile.TryGetValue((tx, ty), out var plantId))
+                    {
+                        // Empty farm tile — stamp Sow if the farm wants
+                        // to fill the field. SowJobSystem reads the
+                        // CropDefId off the zone at execute time.
+                        if (!f.AllowSowing) continue;
+                        var kind = DesignationKind.Sow;
+                        if (existing.ContainsKey((tx, ty, kind))) continue;
+                        toStamp.Add((tx, ty, kind));
+                        continue;
+                    }
                     var plant = _world.Store.GetEntityById(plantId);
                     if (plant == default) continue;
                     ref var p = ref plant.GetComponent<Plant>();

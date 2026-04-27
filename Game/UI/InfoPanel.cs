@@ -323,6 +323,7 @@ public partial class InfoPanel : CanvasLayer
         WorkKind.HaulItem => "hauling",
         WorkKind.CutPlant => "cutting",
         WorkKind.HarvestPlant => "harvesting",
+        WorkKind.Sow => "sowing",
         _ => "working",
     };
 }

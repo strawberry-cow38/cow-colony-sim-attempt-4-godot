@@ -10,4 +10,5 @@ public enum WorkKind
     HaulItem = 2,
     CutPlant = 3,
     HarvestPlant = 4,
+    Sow = 5,
 }

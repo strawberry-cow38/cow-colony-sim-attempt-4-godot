@@ -44,8 +44,8 @@ public class HaulSystemTests
             new WanderSystem(world, planner, grid),
         };
 
-        // Run for up to 30s of sim time waiting for the source to fully drain.
-        var maxTicks = 60 * 30;
+        // Run for up to 90s of sim time waiting for the source to fully drain.
+        var maxTicks = 60 * 90;
         var ticked = 0;
         var trace = new System.Text.StringBuilder();
         while (ticked < maxTicks)

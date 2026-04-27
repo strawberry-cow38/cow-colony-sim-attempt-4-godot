@@ -199,12 +199,20 @@ public sealed class SimRuntime : IDisposable
             ref var z = ref entity.GetComponent<Zone>();
             var priority = entity.HasComponent<StockpileSettings>()
                 ? entity.GetComponent<StockpileSettings>().Priority : 0;
-            var cropDefId = entity.HasComponent<FarmSettings>()
-                ? entity.GetComponent<FarmSettings>().CropDefId : 0;
+            var cropDefId = 0;
+            var allowSow = false;
+            var allowHarv = false;
+            if (entity.HasComponent<FarmSettings>())
+            {
+                ref var f = ref entity.GetComponent<FarmSettings>();
+                cropDefId = f.CropDefId;
+                allowSow = f.AllowSowing;
+                allowHarv = f.AllowHarvest;
+            }
             views[i++] = new ZoneView(
                 z.ZoneId, z.Type,
                 z.Rect.MinX, z.Rect.MinY, z.Rect.MaxX, z.Rect.MaxY,
-                z.Mask, z.Name, priority, cropDefId);
+                z.Mask, z.Name, priority, cropDefId, allowSow, allowHarv);
         }
         return views;
     }

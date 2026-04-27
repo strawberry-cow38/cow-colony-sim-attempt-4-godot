@@ -445,6 +445,8 @@ public sealed class CommandSystem : ITickSystem
         {
             ref var f = ref entity.GetComponent<FarmSettings>();
             f.CropDefId = cmd.CropDefId;
+            f.AllowSowing = cmd.AllowSowing;
+            f.AllowHarvest = cmd.AllowHarvest;
         }
     }
 

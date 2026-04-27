@@ -53,7 +53,9 @@ public readonly record struct SetZoneSettingsCommand(
     int ZoneId,
     string Name,
     int Priority,
-    int CropDefId) : ISimCommand;
+    int CropDefId,
+    bool AllowSowing,
+    bool AllowHarvest) : ISimCommand;
 
 public sealed class CommandBus
 {

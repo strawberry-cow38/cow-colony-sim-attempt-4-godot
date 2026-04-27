@@ -23,6 +23,8 @@ public partial class ZoneSettingsPanel : CanvasLayer
     private SpinBox _priority = null!;
     private HBoxContainer _cropRow = null!;
     private SpinBox _cropDefId = null!;
+    private CheckBox _allowSowing = null!;
+    private CheckBox _allowHarvest = null!;
     private Button _apply = null!;
     private Button _delete = null!;
     private TileRect _boundRect;
@@ -77,6 +79,14 @@ public partial class ZoneSettingsPanel : CanvasLayer
         _cropRow.AddChild(_cropDefId);
         box.AddChild(_cropRow);
 
+        _allowSowing = new CheckBox { Text = "allow sowing" };
+        _allowSowing.Toggled += _ => _userEdited = true;
+        box.AddChild(_allowSowing);
+
+        _allowHarvest = new CheckBox { Text = "allow harvest" };
+        _allowHarvest.Toggled += _ => _userEdited = true;
+        box.AddChild(_allowHarvest);
+
         _apply = new Button { Text = "Apply" };
         _apply.Pressed += OnApply;
         box.AddChild(_apply);
@@ -121,8 +131,12 @@ public partial class ZoneSettingsPanel : CanvasLayer
             _nameEdit.Text = z.Name;
             _priority.Value = z.Priority;
             _cropDefId.Value = z.CropDefId;
+            _allowSowing.ButtonPressed = z.AllowSowing;
+            _allowHarvest.ButtonPressed = z.AllowHarvest;
             _priorityRow.Visible = z.Type == ZoneType.Stockpile;
             _cropRow.Visible = z.Type == ZoneType.Farm;
+            _allowSowing.Visible = z.Type == ZoneType.Farm;
+            _allowHarvest.Visible = z.Type == ZoneType.Farm;
             _boundZoneId = z.ZoneId;
             _boundRect = new TileRect(z.MinTileX, z.MinTileY, z.MaxTileX, z.MaxTileY);
             _userEdited = false;
@@ -140,7 +154,9 @@ public partial class ZoneSettingsPanel : CanvasLayer
             _boundZoneId,
             _nameEdit.Text,
             (int)_priority.Value,
-            (int)_cropDefId.Value));
+            (int)_cropDefId.Value,
+            _allowSowing.ButtonPressed,
+            _allowHarvest.ButtonPressed));
         _userEdited = false;
     }
 

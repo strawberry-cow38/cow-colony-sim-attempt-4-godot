@@ -121,4 +121,48 @@ public class InventoryOpsTests
         InventoryOps.Add(ref inv, caps, "wood", 1);
         Assert.False(InventoryOps.Equip(ref inv, 0));
     }
+
+    [Fact]
+    public void Add_skips_locked_stack_and_creates_new_unlocked_one()
+    {
+        // Existing locked (force-picked) wood must NOT absorb auto-haul
+        // wood — otherwise haul-drained items vanish into the locked
+        // pile.
+        var (inv, caps) = Fresh(strength: 1000, baseBulk: 1000f);
+        InventoryOps.AddLocked(ref inv, caps, "wood", 5);
+        InventoryOps.Add(ref inv, caps, "wood", 3);
+        Assert.Equal(2, inv.Stacks.Count);
+        Assert.True(inv.Stacks[0].Locked);
+        Assert.Equal(5, inv.Stacks[0].Count);
+        Assert.False(inv.Stacks[1].Locked);
+        Assert.Equal(3, inv.Stacks[1].Count);
+    }
+
+    [Fact]
+    public void AddLocked_skips_unlocked_stack_and_creates_new_locked_one()
+    {
+        // Reverse: haul stack already there, force-pickup must NOT merge
+        // into it. Otherwise the force-locked pile silently includes
+        // un-locked auto-haul items, and locking the merged stack
+        // strands those items.
+        var (inv, caps) = Fresh(strength: 1000, baseBulk: 1000f);
+        InventoryOps.Add(ref inv, caps, "wood", 5);
+        InventoryOps.AddLocked(ref inv, caps, "wood", 3);
+        Assert.Equal(2, inv.Stacks.Count);
+        Assert.False(inv.Stacks[0].Locked);
+        Assert.Equal(5, inv.Stacks[0].Count);
+        Assert.True(inv.Stacks[1].Locked);
+        Assert.Equal(3, inv.Stacks[1].Count);
+    }
+
+    [Fact]
+    public void AddLocked_merges_into_existing_locked_stack()
+    {
+        var (inv, caps) = Fresh(strength: 1000, baseBulk: 1000f);
+        InventoryOps.AddLocked(ref inv, caps, "wood", 5);
+        InventoryOps.AddLocked(ref inv, caps, "wood", 4);
+        Assert.Single(inv.Stacks);
+        Assert.True(inv.Stacks[0].Locked);
+        Assert.Equal(9, inv.Stacks[0].Count);
+    }
 }

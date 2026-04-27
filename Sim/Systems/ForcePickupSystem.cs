@@ -84,21 +84,12 @@ public sealed class ForcePickupSystem : ITickSystem
             {
                 defId = ItemCatalog.DefaultIdFor(itComp.Kind);
             }
-            var added = InventoryOps.Add(ref inv, caps, defId, itComp.Count);
+            var added = InventoryOps.AddLocked(ref inv, caps, defId, itComp.Count);
             if (added <= 0)
             {
                 // No room — give up the force, leave item alone.
                 ClearWork(entity, ref work);
                 continue;
-            }
-            // Lock the just-added (or grown) stack of this defId.
-            for (var i = inv.Stacks.Count - 1; i >= 0; i--)
-            {
-                var s = inv.Stacks[i];
-                if (s.DefId != defId || s.Equipped) continue;
-                s.Locked = true;
-                inv.Stacks[i] = s;
-                break;
             }
 
             if (added < itComp.Count)

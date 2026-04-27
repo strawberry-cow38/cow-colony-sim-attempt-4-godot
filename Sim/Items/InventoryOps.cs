@@ -83,8 +83,11 @@ public static class InventoryOps
     }
 
     // Adds up to `count` units. Returns how many actually fit. Stackable
-    // defs merge into the first non-equipped stack of the same DefId;
-    // uniques append a new stack each time.
+    // defs merge into the first non-equipped, non-locked stack of the
+    // same DefId; uniques append a new stack each time. Locked stacks
+    // are sealed by the player (force-pickup) — never merge into them
+    // here, otherwise haul flow silently feeds locked piles and the
+    // dropped count vanishes.
     public static int Add(ref Inventory inv, in CarryCaps caps, string defId, int count)
     {
         if (count <= 0) return 0;
@@ -99,7 +102,7 @@ public static class InventoryOps
             for (var i = 0; i < inv.Stacks.Count; i++)
             {
                 var s = inv.Stacks[i];
-                if (s.DefId != defId || s.Equipped) continue;
+                if (s.DefId != defId || s.Equipped || s.Locked) continue;
                 s.Count += take;
                 inv.Stacks[i] = s;
                 return take;
@@ -109,6 +112,36 @@ public static class InventoryOps
         }
         // Non-stackable — one stack of count 1 per call.
         inv.Stacks.Add(new InventoryStack(defId, 1));
+        return 1;
+    }
+
+    // Force-pickup variant: merges into an existing locked stack of the
+    // same DefId, or appends a new locked stack. Keeps the locked pile
+    // separate from any auto-haul stack the colonist might already
+    // carry, so haul drains don't dump the player's reserved items.
+    public static int AddLocked(ref Inventory inv, in CarryCaps caps, string defId, int count)
+    {
+        if (count <= 0) return 0;
+        inv.Stacks ??= new List<InventoryStack>();
+        var room = RoomFor(defId, caps, inv);
+        var take = Math.Min(room, count);
+        if (take <= 0) return 0;
+
+        var def = ItemCatalog.Get(defId);
+        if (def.Stackable)
+        {
+            for (var i = 0; i < inv.Stacks.Count; i++)
+            {
+                var s = inv.Stacks[i];
+                if (s.DefId != defId || s.Equipped || !s.Locked) continue;
+                s.Count += take;
+                inv.Stacks[i] = s;
+                return take;
+            }
+            inv.Stacks.Add(new InventoryStack(defId, take, locked: true));
+            return take;
+        }
+        inv.Stacks.Add(new InventoryStack(defId, 1, locked: true));
         return 1;
     }
 

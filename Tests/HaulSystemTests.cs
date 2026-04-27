@@ -86,21 +86,18 @@ public class HaulSystemTests
 
     private static bool IsDone(SimWorld world, int sourceId, TileRect stockpileRect)
     {
-        var src = world.Store.GetEntityById(sourceId);
-        if (src != default && src.HasComponent<Item>())
-        {
-            ref var it = ref src.GetComponent<Item>();
-            if (it.Count != 0) return false;
-        }
+        var sourceAlive = false;
         foreach (var e in world.Store.Query<Item, TilePosition>().Entities)
         {
+            ref var it = ref e.GetComponent<Item>();
             ref var pos = ref e.GetComponent<TilePosition>();
+            if (e.Id == sourceId && it.Count != 0) sourceAlive = true;
             if (pos.TileX < stockpileRect.MinX || pos.TileX > stockpileRect.MaxX
                 || pos.TileY < stockpileRect.MinY || pos.TileY > stockpileRect.MaxY)
             {
                 return false;
             }
         }
-        return true;
+        return !sourceAlive;
     }
 }

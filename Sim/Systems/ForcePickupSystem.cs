@@ -33,13 +33,16 @@ public sealed class ForcePickupSystem : ITickSystem
     {
         _toDelete.Clear();
 
-        var query = _world.Store.Query<Colonist, Job, WorkJob, TilePosition, PathFollower, Inventory>();
+        // Friflo Query caps at 5 type args. Inventory + CarryCaps live on
+        // every colonist (added at spawn) so we can read them via HasComponent.
+        var query = _world.Store.Query<Colonist, Job, WorkJob, TilePosition, PathFollower>();
         foreach (var entity in query.Entities)
         {
             ref var job = ref entity.GetComponent<Job>();
             if (job.Active) continue;
             ref var work = ref entity.GetComponent<WorkJob>();
             if (!work.Active || work.Kind != WorkKind.ForcePickup) continue;
+            if (!entity.HasComponent<Inventory>() || !entity.HasComponent<CarryCaps>()) continue;
 
             var item = _world.Store.GetEntityById(work.TargetEntityId);
             if (item == default || !item.HasComponent<Item>() || !item.HasComponent<TilePosition>())

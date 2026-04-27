@@ -13,4 +13,8 @@ public enum WorkKind
     Sow = 5,
     HaulToBlueprint = 6,
     Construct = 7,
+    // Player force-pick: walk to an item entity, suck it into Inventory
+    // with the Locked flag set, then idle. Auto-systems leave the colonist
+    // alone after — only ForceDrop releases the stack.
+    ForcePickup = 8,
 }

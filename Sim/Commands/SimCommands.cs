@@ -60,6 +60,19 @@ public readonly record struct DeconstructStructureCommand(int EntityId) : ISimCo
 // need spots, and other gameplay entities are untouched.
 public readonly record struct EraseInRectCommand(TileRect Rect) : ISimCommand;
 
+// Pin a colonist to walk to an item entity, pick the entire stack into
+// their inventory, and lock it there. Auto-haul + auto-construct skip
+// locked stacks — only ForceDropFromInventory releases.
+public readonly record struct ForcePickupCommand(int ColonistId, int ItemEntityId) : ISimCommand;
+
+// Drop one inventory stack at the colonist's current tile. Bypasses the
+// Locked + Equipped flags — that's what "force" means.
+public readonly record struct ForceDropFromInventoryCommand(int ColonistId, int StackIndex) : ISimCommand;
+
+// Equip / unequip an in-inventory stack. Validation lives in InventoryOps.
+public readonly record struct EquipFromInventoryCommand(int ColonistId, int StackIndex) : ISimCommand;
+public readonly record struct UnequipInventoryCommand(int ColonistId, int StackIndex) : ISimCommand;
+
 // Update a zone's editable fields. Sim re-reads the zone by id and
 // rewrites Name + the relevant per-type settings struct. Fields that
 // don't apply for the zone's type are ignored.

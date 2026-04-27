@@ -73,8 +73,111 @@ public sealed class CommandSystem : ITickSystem
                 case DeconstructStructureCommand ds:
                     ApplyDeconstruct(ds.EntityId);
                     break;
+                case ForcePickupCommand fp:
+                    Apply(fp);
+                    break;
+                case ForceDropFromInventoryCommand fd:
+                    Apply(fd);
+                    break;
+                case EquipFromInventoryCommand eq:
+                    Apply(eq);
+                    break;
+                case UnequipInventoryCommand uq:
+                    Apply(uq);
+                    break;
             }
         }
+    }
+
+    private void Apply(ForcePickupCommand cmd)
+    {
+        var colonist = _world.Store.GetEntityById(cmd.ColonistId);
+        if (colonist == default) return;
+        if (!colonist.HasComponent<WorkJob>() || !colonist.HasComponent<PathFollower>()
+            || !colonist.HasComponent<TilePosition>()) return;
+
+        var item = _world.Store.GetEntityById(cmd.ItemEntityId);
+        if (item == default || !item.HasComponent<Item>() || !item.HasComponent<TilePosition>()) return;
+        ref var itComp = ref item.GetComponent<Item>();
+        if (itComp.Forbidden) return;
+        ref var itPos = ref item.GetComponent<TilePosition>();
+
+        // Clear any other haul targeting this stack — the lock-pickup
+        // shape mirrors PrioritizeHaul's pre-emption logic.
+        foreach (var other in _world.Store.Query<Colonist, WorkJob, PathFollower, TilePosition>().Entities)
+        {
+            if (other.Id == cmd.ColonistId) continue;
+            ref var ow = ref other.GetComponent<WorkJob>();
+            if (!ow.Active || ow.TargetEntityId != cmd.ItemEntityId) continue;
+            ref var opf = ref other.GetComponent<PathFollower>();
+            ref var opos = ref other.GetComponent<TilePosition>();
+            if (ow.Carrying)
+            {
+                if (ow.CarryKind == ItemKind.Minified && !string.IsNullOrEmpty(ow.CarryMinifiedDefId))
+                    _world.SpawnMinifiedThing(ow.CarryMinifiedDefId, opos.TileX, opos.TileY, 0, 0);
+                else
+                    _world.AddOrMergeItem(opos.TileX, opos.TileY, ow.CarryKind, ow.CarryCount);
+            }
+            ResetWorkJob(ref ow, ref opf);
+        }
+
+        ref var work = ref colonist.GetComponent<WorkJob>();
+        ref var pf = ref colonist.GetComponent<PathFollower>();
+        work.Active = true;
+        work.Kind = WorkKind.ForcePickup;
+        work.TargetEntityId = cmd.ItemEntityId;
+        work.TargetTileX = itPos.TileX;
+        work.TargetTileY = itPos.TileY;
+        work.DropTileX = 0;
+        work.DropTileY = 0;
+        work.Progress = 0f;
+        work.Forced = true;
+        work.Carrying = false;
+        work.CarryKind = ItemKind.None;
+        work.CarryCount = 0;
+        work.CarryMinifiedDefId = null;
+        pf.Tiles = null;
+        pf.Index = 0;
+    }
+
+    private void Apply(ForceDropFromInventoryCommand cmd)
+    {
+        var colonist = _world.Store.GetEntityById(cmd.ColonistId);
+        if (colonist == default) return;
+        if (!colonist.HasComponent<Inventory>() || !colonist.HasComponent<TilePosition>()) return;
+        ref var inv = ref colonist.GetComponent<Inventory>();
+        ref var pos = ref colonist.GetComponent<TilePosition>();
+        var (defId, count) = InventoryOps.RemoveAt(ref inv, cmd.StackIndex);
+        if (count <= 0 || string.IsNullOrEmpty(defId)) return;
+        var def = ItemCatalog.Get(defId);
+        if (def.Kind == ItemKind.Minified)
+        {
+            // Inventory doesn't carry per-instance minified metadata yet —
+            // dropping packages a fresh minified at the colonist's tile
+            // using the inventory entry's defId as the wrapped def.
+            // Phase-3 follow-up: persist Rotation/BaseLayer in the stack.
+            _world.SpawnMinifiedThing(defId, pos.TileX, pos.TileY, 0, 0);
+        }
+        else
+        {
+            _world.AddOrMergeItem(pos.TileX, pos.TileY, def.Kind, count);
+        }
+    }
+
+    private void Apply(EquipFromInventoryCommand cmd)
+    {
+        var colonist = _world.Store.GetEntityById(cmd.ColonistId);
+        if (colonist == default || !colonist.HasComponent<Inventory>()) return;
+        ref var inv = ref colonist.GetComponent<Inventory>();
+        InventoryOps.Equip(ref inv, cmd.StackIndex);
+    }
+
+    private void Apply(UnequipInventoryCommand cmd)
+    {
+        var colonist = _world.Store.GetEntityById(cmd.ColonistId);
+        if (colonist == default || !colonist.HasComponent<Inventory>()) return;
+        ref var inv = ref colonist.GetComponent<Inventory>();
+        InventoryOps.Unequip(ref inv, cmd.StackIndex);
     }
 
     private void Apply(UninstallStructureCommand cmd)

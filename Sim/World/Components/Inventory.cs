@@ -13,12 +13,17 @@ public struct InventoryStack
     public string DefId;
     public int Count;
     public bool Equipped;
+    // Player force-picked this stack. Auto-haul and auto-construct skip
+    // locked stacks — they sit in inventory until the player force-drops
+    // them. Cleared on force-drop only.
+    public bool Locked;
 
-    public InventoryStack(string defId, int count, bool equipped = false)
+    public InventoryStack(string defId, int count, bool equipped = false, bool locked = false)
     {
         DefId = defId;
         Count = count;
         Equipped = equipped;
+        Locked = locked;
     }
 }
 

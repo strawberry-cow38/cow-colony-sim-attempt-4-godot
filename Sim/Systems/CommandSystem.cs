@@ -6,6 +6,7 @@ using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.World;
 using CowColonySim.Sim.World.Components;
 using CowColonySim.Sim.Zones;
+using Friflo.Engine.ECS;
 
 namespace CowColonySim.Sim.Systems;
 

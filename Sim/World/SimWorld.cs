@@ -121,6 +121,16 @@ public sealed class SimWorld
         return e;
     }
 
+    public Entity SpawnMinifiedThing(string defId, int tileX, int tileY, int rotation, int baseLayer)
+    {
+        var def = BlueprintCatalog.Get(defId);
+        var e = Store.CreateEntity();
+        e.AddComponent(new TilePosition(tileX, tileY, 0, 0.5f, 0.5f));
+        e.AddComponent(new Item { Kind = ItemKind.Minified, Count = 1, Capacity = 1 });
+        e.AddComponent(new MinifiedThing { DefId = def.Id, Rotation = rotation, BaseLayer = baseLayer });
+        return e;
+    }
+
     public Entity SpawnStructure(string defId, int tileX, int tileY, int rotation = 0, int baseLayer = 0)
     {
         var def = BlueprintCatalog.Get(defId);

@@ -108,12 +108,28 @@ public sealed class ConstructionJobSystem : ITickSystem
         var bpEnt = d.BlueprintId == 0 ? default : _world.Store.GetEntityById(d.BlueprintId);
         if (bpEnt == default)
         {
-            _world.AddOrMergeItem(d.TileX, d.TileY, d.Kind, d.Count);
+            DropPayload(d);
             return;
         }
         ref var g = ref bpEnt.GetComponent<BlueprintGhost>();
-        var def = BlueprintCatalog.Get(g.DefId);
-        var required = TotalMaterialOf(def, d.Kind);
+        if (d.Kind == ItemKind.Minified)
+        {
+            // Minified must match this blueprint's defId. Otherwise drop —
+            // we accidentally hauled the wrong package.
+            if (d.MinifiedDefId != g.DefId)
+            {
+                DropPayload(d);
+                return;
+            }
+            var def = BlueprintCatalog.Get(g.DefId);
+            g.MinifiedDelivered = true;
+            g.MaterialDeposited = TotalMaterialOf(def, ItemKind.Wood);
+            g.BuildProgress = 1f;
+            _completedBlueprints.Add(bpEnt.Id);
+            return;
+        }
+        var rawDef = BlueprintCatalog.Get(g.DefId);
+        var required = TotalMaterialOf(rawDef, d.Kind);
         var room = required - g.MaterialDeposited;
         if (room <= 0)
         {
@@ -124,6 +140,16 @@ public sealed class ConstructionJobSystem : ITickSystem
         g.MaterialDeposited += take;
         var leftover = d.Count - take;
         if (leftover > 0) _world.AddOrMergeItem(d.TileX, d.TileY, d.Kind, leftover);
+    }
+
+    private void DropPayload(DepositAction d)
+    {
+        if (d.Kind == ItemKind.Minified)
+        {
+            _world.SpawnMinifiedThing(d.MinifiedDefId, d.TileX, d.TileY, 0, 0);
+            return;
+        }
+        _world.AddOrMergeItem(d.TileX, d.TileY, d.Kind, d.Count);
     }
 
     private void CompleteBlueprint(int bpId)
@@ -171,6 +197,7 @@ public sealed class ConstructionJobSystem : ITickSystem
             work.Carrying = true;
             work.CarryKind = item.Kind;
             work.CarryCount = item.Count;
+            work.CarryMinifiedDefId = item.Kind == ItemKind.Minified ? item.MinifiedDefId : null;
             _pickupsToDelete.Add(work.TargetEntityId);
             EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
             return;
@@ -180,7 +207,7 @@ public sealed class ConstructionJobSystem : ITickSystem
         {
             if (pf.LastPathFailed)
             {
-                _deposits.Add(new DepositAction(0, work.CarryKind, work.CarryCount, pos.TileX, pos.TileY));
+                _deposits.Add(new DepositAction(0, work.CarryKind, work.CarryCount, pos.TileX, pos.TileY, work.CarryMinifiedDefId ?? string.Empty));
                 ClearWork(ref work, ref pf);
                 return;
             }
@@ -190,7 +217,7 @@ public sealed class ConstructionJobSystem : ITickSystem
 
         var bp = FindBlueprintAt(blueprints, work.DropTileX, work.DropTileY);
         var bpId = bp.HasValue ? bp.Value.EntityId : 0;
-        _deposits.Add(new DepositAction(bpId, work.CarryKind, work.CarryCount, work.DropTileX, work.DropTileY));
+        _deposits.Add(new DepositAction(bpId, work.CarryKind, work.CarryCount, work.DropTileX, work.DropTileY, work.CarryMinifiedDefId ?? string.Empty));
         ClearWork(ref work, ref pf);
     }
 
@@ -253,21 +280,47 @@ public sealed class ConstructionJobSystem : ITickSystem
                 var chosenItem = 0;
                 var chosenX = 0;
                 var chosenY = 0;
-                var bestItemDist = float.PositiveInfinity;
-                for (var i = 0; i < items.Count; i++)
+                // Pass 1: matching minified package wins outright — drops one
+                // payload and the blueprint completes, no wood needed.
+                if (bp.MaterialDeposited == 0)
                 {
-                    var it = items[i];
-                    if (it.Kind != ItemKind.Wood || it.Forbidden) continue;
-                    if (claimedItems.Contains(it.EntityId)) continue;
-                    var idx = it.TileX - pos.TileX;
-                    var idy = it.TileY - pos.TileY;
-                    var d = idx * idx + idy * idy;
-                    if (d < bestItemDist)
+                    var bestMiniDist = float.PositiveInfinity;
+                    for (var i = 0; i < items.Count; i++)
                     {
-                        bestItemDist = d;
-                        chosenItem = it.EntityId;
-                        chosenX = it.TileX;
-                        chosenY = it.TileY;
+                        var it = items[i];
+                        if (it.Kind != ItemKind.Minified || it.Forbidden) continue;
+                        if (it.MinifiedDefId != bp.DefId) continue;
+                        if (claimedItems.Contains(it.EntityId)) continue;
+                        var idx = it.TileX - pos.TileX;
+                        var idy = it.TileY - pos.TileY;
+                        var d = idx * idx + idy * idy;
+                        if (d < bestMiniDist)
+                        {
+                            bestMiniDist = d;
+                            chosenItem = it.EntityId;
+                            chosenX = it.TileX;
+                            chosenY = it.TileY;
+                        }
+                    }
+                }
+                if (chosenItem == 0)
+                {
+                    var bestItemDist = float.PositiveInfinity;
+                    for (var i = 0; i < items.Count; i++)
+                    {
+                        var it = items[i];
+                        if (it.Kind != ItemKind.Wood || it.Forbidden) continue;
+                        if (claimedItems.Contains(it.EntityId)) continue;
+                        var idx = it.TileX - pos.TileX;
+                        var idy = it.TileY - pos.TileY;
+                        var d = idx * idx + idy * idy;
+                        if (d < bestItemDist)
+                        {
+                            bestItemDist = d;
+                            chosenItem = it.EntityId;
+                            chosenX = it.TileX;
+                            chosenY = it.TileY;
+                        }
                     }
                 }
                 if (chosenItem == 0) continue;
@@ -318,6 +371,7 @@ public sealed class ConstructionJobSystem : ITickSystem
             work.Carrying = false;
             work.CarryKind = ItemKind.None;
             work.CarryCount = 0;
+            work.CarryMinifiedDefId = null;
             claimedItems.Add(bestItemId);
             claimedBps.Add(bestBpId);
             EnsurePath(entity, ref pf, pos.TileX, pos.TileY, bestItemX, bestItemY);
@@ -385,7 +439,12 @@ public sealed class ConstructionJobSystem : ITickSystem
         {
             ref var it = ref entity.GetComponent<Item>();
             ref var pos = ref entity.GetComponent<TilePosition>();
-            var snap = new ItemSnapshot(entity.Id, it.Kind, it.Count, pos.TileX, pos.TileY, it.Forbidden);
+            var miniDef = string.Empty;
+            if (entity.HasComponent<MinifiedThing>())
+            {
+                miniDef = entity.GetComponent<MinifiedThing>().DefId;
+            }
+            var snap = new ItemSnapshot(entity.Id, it.Kind, it.Count, pos.TileX, pos.TileY, it.Forbidden, miniDef);
             list.Add(snap);
             byEntity[entity.Id] = snap;
         }
@@ -423,6 +482,7 @@ public sealed class ConstructionJobSystem : ITickSystem
         work.Carrying = false;
         work.CarryKind = ItemKind.None;
         work.CarryCount = 0;
+        work.CarryMinifiedDefId = null;
         pf.Tiles = null;
         pf.Index = 0;
     }
@@ -450,9 +510,11 @@ public sealed class ConstructionJobSystem : ITickSystem
         public readonly int TileX;
         public readonly int TileY;
         public readonly bool Forbidden;
-        public ItemSnapshot(int id, ItemKind k, int c, int tx, int ty, bool forbidden)
+        public readonly string MinifiedDefId;
+        public ItemSnapshot(int id, ItemKind k, int c, int tx, int ty, bool forbidden, string miniDef)
         {
             EntityId = id; Kind = k; Count = c; TileX = tx; TileY = ty; Forbidden = forbidden;
+            MinifiedDefId = miniDef;
         }
     }
 
@@ -463,7 +525,8 @@ public sealed class ConstructionJobSystem : ITickSystem
         public readonly int Count;
         public readonly int TileX;
         public readonly int TileY;
-        public DepositAction(int bp, ItemKind k, int c, int tx, int ty)
-        { BlueprintId = bp; Kind = k; Count = c; TileX = tx; TileY = ty; }
+        public readonly string MinifiedDefId;
+        public DepositAction(int bp, ItemKind k, int c, int tx, int ty, string miniDef)
+        { BlueprintId = bp; Kind = k; Count = c; TileX = tx; TileY = ty; MinifiedDefId = miniDef; }
     }
 }

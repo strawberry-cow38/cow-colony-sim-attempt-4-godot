@@ -7,4 +7,8 @@ public enum ItemKind
     None = 0,
     Wood = 1,
     Wheat = 2,
+    // A whole structure compressed back into a portable item, paired
+    // with a MinifiedThing component that carries the original DefId
+    // and any per-instance settings. Never stacks (Count = 1).
+    Minified = 3,
 }

@@ -68,21 +68,34 @@ public sealed class CommandSystem : ITickSystem
                     Apply(cb);
                     break;
                 case UninstallStructureCommand us:
-                    Apply(us, refundFraction: 1f);
+                    Apply(us);
                     break;
                 case DeconstructStructureCommand ds:
-                    Apply(ds.EntityId, refundFraction: 0.5f);
+                    ApplyDeconstruct(ds.EntityId);
                     break;
             }
         }
     }
 
-    private void Apply(UninstallStructureCommand cmd, float refundFraction)
+    private void Apply(UninstallStructureCommand cmd)
     {
-        Apply(cmd.EntityId, refundFraction);
+        var ent = _world.Store.GetEntityById(cmd.EntityId);
+        if (ent == default || !ent.HasComponent<Structure>() || !ent.HasComponent<TilePosition>()) return;
+        ref var s = ref ent.GetComponent<Structure>();
+        ref var pos = ref ent.GetComponent<TilePosition>();
+        var def = BlueprintCatalog.Get(s.DefId);
+
+        UnblockFootprintIfStructure(def, s.Rotation, pos.TileX, pos.TileY);
+        var defId = s.DefId;
+        var rotation = s.Rotation;
+        var baseLayer = s.BaseLayer;
+        var tileX = pos.TileX;
+        var tileY = pos.TileY;
+        ent.DeleteEntity();
+        _world.SpawnMinifiedThing(defId, tileX, tileY, rotation, baseLayer);
     }
 
-    private void Apply(int structureId, float refundFraction)
+    private void ApplyDeconstruct(int structureId)
     {
         var ent = _world.Store.GetEntityById(structureId);
         if (ent == default || !ent.HasComponent<Structure>() || !ent.HasComponent<TilePosition>()) return;
@@ -93,21 +106,24 @@ public sealed class CommandSystem : ITickSystem
         for (var i = 0; i < mats.Count; i++)
         {
             var m = mats[i];
-            var refund = (int)Math.Floor(m.Count * refundFraction);
+            var refund = m.Count / 2;
             if (refund > 0) _world.AddOrMergeItem(pos.TileX, pos.TileY, m.Kind, refund);
         }
-        if (def.Category == BlueprintCategory.Structure)
+        UnblockFootprintIfStructure(def, s.Rotation, pos.TileX, pos.TileY);
+        ent.DeleteEntity();
+    }
+
+    private void UnblockFootprintIfStructure(BlueprintDef def, int rotation, int tileX, int tileY)
+    {
+        if (def.Category != BlueprintCategory.Structure) return;
+        var (footW, footH) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+        for (var dy = 0; dy < footH; dy++)
         {
-            var (footW, footH) = (s.Rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
-            for (var dy = 0; dy < footH; dy++)
+            for (var dx = 0; dx < footW; dx++)
             {
-                for (var dx = 0; dx < footW; dx++)
-                {
-                    _grid.MarkBlocked(pos.TileX + dx, pos.TileY + dy, false);
-                }
+                _grid.MarkBlocked(tileX + dx, tileY + dy, false);
             }
         }
-        ent.DeleteEntity();
     }
 
     private void Apply(CancelBlueprintCommand cmd)
@@ -118,14 +134,21 @@ public sealed class CommandSystem : ITickSystem
         ref var pos = ref bp.GetComponent<TilePosition>();
         var def = BlueprintCatalog.Get(g.DefId);
 
-        var deposited = g.MaterialDeposited;
-        var mats = def.MaterialsOrEmpty;
-        for (var i = 0; i < mats.Count && deposited > 0; i++)
+        if (g.MinifiedDelivered)
         {
-            var m = mats[i];
-            var drop = Math.Min(m.Count, deposited);
-            if (drop > 0) _world.AddOrMergeItem(pos.TileX, pos.TileY, m.Kind, drop);
-            deposited -= drop;
+            _world.SpawnMinifiedThing(g.DefId, pos.TileX, pos.TileY, g.Rotation, g.BaseLayer);
+        }
+        else
+        {
+            var deposited = g.MaterialDeposited;
+            var mats = def.MaterialsOrEmpty;
+            for (var i = 0; i < mats.Count && deposited > 0; i++)
+            {
+                var m = mats[i];
+                var drop = Math.Min(m.Count, deposited);
+                if (drop > 0) _world.AddOrMergeItem(pos.TileX, pos.TileY, m.Kind, drop);
+                deposited -= drop;
+            }
         }
 
         var query = _world.Store.Query<Colonist, WorkJob>();
@@ -141,7 +164,14 @@ public sealed class CommandSystem : ITickSystem
             if (w.Carrying && w.CarryCount > 0 && entity.HasComponent<TilePosition>())
             {
                 ref var ePos = ref entity.GetComponent<TilePosition>();
-                _world.AddOrMergeItem(ePos.TileX, ePos.TileY, w.CarryKind, w.CarryCount);
+                if (w.CarryKind == ItemKind.Minified && !string.IsNullOrEmpty(w.CarryMinifiedDefId))
+                {
+                    _world.SpawnMinifiedThing(w.CarryMinifiedDefId, ePos.TileX, ePos.TileY, 0, 0);
+                }
+                else
+                {
+                    _world.AddOrMergeItem(ePos.TileX, ePos.TileY, w.CarryKind, w.CarryCount);
+                }
             }
             w.Active = false;
             w.Kind = WorkKind.None;
@@ -149,6 +179,7 @@ public sealed class CommandSystem : ITickSystem
             w.Carrying = false;
             w.CarryKind = ItemKind.None;
             w.CarryCount = 0;
+            w.CarryMinifiedDefId = null;
         }
 
         bp.DeleteEntity();
@@ -299,6 +330,7 @@ public sealed class CommandSystem : ITickSystem
         work.Carrying = false;
         work.CarryKind = ItemKind.None;
         work.CarryCount = 0;
+        work.CarryMinifiedDefId = null;
         pf.Tiles = null;
         pf.Index = 0;
     }

@@ -274,7 +274,15 @@ public sealed class SimRuntime : IDisposable
         {
             ref var it = ref entity.GetComponent<Item>();
             ref var p = ref entity.GetComponent<TilePosition>();
-            views[i++] = new ItemView(entity.Id, it.Kind, it.Count, it.Capacity, p.TileX, p.TileY, it.Forbidden);
+            string? miniDef = null;
+            var miniRot = 0;
+            if (entity.HasComponent<MinifiedThing>())
+            {
+                ref var m = ref entity.GetComponent<MinifiedThing>();
+                miniDef = m.DefId;
+                miniRot = m.Rotation;
+            }
+            views[i++] = new ItemView(entity.Id, it.Kind, it.Count, it.Capacity, p.TileX, p.TileY, it.Forbidden, miniDef, miniRot);
         }
         return views;
     }

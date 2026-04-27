@@ -19,6 +19,11 @@ public struct BlueprintGhost : IComponent
     // single Wood cost so one counter is enough; multi-material recipes
     // can grow this into a per-kind dictionary later.
     public int MaterialDeposited;
+    // Set true when a minified item has been delivered in lieu of raw
+    // materials. On completion the structure spawns from this ghost's
+    // DefId/Rotation/BaseLayer. On cancel a fresh minified item is
+    // dropped (carrying the original metadata) instead of raw mats.
+    public bool MinifiedDelivered;
 
     public BlueprintGhost() { }
 }

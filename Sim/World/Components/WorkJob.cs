@@ -30,6 +30,9 @@ public struct WorkJob : IComponent
     public bool Carrying;
     public ItemKind CarryKind;
     public int CarryCount;
+    // Non-empty only when CarryKind == Minified — carries the wrapped
+    // structure's defId so the deposit matches a blueprint by id.
+    public string? CarryMinifiedDefId;
     public int DropTileX;
     public int DropTileY;
 }

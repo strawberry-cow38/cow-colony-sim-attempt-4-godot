@@ -39,8 +39,9 @@ public sealed class HaulSystem : ITickSystem
         public readonly int TileY;
         public readonly ItemKind Kind;
         public readonly int Count;
-        public DepositAction(int tx, int ty, ItemKind kind, int count)
-        { TileX = tx; TileY = ty; Kind = kind; Count = count; }
+        public readonly string MinifiedDefId;
+        public DepositAction(int tx, int ty, ItemKind kind, int count, string miniDef)
+        { TileX = tx; TileY = ty; Kind = kind; Count = count; MinifiedDefId = miniDef; }
     }
 
     public HaulSystem(SimWorld world, PathPlanner planner, HeightGrid grid)
@@ -97,7 +98,14 @@ public sealed class HaulSystem : ITickSystem
         for (var i = 0; i < _deposits.Count; i++)
         {
             var d = _deposits[i];
-            _world.AddOrMergeItem(d.TileX, d.TileY, d.Kind, d.Count);
+            if (d.Kind == ItemKind.Minified && !string.IsNullOrEmpty(d.MinifiedDefId))
+            {
+                _world.SpawnMinifiedThing(d.MinifiedDefId, d.TileX, d.TileY, 0, 0);
+            }
+            else
+            {
+                _world.AddOrMergeItem(d.TileX, d.TileY, d.Kind, d.Count);
+            }
         }
     }
 
@@ -127,6 +135,7 @@ public sealed class HaulSystem : ITickSystem
             work.Carrying = true;
             work.CarryKind = item.Kind;
             work.CarryCount = item.Count;
+            work.CarryMinifiedDefId = item.Kind == ItemKind.Minified ? item.MinifiedDefId : null;
             _pickups.Add(new PickupAction(work.TargetEntityId));
             // Switch the goal to the stockpile drop tile.
             EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
@@ -140,14 +149,14 @@ public sealed class HaulSystem : ITickSystem
             // current tile so it lives somewhere visible.
             if (pf.LastPathFailed)
             {
-                _deposits.Add(new DepositAction(pos.TileX, pos.TileY, work.CarryKind, work.CarryCount));
+                _deposits.Add(new DepositAction(pos.TileX, pos.TileY, work.CarryKind, work.CarryCount, work.CarryMinifiedDefId ?? string.Empty));
                 ClearWork(ref work, ref pf);
                 return;
             }
             EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
             return;
         }
-        _deposits.Add(new DepositAction(work.DropTileX, work.DropTileY, work.CarryKind, work.CarryCount));
+        _deposits.Add(new DepositAction(work.DropTileX, work.DropTileY, work.CarryKind, work.CarryCount, work.CarryMinifiedDefId ?? string.Empty));
         ClearWork(ref work, ref pf);
     }
 
@@ -197,6 +206,7 @@ public sealed class HaulSystem : ITickSystem
         work.Carrying = false;
         work.CarryKind = ItemKind.None;
         work.CarryCount = 0;
+        work.CarryMinifiedDefId = null;
         claimedItems.Add(bestItem);
         occupiedDropTiles.Add((dropX, dropY));
 
@@ -289,6 +299,7 @@ public sealed class HaulSystem : ITickSystem
         work.Carrying = false;
         work.CarryKind = ItemKind.None;
         work.CarryCount = 0;
+        work.CarryMinifiedDefId = null;
         pf.Tiles = null;
         pf.Index = 0;
     }
@@ -302,7 +313,8 @@ public sealed class HaulSystem : ITickSystem
         public readonly int TileX;
         public readonly int TileY;
         public readonly bool Forbidden;
-        public ItemSnapshot(int id, ItemKind kind, int count, int capacity, int tx, int ty, bool forbidden)
+        public readonly string MinifiedDefId;
+        public ItemSnapshot(int id, ItemKind kind, int count, int capacity, int tx, int ty, bool forbidden, string miniDef)
         {
             EntityId = id;
             Kind = kind;
@@ -311,6 +323,7 @@ public sealed class HaulSystem : ITickSystem
             TileX = tx;
             TileY = ty;
             Forbidden = forbidden;
+            MinifiedDefId = miniDef;
         }
     }
 
@@ -322,7 +335,9 @@ public sealed class HaulSystem : ITickSystem
         {
             ref var it = ref entity.GetComponent<Item>();
             ref var pos = ref entity.GetComponent<TilePosition>();
-            var snap = new ItemSnapshot(entity.Id, it.Kind, it.Count, it.Capacity, pos.TileX, pos.TileY, it.Forbidden);
+            var miniDef = entity.HasComponent<MinifiedThing>()
+                ? entity.GetComponent<MinifiedThing>().DefId : string.Empty;
+            var snap = new ItemSnapshot(entity.Id, it.Kind, it.Count, it.Capacity, pos.TileX, pos.TileY, it.Forbidden, miniDef);
             byTile[(pos.TileX, pos.TileY)] = snap;
             byEntity[entity.Id] = snap;
         }

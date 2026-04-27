@@ -69,12 +69,13 @@ public static class BlueprintCatalog
                 DisplayName: "Crafting Table",
                 Category: BlueprintCategory.Workstation,
                 Placement: PlacementMode.Footprint,
-                FootprintW: 2, FootprintH: 1,
+                FootprintW: 1, FootprintH: 1,
                 Rotatable: true,
                 Requirements: new[]
                 {
                     new FootprintRequirement(FootprintRequirementKind.InteractionSpot, 0, 1),
-                }),
+                },
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 8) }),
 
             new BlueprintDef(
                 Id: "utility.ac_unit",
@@ -86,7 +87,20 @@ public static class BlueprintCatalog
                 Requirements: new[]
                 {
                     new FootprintRequirement(FootprintRequirementKind.VentSide, 0, -1),
-                }),
+                    new FootprintRequirement(FootprintRequirementKind.VentSide, 0, 1),
+                },
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 6) }),
+
+            new BlueprintDef(
+                Id: "furniture.table",
+                DisplayName: "Table",
+                Category: BlueprintCategory.Furniture,
+                Placement: PlacementMode.Footprint,
+                FootprintW: 2, FootprintH: 2,
+                Rotatable: false,
+                Requirements: System.Array.Empty<FootprintRequirement>(),
+                HeightMeters: 0.75f,
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 12) }),
         };
 
         var dict = new Dictionary<string, BlueprintDef>(defs.Length);

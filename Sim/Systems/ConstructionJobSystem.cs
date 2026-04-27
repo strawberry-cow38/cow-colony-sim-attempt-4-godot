@@ -136,10 +136,20 @@ public sealed class ConstructionJobSystem : ITickSystem
         _world.SpawnStructure(g.DefId, pos.TileX, pos.TileY, g.Rotation, g.BaseLayer);
         if (def.Category == BlueprintCategory.Structure)
         {
-            _grid.MarkBlocked(pos.TileX, pos.TileY, true);
+            var (footW, footH) = RotatedFootprint(def.FootprintW, def.FootprintH, g.Rotation);
+            for (var dy = 0; dy < footH; dy++)
+            {
+                for (var dx = 0; dx < footW; dx++)
+                {
+                    _grid.MarkBlocked(pos.TileX + dx, pos.TileY + dy, true);
+                }
+            }
         }
         bpEnt.DeleteEntity();
     }
+
+    private static (int w, int h) RotatedFootprint(int w, int h, int rot)
+        => (rot & 1) == 0 ? (w, h) : (h, w);
 
     private void ProgressHaul(
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
@@ -332,7 +342,7 @@ public sealed class ConstructionJobSystem : ITickSystem
     }
 
     private static bool IsBuildable(BlueprintDef def) =>
-        def.FootprintW == 1 && def.FootprintH == 1 && def.MaterialsOrEmpty.Count > 0;
+        def.MaterialsOrEmpty.Count > 0;
 
     private static int TotalMaterialOf(BlueprintDef def, ItemKind kind)
     {

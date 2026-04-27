@@ -64,8 +64,94 @@ public sealed class CommandSystem : ITickSystem
                 case SetItemForbiddenCommand sf:
                     Apply(sf);
                     break;
+                case CancelBlueprintCommand cb:
+                    Apply(cb);
+                    break;
+                case UninstallStructureCommand us:
+                    Apply(us, refundFraction: 1f);
+                    break;
+                case DeconstructStructureCommand ds:
+                    Apply(ds.EntityId, refundFraction: 0.5f);
+                    break;
             }
         }
+    }
+
+    private void Apply(UninstallStructureCommand cmd, float refundFraction)
+    {
+        Apply(cmd.EntityId, refundFraction);
+    }
+
+    private void Apply(int structureId, float refundFraction)
+    {
+        var ent = _world.Store.GetEntityById(structureId);
+        if (ent == default || !ent.HasComponent<Structure>() || !ent.HasComponent<TilePosition>()) return;
+        ref var s = ref ent.GetComponent<Structure>();
+        ref var pos = ref ent.GetComponent<TilePosition>();
+        var def = BlueprintCatalog.Get(s.DefId);
+        var mats = def.MaterialsOrEmpty;
+        for (var i = 0; i < mats.Count; i++)
+        {
+            var m = mats[i];
+            var refund = (int)Math.Floor(m.Count * refundFraction);
+            if (refund > 0) _world.AddOrMergeItem(pos.TileX, pos.TileY, m.Kind, refund);
+        }
+        if (def.Category == BlueprintCategory.Structure)
+        {
+            var (footW, footH) = (s.Rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+            for (var dy = 0; dy < footH; dy++)
+            {
+                for (var dx = 0; dx < footW; dx++)
+                {
+                    _grid.MarkBlocked(pos.TileX + dx, pos.TileY + dy, false);
+                }
+            }
+        }
+        ent.DeleteEntity();
+    }
+
+    private void Apply(CancelBlueprintCommand cmd)
+    {
+        var bp = _world.Store.GetEntityById(cmd.EntityId);
+        if (bp == default || !bp.HasComponent<BlueprintGhost>() || !bp.HasComponent<TilePosition>()) return;
+        ref var g = ref bp.GetComponent<BlueprintGhost>();
+        ref var pos = ref bp.GetComponent<TilePosition>();
+        var def = BlueprintCatalog.Get(g.DefId);
+
+        var deposited = g.MaterialDeposited;
+        var mats = def.MaterialsOrEmpty;
+        for (var i = 0; i < mats.Count && deposited > 0; i++)
+        {
+            var m = mats[i];
+            var drop = Math.Min(m.Count, deposited);
+            if (drop > 0) _world.AddOrMergeItem(pos.TileX, pos.TileY, m.Kind, drop);
+            deposited -= drop;
+        }
+
+        var query = _world.Store.Query<Colonist, WorkJob>();
+        foreach (var entity in query.Entities)
+        {
+            ref var w = ref entity.GetComponent<WorkJob>();
+            if (!w.Active) continue;
+            var clear = false;
+            if (w.Kind == WorkKind.Construct && w.TargetEntityId == cmd.EntityId) clear = true;
+            else if (w.Kind == WorkKind.HaulToBlueprint
+                && w.DropTileX == pos.TileX && w.DropTileY == pos.TileY) clear = true;
+            if (!clear) continue;
+            if (w.Carrying && w.CarryCount > 0 && entity.HasComponent<TilePosition>())
+            {
+                ref var ePos = ref entity.GetComponent<TilePosition>();
+                _world.AddOrMergeItem(ePos.TileX, ePos.TileY, w.CarryKind, w.CarryCount);
+            }
+            w.Active = false;
+            w.Kind = WorkKind.None;
+            w.TargetEntityId = 0;
+            w.Carrying = false;
+            w.CarryKind = ItemKind.None;
+            w.CarryCount = 0;
+        }
+
+        bp.DeleteEntity();
     }
 
     private void Apply(PrioritizeHaulCommand cmd)

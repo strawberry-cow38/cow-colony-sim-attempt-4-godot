@@ -1,4 +1,5 @@
 using CowColonySim.Game.Selection;
+using CowColonySim.Sim.Blueprints;
 using CowColonySim.Sim.Commands;
 using CowColonySim.Sim.Designations;
 using CowColonySim.Sim.Items;
@@ -36,6 +37,17 @@ public partial class InfoPanel : CanvasLayer
     private Label _itemHeader = null!;
     private Label _itemDescription = null!;
     private CheckBox _forbidCheck = null!;
+
+    private VBoxContainer _blueprintBox = null!;
+    private Label _blueprintHeader = null!;
+    private Label _blueprintMaterials = null!;
+    private ProgressBar _blueprintProgressBar = null!;
+    private Button _cancelBlueprintBtn = null!;
+
+    private VBoxContainer _structureBox = null!;
+    private Label _structureHeader = null!;
+    private Button _uninstallBtn = null!;
+    private Button _deconstructBtn = null!;
 
     private Label _emptyLabel = null!;
     private bool _forbidSyncing;
@@ -107,6 +119,30 @@ public partial class InfoPanel : CanvasLayer
         _forbidCheck = new CheckBox { Text = "forbid" };
         _forbidCheck.Toggled += OnForbidToggled;
         _itemBox.AddChild(_forbidCheck);
+
+        _blueprintBox = new VBoxContainer { Visible = false };
+        root.AddChild(_blueprintBox);
+        _blueprintHeader = MakeLabel("blueprint");
+        _blueprintBox.AddChild(_blueprintHeader);
+        _blueprintMaterials = MakeLabel("0 / 0 wood");
+        _blueprintBox.AddChild(_blueprintMaterials);
+        _blueprintBox.AddChild(MakeLabel("build progress"));
+        _blueprintProgressBar = MakeBar(new Color(0.4f, 0.7f, 0.95f));
+        _blueprintBox.AddChild(_blueprintProgressBar);
+        _cancelBlueprintBtn = new Button { Text = "cancel" };
+        _cancelBlueprintBtn.Pressed += OnCancelBlueprint;
+        _blueprintBox.AddChild(_cancelBlueprintBtn);
+
+        _structureBox = new VBoxContainer { Visible = false };
+        root.AddChild(_structureBox);
+        _structureHeader = MakeLabel("structure");
+        _structureBox.AddChild(_structureHeader);
+        _uninstallBtn = new Button { Text = "uninstall" };
+        _uninstallBtn.Pressed += OnUninstall;
+        _structureBox.AddChild(_uninstallBtn);
+        _deconstructBtn = new Button { Text = "deconstruct (returns half)" };
+        _deconstructBtn.Pressed += OnDeconstruct;
+        _structureBox.AddChild(_deconstructBtn);
     }
 
     private static Label MakeLabel(string text)
@@ -154,6 +190,16 @@ public partial class InfoPanel : CanvasLayer
             ShowItem(snap, itemId);
             return;
         }
+        if (_selection.SelectedBlueprintId is int bpId)
+        {
+            ShowBlueprint(snap, bpId);
+            return;
+        }
+        if (_selection.SelectedStructureId is int structId)
+        {
+            ShowStructure(snap, structId);
+            return;
+        }
         ShowEmpty();
     }
 
@@ -163,6 +209,74 @@ public partial class InfoPanel : CanvasLayer
         _colonistBox.Visible = false;
         _treeBox.Visible = false;
         _itemBox.Visible = false;
+        _blueprintBox.Visible = false;
+        _structureBox.Visible = false;
+    }
+
+    private void ShowBlueprint(SimSnapshot snap, int id)
+    {
+        _emptyLabel.Visible = false;
+        _colonistBox.Visible = false;
+        _treeBox.Visible = false;
+        _itemBox.Visible = false;
+        _structureBox.Visible = false;
+        _blueprintBox.Visible = true;
+        for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+        {
+            var g = snap.BlueprintGhosts[i];
+            if (g.EntityId != id) continue;
+            var name = BlueprintCatalog.TryGet(g.DefId, out var def) && def is not null
+                ? def.DisplayName : g.DefId;
+            _blueprintHeader.Text =
+                $"{name} (blueprint)\n" +
+                $"tile ({g.OriginTileX}, {g.OriginTileY})";
+            _blueprintMaterials.Text = $"{g.MaterialDeposited} / {g.MaterialRequired} wood";
+            _blueprintProgressBar.Value = Mathf.Clamp(g.BuildProgress * 100f, 0f, 100f);
+            return;
+        }
+        _blueprintHeader.Text = $"blueprint #{id} (gone)";
+        _blueprintMaterials.Text = "";
+        _blueprintProgressBar.Value = 0;
+    }
+
+    private void ShowStructure(SimSnapshot snap, int id)
+    {
+        _emptyLabel.Visible = false;
+        _colonistBox.Visible = false;
+        _treeBox.Visible = false;
+        _itemBox.Visible = false;
+        _blueprintBox.Visible = false;
+        _structureBox.Visible = true;
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            var s = snap.Structures[i];
+            if (s.EntityId != id) continue;
+            var name = BlueprintCatalog.TryGet(s.DefId, out var def) && def is not null
+                ? def.DisplayName : s.DefId;
+            _structureHeader.Text =
+                $"{name}\n" +
+                $"tile ({s.TileX}, {s.TileY})";
+            return;
+        }
+        _structureHeader.Text = $"structure #{id} (gone)";
+    }
+
+    private void OnCancelBlueprint()
+    {
+        if (_selection.SelectedBlueprintId is not int id) return;
+        _commands.Submit(new CancelBlueprintCommand(id));
+    }
+
+    private void OnUninstall()
+    {
+        if (_selection.SelectedStructureId is not int id) return;
+        _commands.Submit(new UninstallStructureCommand(id));
+    }
+
+    private void OnDeconstruct()
+    {
+        if (_selection.SelectedStructureId is not int id) return;
+        _commands.Submit(new DeconstructStructureCommand(id));
     }
 
     private void ShowColonist(SimSnapshot snap, int id)
@@ -170,6 +284,8 @@ public partial class InfoPanel : CanvasLayer
         _emptyLabel.Visible = false;
         _treeBox.Visible = false;
         _itemBox.Visible = false;
+        _blueprintBox.Visible = false;
+        _structureBox.Visible = false;
         _colonistBox.Visible = true;
         for (var i = 0; i < snap.Colonists.Count; i++)
         {
@@ -201,6 +317,8 @@ public partial class InfoPanel : CanvasLayer
         _emptyLabel.Visible = false;
         _colonistBox.Visible = false;
         _itemBox.Visible = false;
+        _blueprintBox.Visible = false;
+        _structureBox.Visible = false;
         _treeBox.Visible = true;
         for (var i = 0; i < snap.Trees.Count; i++)
         {
@@ -227,6 +345,8 @@ public partial class InfoPanel : CanvasLayer
         _emptyLabel.Visible = false;
         _colonistBox.Visible = false;
         _treeBox.Visible = false;
+        _blueprintBox.Visible = false;
+        _structureBox.Visible = false;
         _itemBox.Visible = true;
         for (var i = 0; i < snap.Items.Count; i++)
         {

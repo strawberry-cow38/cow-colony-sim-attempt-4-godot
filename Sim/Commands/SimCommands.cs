@@ -40,6 +40,20 @@ public readonly record struct SetItemForbiddenCommand(int ItemEntityId, bool For
 
 public readonly record struct PlaceBlueprintGhostCommand(string DefId, int OriginTileX, int OriginTileY, int Rotation, int BaseLayer) : ISimCommand;
 
+// Cancel a placed blueprint. Drops any deposited material as item stacks
+// at the blueprint origin tile, then deletes the ghost.
+public readonly record struct CancelBlueprintCommand(int EntityId) : ISimCommand;
+
+// Uninstall a built structure. For now: refunds 100% of the def's
+// materials at the structure tile and removes the structure.
+// Future: spawn a minified item that can be re-placed elsewhere.
+public readonly record struct UninstallStructureCommand(int EntityId) : ISimCommand;
+
+// Deconstruct a built structure. Refunds 50% of the def's materials
+// at the structure tile and removes the structure.
+// Future: timed work job; for now applied immediately.
+public readonly record struct DeconstructStructureCommand(int EntityId) : ISimCommand;
+
 // Wipes any zone/designation/blueprint-ghost entity that overlaps the
 // rect. Zones removed if any tile of their rect is inside; designations
 // + blueprint ghosts removed if their tile/origin is inside. Colonists,

@@ -110,14 +110,7 @@ public sealed class CommandSystem : ITickSystem
             ref var ow = ref other.GetComponent<WorkJob>();
             if (!ow.Active || ow.TargetEntityId != cmd.ItemEntityId) continue;
             ref var opf = ref other.GetComponent<PathFollower>();
-            ref var opos = ref other.GetComponent<TilePosition>();
-            if (ow.Carrying)
-            {
-                if (ow.CarryKind == ItemKind.Minified && !string.IsNullOrEmpty(ow.CarryMinifiedDefId))
-                    _world.SpawnMinifiedThing(ow.CarryMinifiedDefId, opos.TileX, opos.TileY, 0, 0);
-                else
-                    _world.AddOrMergeItem(opos.TileX, opos.TileY, ow.CarryKind, ow.CarryCount);
-            }
+            DrainUnlockedToTile(other, ow.CarryKind);
             ResetWorkJob(ref ow, ref opf);
         }
 
@@ -264,17 +257,9 @@ public sealed class CommandSystem : ITickSystem
             else if (w.Kind == WorkKind.HaulToBlueprint
                 && w.DropTileX == pos.TileX && w.DropTileY == pos.TileY) clear = true;
             if (!clear) continue;
-            if (w.Carrying && w.CarryCount > 0 && entity.HasComponent<TilePosition>())
+            if (w.Kind == WorkKind.HaulToBlueprint)
             {
-                ref var ePos = ref entity.GetComponent<TilePosition>();
-                if (w.CarryKind == ItemKind.Minified && !string.IsNullOrEmpty(w.CarryMinifiedDefId))
-                {
-                    _world.SpawnMinifiedThing(w.CarryMinifiedDefId, ePos.TileX, ePos.TileY, 0, 0);
-                }
-                else
-                {
-                    _world.AddOrMergeItem(ePos.TileX, ePos.TileY, w.CarryKind, w.CarryCount);
-                }
+                DrainUnlockedToTile(entity, w.CarryKind);
             }
             w.Active = false;
             w.Kind = WorkKind.None;
@@ -313,11 +298,7 @@ public sealed class CommandSystem : ITickSystem
             ref var ow = ref other.GetComponent<WorkJob>();
             if (!ow.Active || ow.Kind != WorkKind.HaulItem || ow.TargetEntityId != cmd.ItemEntityId) continue;
             ref var opf = ref other.GetComponent<PathFollower>();
-            ref var opos = ref other.GetComponent<TilePosition>();
-            if (ow.Carrying)
-            {
-                _world.AddOrMergeItem(opos.TileX, opos.TileY, ow.CarryKind, ow.CarryCount);
-            }
+            DrainUnlockedToTile(other, ow.CarryKind);
             ResetWorkJob(ref ow, ref opf);
         }
 
@@ -348,18 +329,15 @@ public sealed class CommandSystem : ITickSystem
         if (!cmd.Forbidden) return;
 
         // Forbidding clears every haul job pointing at this stack.
-        // If a colonist had already picked it up, drop the payload where
-        // they stand so the stack count survives.
+        // If a colonist had already pulled it into Inventory, drain the
+        // unlocked stacks of that kind onto their tile so the stack
+        // count survives.
         foreach (var other in _world.Store.Query<Colonist, WorkJob, PathFollower, TilePosition>().Entities)
         {
             ref var ow = ref other.GetComponent<WorkJob>();
             if (!ow.Active || ow.Kind != WorkKind.HaulItem || ow.TargetEntityId != cmd.ItemEntityId) continue;
             ref var opf = ref other.GetComponent<PathFollower>();
-            ref var opos = ref other.GetComponent<TilePosition>();
-            if (ow.Carrying)
-            {
-                _world.AddOrMergeItem(opos.TileX, opos.TileY, ow.CarryKind, ow.CarryCount);
-            }
+            DrainUnlockedToTile(other, ow.CarryKind);
             ResetWorkJob(ref ow, ref opf);
         }
     }
@@ -421,6 +399,32 @@ public sealed class CommandSystem : ITickSystem
         dropX = bestX;
         dropY = bestY;
         return true;
+    }
+
+    // Drop every unlocked, non-equipped inventory stack of `kind` at the
+    // colonist's tile. Used when pre-empting a haul (auto-haul, haul-to-
+    // blueprint) — the carried payload now lives in Inventory, so the
+    // pre-empt path has to drain it instead of reading the legacy
+    // WorkJob.CarryCount counter (which haul systems stopped writing).
+    private void DrainUnlockedToTile(Entity colonist, ItemKind kind)
+    {
+        if (kind == ItemKind.None) return;
+        if (!colonist.HasComponent<Inventory>() || !colonist.HasComponent<TilePosition>()) return;
+        ref var inv = ref colonist.GetComponent<Inventory>();
+        ref var pos = ref colonist.GetComponent<TilePosition>();
+        if (inv.Stacks is null) return;
+        for (var i = inv.Stacks.Count - 1; i >= 0; i--)
+        {
+            var s = inv.Stacks[i];
+            if (s.Locked || s.Equipped) continue;
+            var def = ItemCatalog.Get(s.DefId);
+            if (def.Kind != kind) continue;
+            if (def.Kind == ItemKind.Minified)
+                _world.SpawnMinifiedThing(s.DefId, pos.TileX, pos.TileY, 0, 0);
+            else
+                _world.AddOrMergeItem(pos.TileX, pos.TileY, def.Kind, s.Count);
+            inv.Stacks.RemoveAt(i);
+        }
     }
 
     private static void ResetWorkJob(ref WorkJob work, ref PathFollower pf)

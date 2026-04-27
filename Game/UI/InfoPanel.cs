@@ -32,6 +32,8 @@ public partial class InfoPanel : CanvasLayer
     private ProgressBar _bulkBar = null!;
     private VBoxContainer _inventoryList = null!;
     private AcceptDialog _itemInfoDialog = null!;
+    private int _lastInvColonistId;
+    private long _lastInvSig;
 
     private VBoxContainer _treeBox = null!;
     private Label _treeHeader = null!;
@@ -350,6 +352,14 @@ public partial class InfoPanel : CanvasLayer
 
     private void RebuildInventoryList(int colonistId, IReadOnlyList<InventoryStackView> inv)
     {
+        // Buttons are rebuilt only when contents change. _Process runs at
+        // 60Hz; QueueFree-ing buttons every frame races click handling
+        // (press lands on instance N, instance N+1 sees the release).
+        var sig = ComputeInvSig(inv);
+        if (colonistId == _lastInvColonistId && sig == _lastInvSig) return;
+        _lastInvColonistId = colonistId;
+        _lastInvSig = sig;
+
         foreach (var child in _inventoryList.GetChildren())
         {
             child.QueueFree();
@@ -392,6 +402,24 @@ public partial class InfoPanel : CanvasLayer
             row.AddChild(dropBtn);
 
             _inventoryList.AddChild(row);
+        }
+    }
+
+    private static long ComputeInvSig(IReadOnlyList<InventoryStackView> inv)
+    {
+        if (inv is null || inv.Count == 0) return 0L;
+        unchecked
+        {
+            long h = 14695981039346656037;
+            for (var i = 0; i < inv.Count; i++)
+            {
+                var s = inv[i];
+                h = (h ^ (s.DefId?.GetHashCode() ?? 0)) * 1099511628211L;
+                h = (h ^ s.Count) * 1099511628211L;
+                h = (h ^ (s.Equipped ? 1 : 0)) * 1099511628211L;
+                h = (h ^ (s.Locked ? 2 : 0)) * 1099511628211L;
+            }
+            return h == 0 ? 1 : h;
         }
     }
 

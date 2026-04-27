@@ -121,6 +121,8 @@ public partial class ContextMenu : CanvasLayer
         {
             AddOption($"prioritize haul (colonist #{colonistId})",
                 () => _commands.Submit(new PrioritizeHaulCommand(colonistId, itemId)));
+            AddOption($"force pickup (colonist #{colonistId})",
+                () => _commands.Submit(new ForcePickupCommand(colonistId, itemId)));
         }
         if (view.Forbidden)
         {

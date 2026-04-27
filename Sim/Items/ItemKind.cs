@@ -11,4 +11,8 @@ public enum ItemKind
     // with a MinifiedThing component that carries the original DefId
     // and any per-instance settings. Never stacks (Count = 1).
     Minified = 3,
+    // Wearable. Per-piece behavior comes from the ItemDef (layer, bonuses).
+    Apparel = 4,
+    // Equipped weapon. Single instance per colonist.
+    Weapon = 5,
 }

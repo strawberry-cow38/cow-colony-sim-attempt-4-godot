@@ -47,6 +47,8 @@ public sealed class SimWorld
         e.AddComponent(Needs.Full());
         e.AddComponent(new Job());
         e.AddComponent(new WorkJob());
+        e.AddComponent(Inventory.New());
+        e.AddComponent(CarryCaps.Default());
         return e;
     }
 

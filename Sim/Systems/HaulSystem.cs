@@ -1,5 +1,6 @@
 using CowColonySim.Sim.Designations;
 using CowColonySim.Sim.Items;
+using CowColonySim.Sim.Logging;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.World;
 using CowColonySim.Sim.World.Components;
@@ -120,6 +121,10 @@ public sealed class HaulSystem : ITickSystem
                 EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
                 return;
             }
+            SimLog.Logger.Information(
+                "HAUL drop-arrived colonist={Cid} drop=({DX},{DY}) carryKind={K} stacks={Sc}",
+                entity.Id, work.DropTileX, work.DropTileY, work.CarryKind,
+                inv.Stacks?.Count ?? 0);
             DrainCarriedToTile(ref inv, work.DropTileX, work.DropTileY, work.CarryKind);
             ClearWork(ref work, ref pf);
             return;
@@ -148,6 +153,9 @@ public sealed class HaulSystem : ITickSystem
         // At pickup tile — pull the whole stack (or as much as fits) into Inventory.
         var defId = ResolveDefId(item);
         var added = InventoryOps.Add(ref inv, in caps, defId, item.Count);
+        SimLog.Logger.Information(
+            "HAUL pickup colonist={Cid} at ({X},{Y}) defId={Def} item.Count={N} added={Added} drop=({DX},{DY})",
+            entity.Id, pos.TileX, pos.TileY, defId, item.Count, added, work.DropTileX, work.DropTileY);
         if (added <= 0)
         {
             // Inventory full — switch to drop with what we already have.
@@ -243,6 +251,9 @@ public sealed class HaulSystem : ITickSystem
                 break;
             }
         }
+        SimLog.Logger.Information(
+            "HAUL switch-to-drop colonist={Cid} pos=({X},{Y}) carryKind={K} holds={H} drop=({DX},{DY})",
+            entity.Id, pos.TileX, pos.TileY, work.CarryKind, holds, work.DropTileX, work.DropTileY);
         if (!holds)
         {
             ClearWork(ref work, ref pf);
@@ -317,7 +328,16 @@ public sealed class HaulSystem : ITickSystem
         }
         if (bestItem == -1) return;
 
-        if (!TryFindDropTile(bestKind, bestCount, itemsByTile, occupiedDropTiles, out var dropX, out var dropY)) return;
+        if (!TryFindDropTile(bestKind, bestCount, itemsByTile, occupiedDropTiles, out var dropX, out var dropY))
+        {
+            SimLog.Logger.Information(
+                "HAUL no-drop-tile colonist={Cid} kind={K} bestItem={B}",
+                entity.Id, bestKind, bestItem);
+            return;
+        }
+        SimLog.Logger.Information(
+            "HAUL assign colonist={Cid} pos=({X},{Y}) item={I} src=({SX},{SY}) drop=({DX},{DY})",
+            entity.Id, pos.TileX, pos.TileY, bestItem, bestItemTileX, bestItemTileY, dropX, dropY);
 
         work.Active = true;
         work.Kind = WorkKind.HaulItem;

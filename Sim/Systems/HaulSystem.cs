@@ -8,30 +8,22 @@ using Friflo.Engine.ECS;
 
 namespace CowColonySim.Sim.Systems;
 
-// Auto-haul: idle colonists pick up non-forbidden item stacks that
-// aren't already inside a stockpile and walk them to the highest-
-// priority stockpile zone with room. Two-phase WorkJob — phase 0 walks
-// to the source item, phase 1 walks to the drop tile. Carrying flips
-// when the colonist reaches the pickup tile (item entity consumed,
-// payload buffered into WorkJob until deposit).
+// Auto-haul: idle colonists pull non-forbidden item stacks that aren't
+// already in a stockpile into their Inventory, chain-pick more of the
+// same kind while bulk/weight room remains, then walk to the best
+// stockpile tile and drain the carried stacks back to the ground.
 //
-// Like ChopJobSystem, all entity creation/deletion is deferred outside
-// the colonist iteration. Friflo crashes if you mutate archetype
-// storage mid-foreach.
+// Inventory routing matters: locked + equipped stacks survive the
+// drain, so a force-picked log stays put and worn gear isn't tossed.
+// All entity creation/deletion is deferred outside the colonist loop.
 public sealed class HaulSystem : ITickSystem
 {
     private readonly SimWorld _world;
     private readonly PathPlanner _planner;
     private readonly HeightGrid _grid;
 
-    private readonly List<PickupAction> _pickups = new();
+    private readonly List<int> _pickupsToDelete = new();
     private readonly List<DepositAction> _deposits = new();
-
-    private readonly struct PickupAction
-    {
-        public readonly int ItemEntityId;
-        public PickupAction(int itemEntityId) { ItemEntityId = itemEntityId; }
-    }
 
     private readonly struct DepositAction
     {
@@ -53,7 +45,7 @@ public sealed class HaulSystem : ITickSystem
 
     public void Tick(TickContext ctx)
     {
-        _pickups.Clear();
+        _pickupsToDelete.Clear();
         _deposits.Clear();
 
         var stockpileTiles = CollectStockpileTiles();
@@ -66,22 +58,22 @@ public sealed class HaulSystem : ITickSystem
         {
             ref var work = ref entity.GetComponent<WorkJob>();
             if (!work.Active || work.Kind != WorkKind.HaulItem) continue;
-            claimedItems.Add(work.TargetEntityId);
+            if (work.TargetEntityId != 0) claimedItems.Add(work.TargetEntityId);
             occupiedDropTiles.Add((work.DropTileX, work.DropTileY));
         }
 
         foreach (var entity in query.Entities)
         {
             ref var job = ref entity.GetComponent<Job>();
+            if (job.Active) continue;
+            if (!entity.HasComponent<Inventory>() || !entity.HasComponent<CarryCaps>()) continue;
             ref var work = ref entity.GetComponent<WorkJob>();
             ref var pos = ref entity.GetComponent<TilePosition>();
             ref var pf = ref entity.GetComponent<PathFollower>();
 
-            if (job.Active) continue;
-
             if (work.Active && work.Kind == WorkKind.HaulItem)
             {
-                ProgressHaul(entity, ref work, ref pf, ref pos, itemsByEntity, stockpileTiles);
+                ProgressHaul(entity, ref work, ref pf, ref pos, itemsByTile, itemsByEntity, stockpileTiles, claimedItems);
             }
             else if (!work.Active)
             {
@@ -89,75 +81,208 @@ public sealed class HaulSystem : ITickSystem
             }
         }
 
-        for (var i = 0; i < _pickups.Count; i++)
+        for (var i = 0; i < _pickupsToDelete.Count; i++)
         {
-            var p = _pickups[i];
-            var item = _world.Store.GetEntityById(p.ItemEntityId);
+            var item = _world.Store.GetEntityById(_pickupsToDelete[i]);
             if (item != default) item.DeleteEntity();
         }
         for (var i = 0; i < _deposits.Count; i++)
         {
             var d = _deposits[i];
             if (d.Kind == ItemKind.Minified && !string.IsNullOrEmpty(d.MinifiedDefId))
-            {
                 _world.SpawnMinifiedThing(d.MinifiedDefId, d.TileX, d.TileY, 0, 0);
-            }
             else
-            {
                 _world.AddOrMergeItem(d.TileX, d.TileY, d.Kind, d.Count);
-            }
         }
     }
 
     private void ProgressHaul(
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
-        Dictionary<int, ItemSnapshot> itemsByEntity, HashSet<(int, int)> stockpileTiles)
+        Dictionary<(int, int), ItemSnapshot> itemsByTile,
+        Dictionary<int, ItemSnapshot> itemsByEntity,
+        HashSet<(int, int)> stockpileTiles,
+        HashSet<int> claimedItems)
     {
-        if (!work.Carrying)
+        ref var inv = ref entity.GetComponent<Inventory>();
+        ref var caps = ref entity.GetComponent<CarryCaps>();
+
+        // Drop phase — TargetEntityId == 0 means pickup chain ended.
+        if (work.TargetEntityId == 0)
         {
-            if (!itemsByEntity.TryGetValue(work.TargetEntityId, out var item) || item.Forbidden)
-            {
-                ClearWork(ref work, ref pf);
-                return;
-            }
-            if (pos.TileX != item.TileX || pos.TileY != item.TileY)
+            if (pos.TileX != work.DropTileX || pos.TileY != work.DropTileY)
             {
                 if (pf.LastPathFailed)
                 {
+                    DrainCarriedToTile(ref inv, pos.TileX, pos.TileY, work.CarryKind);
                     ClearWork(ref work, ref pf);
                     return;
                 }
-                EnsurePath(entity, ref pf, pos.TileX, pos.TileY, item.TileX, item.TileY);
+                EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
                 return;
             }
-            // Reached pickup tile. Buffer payload, defer the actual entity
-            // delete to post-loop.
-            work.Carrying = true;
-            work.CarryKind = item.Kind;
-            work.CarryCount = item.Count;
-            work.CarryMinifiedDefId = item.Kind == ItemKind.Minified ? item.MinifiedDefId : null;
-            _pickups.Add(new PickupAction(work.TargetEntityId));
-            // Switch the goal to the stockpile drop tile.
-            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
+            DrainCarriedToTile(ref inv, work.DropTileX, work.DropTileY, work.CarryKind);
+            ClearWork(ref work, ref pf);
             return;
         }
 
-        if (pos.TileX != work.DropTileX || pos.TileY != work.DropTileY)
+        // Pickup phase
+        if (!itemsByEntity.TryGetValue(work.TargetEntityId, out var item) || item.Forbidden)
         {
-            // Drop tile unreachable (stockpile fenced in, etc). Don't loop
-            // forever re-requesting — drop the carry at the colonist's
-            // current tile so it lives somewhere visible.
-            if (pf.LastPathFailed)
-            {
-                _deposits.Add(new DepositAction(pos.TileX, pos.TileY, work.CarryKind, work.CarryCount, work.CarryMinifiedDefId ?? string.Empty));
-                ClearWork(ref work, ref pf);
-                return;
-            }
-            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
+            // Source gone or forbidden — chain or finish.
+            if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, itemsByTile, stockpileTiles, claimedItems, in inv, in caps))
+                SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
             return;
         }
-        _deposits.Add(new DepositAction(work.DropTileX, work.DropTileY, work.CarryKind, work.CarryCount, work.CarryMinifiedDefId ?? string.Empty));
-        ClearWork(ref work, ref pf);
+        if (pos.TileX != item.TileX || pos.TileY != item.TileY)
+        {
+            if (pf.LastPathFailed)
+            {
+                if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, itemsByTile, stockpileTiles, claimedItems, in inv, in caps))
+                    SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
+                return;
+            }
+            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, item.TileX, item.TileY);
+            return;
+        }
+
+        // At pickup tile — pull the whole stack (or as much as fits) into Inventory.
+        var defId = ResolveDefId(item);
+        var added = InventoryOps.Add(ref inv, in caps, defId, item.Count);
+        if (added <= 0)
+        {
+            // Inventory full — switch to drop with what we already have.
+            SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
+            return;
+        }
+        if (work.CarryKind == ItemKind.None) work.CarryKind = item.Kind;
+
+        if (added < item.Count)
+        {
+            // Partial fill — decrement the source stack count rather than
+            // delete it, then go drop what we have.
+            var src = _world.Store.GetEntityById(work.TargetEntityId);
+            if (src != default && src.HasComponent<Item>())
+            {
+                ref var srcIt = ref src.GetComponent<Item>();
+                srcIt.Count = Math.Max(0, srcIt.Count - added);
+                if (srcIt.Count == 0) _pickupsToDelete.Add(work.TargetEntityId);
+            }
+            // Refresh snapshot so chain logic doesn't re-target same id.
+            claimedItems.Add(work.TargetEntityId);
+            SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
+            return;
+        }
+
+        // Whole stack consumed.
+        _pickupsToDelete.Add(work.TargetEntityId);
+        claimedItems.Add(work.TargetEntityId);
+
+        if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, itemsByTile, stockpileTiles, claimedItems, in inv, in caps))
+            SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
+    }
+
+    // Chain: if there's another nearby item of the same CarryKind that
+    // fits in remaining inventory room, retarget WorkJob and repath.
+    private bool TryChainNextPickup(
+        Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
+        Dictionary<(int, int), ItemSnapshot> itemsByTile,
+        HashSet<(int, int)> stockpileTiles,
+        HashSet<int> claimedItems,
+        in Inventory inv, in CarryCaps caps)
+    {
+        if (work.CarryKind == ItemKind.None) return false;
+        var room = InventoryOps.RoomFor(ItemCatalog.DefaultIdFor(work.CarryKind), in caps, in inv);
+        if (room <= 0) return false;
+
+        var bestId = 0;
+        var bestX = 0;
+        var bestY = 0;
+        var bestDist = float.PositiveInfinity;
+        foreach (var kv in itemsByTile)
+        {
+            var it = kv.Value;
+            if (it.Kind != work.CarryKind || it.Forbidden) continue;
+            if (claimedItems.Contains(it.EntityId)) continue;
+            if (stockpileTiles.Contains((it.TileX, it.TileY))) continue;
+            var dx = it.TileX - pos.TileX;
+            var dy = it.TileY - pos.TileY;
+            var d = dx * dx + dy * dy;
+            if (d < bestDist)
+            {
+                bestDist = d;
+                bestId = it.EntityId;
+                bestX = it.TileX;
+                bestY = it.TileY;
+            }
+        }
+        if (bestId == 0) return false;
+
+        work.TargetEntityId = bestId;
+        work.TargetTileX = bestX;
+        work.TargetTileY = bestY;
+        claimedItems.Add(bestId);
+        EnsurePath(entity, ref pf, pos.TileX, pos.TileY, bestX, bestY);
+        return true;
+    }
+
+    private void SwitchToDropOrFinish(
+        Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
+        ref Inventory inv)
+    {
+        // Nothing actually carried? Just abort.
+        var holds = false;
+        if (inv.Stacks is not null)
+        {
+            for (var i = 0; i < inv.Stacks.Count; i++)
+            {
+                var s = inv.Stacks[i];
+                if (s.Locked || s.Equipped) continue;
+                var def = ItemCatalog.Get(s.DefId);
+                if (def.Kind != work.CarryKind) continue;
+                holds = true;
+                break;
+            }
+        }
+        if (!holds)
+        {
+            ClearWork(ref work, ref pf);
+            return;
+        }
+        work.TargetEntityId = 0;
+        EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
+    }
+
+    // Drain non-locked, non-equipped inv stacks of the given kind onto a
+    // tile. Minified items keep their wrapped DefId via SpawnMinifiedThing.
+    private void DrainCarriedToTile(ref Inventory inv, int tileX, int tileY, ItemKind kind)
+    {
+        if (inv.Stacks is null || kind == ItemKind.None) return;
+        for (var i = inv.Stacks.Count - 1; i >= 0; i--)
+        {
+            var s = inv.Stacks[i];
+            if (s.Locked || s.Equipped) continue;
+            var def = ItemCatalog.Get(s.DefId);
+            if (def.Kind != kind) continue;
+            if (def.Kind == ItemKind.Minified)
+                _deposits.Add(new DepositAction(tileX, tileY, def.Kind, s.Count, s.DefId));
+            else
+                _deposits.Add(new DepositAction(tileX, tileY, def.Kind, s.Count, string.Empty));
+            inv.Stacks.RemoveAt(i);
+        }
+    }
+
+    private static string ResolveDefId(ItemSnapshot item)
+    {
+        if (item.Kind == ItemKind.Minified)
+        {
+            // Wrapped structure defs aren't in ItemCatalog — fall back to
+            // the generic minified def for weight/bulk math, but we still
+            // remember the wrapper id via the inventory entry's DefId so
+            // reinstall can match. Phase-3: register per-wrapper defs.
+            return ItemCatalog.TryGet(item.MinifiedDefId, out _)
+                ? item.MinifiedDefId : ItemCatalog.DefaultIdFor(item.Kind);
+        }
+        return ItemCatalog.DefaultIdFor(item.Kind);
     }
 
     private void TryAssignHaul(

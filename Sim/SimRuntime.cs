@@ -154,11 +154,41 @@ public sealed class SimRuntime : IDisposable
             ref var n = ref entity.GetComponent<Needs>();
             ref var j = ref entity.GetComponent<Job>();
             ref var w = ref entity.GetComponent<WorkJob>();
+
+            var invView = Array.Empty<InventoryStackView>();
+            var carryWeight = 0f;
+            var maxWeight = 0f;
+            var carryBulk = 0f;
+            var maxBulk = 0f;
+            if (entity.HasComponent<Inventory>() && entity.HasComponent<CarryCaps>())
+            {
+                ref var inv = ref entity.GetComponent<Inventory>();
+                ref var caps = ref entity.GetComponent<CarryCaps>();
+                carryWeight = Items.InventoryOps.TotalWeight(inv);
+                maxWeight = Items.InventoryOps.MaxWeight(caps, inv);
+                carryBulk = Items.InventoryOps.TotalBulk(inv);
+                maxBulk = Items.InventoryOps.MaxBulk(caps, inv);
+                if (inv.Stacks is not null && inv.Stacks.Count > 0)
+                {
+                    invView = new InventoryStackView[inv.Stacks.Count];
+                    for (var s = 0; s < inv.Stacks.Count; s++)
+                    {
+                        var stack = inv.Stacks[s];
+                        var def = Items.ItemCatalog.Get(stack.DefId);
+                        invView[s] = new InventoryStackView(
+                            s, stack.DefId, def.DisplayName, def.Description,
+                            stack.Count, def.Weight, def.Bulk, def.SellValue,
+                            stack.Equipped, stack.Locked, def.IsWeapon, def.IsClothing);
+                    }
+                }
+            }
+
             views[i++] = new ColonistView(
                 entity.Id, p.MetersX, p.MetersY,
                 n.Hunger, n.Thirst, n.Energy,
                 j.Active, j.NeedKind,
-                w.Active, w.Kind, w.Carrying, w.CarryKind, w.CarryCount);
+                w.Active, w.Kind, w.Carrying, w.CarryKind, w.CarryCount,
+                carryWeight, maxWeight, carryBulk, maxBulk, invView);
         }
         return views;
     }

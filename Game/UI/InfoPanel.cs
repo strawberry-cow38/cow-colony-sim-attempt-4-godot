@@ -26,6 +26,12 @@ public partial class InfoPanel : CanvasLayer
     private ProgressBar _thirstBar = null!;
     private ProgressBar _energyBar = null!;
     private Label _jobLabel = null!;
+    private Label _weightLabel = null!;
+    private ProgressBar _weightBar = null!;
+    private Label _bulkLabel = null!;
+    private ProgressBar _bulkBar = null!;
+    private VBoxContainer _inventoryList = null!;
+    private AcceptDialog _itemInfoDialog = null!;
 
     private VBoxContainer _treeBox = null!;
     private Label _treeHeader = null!;
@@ -67,9 +73,9 @@ public partial class InfoPanel : CanvasLayer
             Position = new Vector2(8f, 0f),
             AnchorTop = 1f,
             AnchorBottom = 1f,
-            OffsetTop = -240f,
+            OffsetTop = -440f,
             OffsetBottom = -8f,
-            CustomMinimumSize = new Vector2(280f, 230f),
+            CustomMinimumSize = new Vector2(320f, 430f),
         };
         AddChild(panel);
 
@@ -94,6 +100,28 @@ public partial class InfoPanel : CanvasLayer
         _colonistBox.AddChild(_energyBar);
         _jobLabel = MakeLabel("job: idle");
         _colonistBox.AddChild(_jobLabel);
+
+        _weightLabel = MakeLabel("weight 0 / 0 kg");
+        _colonistBox.AddChild(_weightLabel);
+        _weightBar = MakeBar(new Color(0.85f, 0.55f, 0.25f));
+        _colonistBox.AddChild(_weightBar);
+        _bulkLabel = MakeLabel("bulk 0 / 0 L");
+        _colonistBox.AddChild(_bulkLabel);
+        _bulkBar = MakeBar(new Color(0.55f, 0.45f, 0.85f));
+        _colonistBox.AddChild(_bulkBar);
+
+        _colonistBox.AddChild(MakeLabel("inventory"));
+        var invScroll = new ScrollContainer
+        {
+            CustomMinimumSize = new Vector2(0f, 140f),
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
+        _colonistBox.AddChild(invScroll);
+        _inventoryList = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        invScroll.AddChild(_inventoryList);
+
+        _itemInfoDialog = new AcceptDialog { Title = "item" };
+        AddChild(_itemInfoDialog);
 
         _treeBox = new VBoxContainer { Visible = false };
         root.AddChild(_treeBox);
@@ -307,9 +335,93 @@ public partial class InfoPanel : CanvasLayer
                 jobText += $"\ncarrying: {KindLabel(c.CarryKind)} ×{c.CarryCount}";
             }
             _jobLabel.Text = jobText;
+
+            _weightLabel.Text = $"weight {c.CarryWeight:F1} / {c.MaxWeight:F1} kg";
+            _weightBar.MaxValue = Mathf.Max(0.001, c.MaxWeight);
+            _weightBar.Value = c.CarryWeight;
+            _bulkLabel.Text = $"bulk {c.CarryBulk:F1} / {c.MaxBulk:F1} L";
+            _bulkBar.MaxValue = Mathf.Max(0.001, c.MaxBulk);
+            _bulkBar.Value = c.CarryBulk;
+            RebuildInventoryList(id, c.Inventory);
             return;
         }
         _colonistHeader.Text = $"colonist #{id} (offline)";
+    }
+
+    private void RebuildInventoryList(int colonistId, IReadOnlyList<InventoryStackView> inv)
+    {
+        foreach (var child in _inventoryList.GetChildren())
+        {
+            child.QueueFree();
+        }
+        if (inv is null || inv.Count == 0)
+        {
+            _inventoryList.AddChild(MakeLabel("(empty)"));
+            return;
+        }
+        for (var i = 0; i < inv.Count; i++)
+        {
+            var stack = inv[i];
+            var row = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+            var tag = stack.Equipped ? " [E]" : stack.Locked ? " [L]" : string.Empty;
+            var nameLabel = MakeLabel($"{stack.DisplayName} ×{stack.Count}{tag}");
+            nameLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            row.AddChild(nameLabel);
+
+            if (stack.IsWeapon || stack.IsClothing)
+            {
+                var equipBtn = new Button
+                {
+                    Text = stack.Equipped ? "unequip" : "equip",
+                    CustomMinimumSize = new Vector2(60f, 0f),
+                };
+                var idx = i;
+                var equipped = stack.Equipped;
+                equipBtn.Pressed += () => OnEquipToggle(colonistId, idx, equipped);
+                row.AddChild(equipBtn);
+            }
+
+            var infoBtn = new Button { Text = "i", CustomMinimumSize = new Vector2(28f, 0f) };
+            var stackCopy = stack;
+            infoBtn.Pressed += () => ShowItemInfo(stackCopy);
+            row.AddChild(infoBtn);
+
+            var dropBtn = new Button { Text = "drop", CustomMinimumSize = new Vector2(50f, 0f) };
+            var dropIdx = i;
+            dropBtn.Pressed += () => OnForceDrop(colonistId, dropIdx);
+            row.AddChild(dropBtn);
+
+            _inventoryList.AddChild(row);
+        }
+    }
+
+    private void OnForceDrop(int colonistId, int stackIndex)
+    {
+        _commands.Submit(new ForceDropFromInventoryCommand(colonistId, stackIndex));
+    }
+
+    private void OnEquipToggle(int colonistId, int stackIndex, bool currentlyEquipped)
+    {
+        if (currentlyEquipped)
+            _commands.Submit(new UnequipInventoryCommand(colonistId, stackIndex));
+        else
+            _commands.Submit(new EquipFromInventoryCommand(colonistId, stackIndex));
+    }
+
+    private void ShowItemInfo(InventoryStackView stack)
+    {
+        _itemInfoDialog.Title = stack.DisplayName;
+        var lines = new System.Text.StringBuilder();
+        lines.AppendLine(stack.Description);
+        lines.AppendLine();
+        lines.AppendLine($"weight: {stack.Weight:F1} kg ea");
+        lines.AppendLine($"bulk: {stack.Bulk:F1} L ea");
+        lines.AppendLine($"sell value: {stack.SellValue} silver ea");
+        lines.AppendLine($"count: {stack.Count}");
+        if (stack.Locked) lines.AppendLine("LOCKED — auto-systems will not touch this stack");
+        if (stack.Equipped) lines.AppendLine("EQUIPPED");
+        _itemInfoDialog.DialogText = lines.ToString();
+        _itemInfoDialog.PopupCentered();
     }
 
     private void ShowTree(SimSnapshot snap, int id)

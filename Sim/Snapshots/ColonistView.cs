@@ -20,4 +20,9 @@ public readonly record struct ColonistView(
     WorkKind WorkKind,
     bool Carrying,
     ItemKind CarryKind,
-    int CarryCount);
+    int CarryCount,
+    float CarryWeight,
+    float MaxWeight,
+    float CarryBulk,
+    float MaxBulk,
+    IReadOnlyList<InventoryStackView> Inventory);

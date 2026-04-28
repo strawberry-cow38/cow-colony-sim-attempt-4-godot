@@ -41,6 +41,12 @@ public partial class InfoPanel : CanvasLayer
     private Button _designateChopBtn = null!;
     private Button _cancelChopBtn = null!;
 
+    private VBoxContainer _boulderBox = null!;
+    private Label _boulderHeader = null!;
+    private ProgressBar _boulderHealthBar = null!;
+    private Button _designateMineBtn = null!;
+    private Button _cancelMineBtn = null!;
+
     private VBoxContainer _itemBox = null!;
     private Label _itemHeader = null!;
     private Label _itemDescription = null!;
@@ -139,6 +145,20 @@ public partial class InfoPanel : CanvasLayer
         _cancelChopBtn.Pressed += OnCancelChop;
         _treeBox.AddChild(_cancelChopBtn);
 
+        _boulderBox = new VBoxContainer { Visible = false };
+        root.AddChild(_boulderBox);
+        _boulderHeader = MakeLabel("boulder");
+        _boulderBox.AddChild(_boulderHeader);
+        _boulderBox.AddChild(MakeLabel("health"));
+        _boulderHealthBar = MakeBar(new Color(0.7f, 0.7f, 0.75f));
+        _boulderBox.AddChild(_boulderHealthBar);
+        _designateMineBtn = new Button { Text = "designate mine" };
+        _designateMineBtn.Pressed += OnDesignateMine;
+        _boulderBox.AddChild(_designateMineBtn);
+        _cancelMineBtn = new Button { Text = "cancel mine" };
+        _cancelMineBtn.Pressed += OnCancelMine;
+        _boulderBox.AddChild(_cancelMineBtn);
+
         _itemBox = new VBoxContainer { Visible = false };
         root.AddChild(_itemBox);
         _itemHeader = MakeLabel("item");
@@ -215,6 +235,11 @@ public partial class InfoPanel : CanvasLayer
             ShowTree(snap, treeId);
             return;
         }
+        if (_selection.SelectedBoulderId is int boulderId)
+        {
+            ShowBoulder(snap, boulderId);
+            return;
+        }
         if (_selection.SelectedItemId is int itemId)
         {
             ShowItem(snap, itemId);
@@ -238,6 +263,7 @@ public partial class InfoPanel : CanvasLayer
         _emptyLabel.Visible = true;
         _colonistBox.Visible = false;
         _treeBox.Visible = false;
+        _boulderBox.Visible = false;
         _itemBox.Visible = false;
         _blueprintBox.Visible = false;
         _structureBox.Visible = false;
@@ -248,6 +274,7 @@ public partial class InfoPanel : CanvasLayer
         _emptyLabel.Visible = false;
         _colonistBox.Visible = false;
         _treeBox.Visible = false;
+        _boulderBox.Visible = false;
         _itemBox.Visible = false;
         _structureBox.Visible = false;
         _blueprintBox.Visible = true;
@@ -274,6 +301,7 @@ public partial class InfoPanel : CanvasLayer
         _emptyLabel.Visible = false;
         _colonistBox.Visible = false;
         _treeBox.Visible = false;
+        _boulderBox.Visible = false;
         _itemBox.Visible = false;
         _blueprintBox.Visible = false;
         _structureBox.Visible = true;
@@ -328,6 +356,7 @@ public partial class InfoPanel : CanvasLayer
     {
         _emptyLabel.Visible = false;
         _treeBox.Visible = false;
+        _boulderBox.Visible = false;
         _itemBox.Visible = false;
         _blueprintBox.Visible = false;
         _structureBox.Visible = false;
@@ -476,6 +505,7 @@ public partial class InfoPanel : CanvasLayer
     {
         _emptyLabel.Visible = false;
         _colonistBox.Visible = false;
+        _boulderBox.Visible = false;
         _itemBox.Visible = false;
         _blueprintBox.Visible = false;
         _structureBox.Visible = false;
@@ -505,6 +535,7 @@ public partial class InfoPanel : CanvasLayer
         _emptyLabel.Visible = false;
         _colonistBox.Visible = false;
         _treeBox.Visible = false;
+        _boulderBox.Visible = false;
         _blueprintBox.Visible = false;
         _structureBox.Visible = false;
         _itemBox.Visible = true;
@@ -586,6 +617,76 @@ public partial class InfoPanel : CanvasLayer
         return false;
     }
 
+    private void ShowBoulder(SimSnapshot snap, int id)
+    {
+        _emptyLabel.Visible = false;
+        _colonistBox.Visible = false;
+        _treeBox.Visible = false;
+        _itemBox.Visible = false;
+        _blueprintBox.Visible = false;
+        _structureBox.Visible = false;
+        _boulderBox.Visible = true;
+        for (var i = 0; i < snap.Boulders.Count; i++)
+        {
+            var b = snap.Boulders[i];
+            if (b.EntityId != id) continue;
+            var label = b.Variant >= 3 ? "mossy boulder" : "boulder";
+            _boulderHeader.Text =
+                $"{label} #{id}\n" +
+                $"tile ({b.TileX}, {b.TileY})";
+            _boulderHealthBar.MaxValue = 30;
+            _boulderHealthBar.Value = b.Health;
+            var designated = HasMineDesignation(snap, b.TileX, b.TileY);
+            _designateMineBtn.Disabled = designated;
+            _cancelMineBtn.Disabled = !designated;
+            return;
+        }
+        _boulderHeader.Text = $"boulder #{id} (mined)";
+        _designateMineBtn.Disabled = true;
+        _cancelMineBtn.Disabled = true;
+    }
+
+    private static bool HasMineDesignation(SimSnapshot snap, int tx, int ty)
+    {
+        for (var i = 0; i < snap.Designations.Count; i++)
+        {
+            var d = snap.Designations[i];
+            if (d.Kind != DesignationKind.Mine) continue;
+            if (d.TileX == tx && d.TileY == ty) return true;
+        }
+        return false;
+    }
+
+    private void OnDesignateMine()
+    {
+        if (_selection.SelectedBoulderId is not int id) return;
+        var snap = _publisher.Current;
+        for (var i = 0; i < snap.Boulders.Count; i++)
+        {
+            var b = snap.Boulders[i];
+            if (b.EntityId != id) continue;
+            if (HasMineDesignation(snap, b.TileX, b.TileY)) return;
+            _commands.Submit(new StampDesignationsCommand(
+                DesignationKind.Mine,
+                new TileRect(b.TileX, b.TileY, b.TileX, b.TileY)));
+            return;
+        }
+    }
+
+    private void OnCancelMine()
+    {
+        if (_selection.SelectedBoulderId is not int id) return;
+        var snap = _publisher.Current;
+        for (var i = 0; i < snap.Boulders.Count; i++)
+        {
+            var b = snap.Boulders[i];
+            if (b.EntityId != id) continue;
+            _commands.Submit(new EraseInRectCommand(
+                new TileRect(b.TileX, b.TileY, b.TileX, b.TileY)));
+            return;
+        }
+    }
+
     private void OnDesignateChop()
     {
         if (_selection.SelectedTreeId is not int id) return;
@@ -627,6 +728,7 @@ public partial class InfoPanel : CanvasLayer
     private static string WorkLabel(WorkKind kind) => kind switch
     {
         WorkKind.ChopTree => "chopping",
+        WorkKind.Mine => "mining",
         WorkKind.HaulItem => "hauling",
         WorkKind.CutPlant => "cutting",
         WorkKind.HarvestPlant => "harvesting",

@@ -28,6 +28,7 @@ public partial class SelectionService : Node
     public int? SelectedEntityId { get; private set; }
     public int? SelectedZoneId { get; private set; }
     public int? SelectedTreeId { get; private set; }
+    public int? SelectedBoulderId { get; private set; }
     public int? SelectedItemId { get; private set; }
     public int? SelectedBlueprintId { get; private set; }
     public int? SelectedStructureId { get; private set; }
@@ -54,6 +55,7 @@ public partial class SelectionService : Node
     public override void _Process(double delta)
     {
         DropStaleTreeSelection();
+        DropStaleBoulderSelection();
         DropStaleItemSelection();
         DropStaleBlueprintSelection();
         DropStaleStructureSelection();
@@ -102,6 +104,19 @@ public partial class SelectionService : Node
         SelectionChanged?.Invoke();
     }
 
+    private void DropStaleBoulderSelection()
+    {
+        if (SelectedBoulderId is not int id) return;
+        var boulders = _publisher.Current.Boulders;
+        for (var i = 0; i < boulders.Count; i++)
+        {
+            if (boulders[i].EntityId == id) return;
+        }
+        SelectedBoulderId = null;
+        _contextMenu?.CloseIfOpen();
+        SelectionChanged?.Invoke();
+    }
+
     private void DropStaleItemSelection()
     {
         if (SelectedItemId is not int id) return;
@@ -131,6 +146,7 @@ public partial class SelectionService : Node
         {
             if (SelectColonistNearRay(camera, mb.Position)) return;
             if (SelectTreeNearRay(camera, mb.Position)) return;
+            if (SelectBoulderNearRay(camera, mb.Position)) return;
             if (SelectItemNearRay(camera, mb.Position)) return;
             var tx = (int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile);
             var ty = (int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile);
@@ -141,6 +157,7 @@ public partial class SelectionService : Node
         else if (mb.ButtonIndex == MouseButton.Right)
         {
             if (TryOpenTreeContextMenu(camera, mb.Position)) return;
+            if (TryOpenBoulderContextMenu(camera, mb.Position)) return;
             if (TryOpenItemContextMenu(camera, mb.Position)) return;
             if (SelectedEntityId is int id)
             {
@@ -175,6 +192,7 @@ public partial class SelectionService : Node
         var changed = false;
         if (SelectedEntityId is not null) { SelectedEntityId = null; changed = true; }
         if (SelectedTreeId is not null) { SelectedTreeId = null; changed = true; }
+        if (SelectedBoulderId is not null) { SelectedBoulderId = null; changed = true; }
         if (SelectedItemId is not null) { SelectedItemId = null; changed = true; }
         if (SelectedBlueprintId is not null) { SelectedBlueprintId = null; changed = true; }
         if (SelectedStructureId is not null) { SelectedStructureId = null; changed = true; }
@@ -184,11 +202,12 @@ public partial class SelectionService : Node
     private void ClearAll()
     {
         var changed = SelectedEntityId is not null || SelectedZoneId is not null
-            || SelectedTreeId is not null || SelectedItemId is not null
+            || SelectedTreeId is not null || SelectedBoulderId is not null || SelectedItemId is not null
             || SelectedBlueprintId is not null || SelectedStructureId is not null;
         SelectedEntityId = null;
         SelectedZoneId = null;
         SelectedTreeId = null;
+        SelectedBoulderId = null;
         SelectedItemId = null;
         SelectedBlueprintId = null;
         SelectedStructureId = null;
@@ -215,6 +234,7 @@ public partial class SelectionService : Node
         SelectedEntityId = null;
         SelectedZoneId = null;
         SelectedTreeId = null;
+        SelectedBoulderId = null;
         SelectedItemId = null;
         SelectionChanged?.Invoke();
         return true;
@@ -240,6 +260,7 @@ public partial class SelectionService : Node
         SelectedEntityId = null;
         SelectedZoneId = null;
         SelectedTreeId = null;
+        SelectedBoulderId = null;
         SelectedItemId = null;
         SelectionChanged?.Invoke();
         return true;
@@ -283,6 +304,60 @@ public partial class SelectionService : Node
         return best == -1 ? null : best;
     }
 
+    private bool TryOpenBoulderContextMenu(Camera3D camera, Vector2 mousePos)
+    {
+        if (_contextMenu is null) return false;
+        var id = PickBoulderId(camera, mousePos);
+        if (id is null) return false;
+        _contextMenu.OpenForBoulder(id.Value, mousePos);
+        return true;
+    }
+
+    private bool SelectBoulderNearRay(Camera3D camera, Vector2 mousePos)
+    {
+        var id = PickBoulderId(camera, mousePos);
+        if (id is null) return false;
+        if (SelectedBoulderId == id) return true;
+        SelectedBoulderId = id;
+        if (SelectedEntityId is not null) SelectedEntityId = null;
+        if (SelectedZoneId is not null) SelectedZoneId = null;
+        if (SelectedTreeId is not null) SelectedTreeId = null;
+        if (SelectedItemId is not null) SelectedItemId = null;
+        SelectionChanged?.Invoke();
+        return true;
+    }
+
+    private int? PickBoulderId(Camera3D camera, Vector2 mousePos)
+    {
+        var origin = camera.ProjectRayOrigin(mousePos);
+        var dir = camera.ProjectRayNormal(mousePos).Normalized();
+
+        var snap = _publisher.Current;
+        var best = -1;
+        var bestDist = float.PositiveInfinity;
+        // Boulders are roughly tile-sized rocks. Cylinder radius ~0.6m so
+        // oblique clicks still hit, height ~1.2m to clear the tallest variant.
+        var radiusUnits = 0.6f * _unitsPerMeter;
+        var heightUnits = 1.2f * _unitsPerMeter;
+        for (var i = 0; i < snap.Boulders.Count; i++)
+        {
+            var b = snap.Boulders[i];
+            var metersX = (b.TileX + 0.5f) * SimConstants.MetersPerTile;
+            var metersY = (b.TileY + 0.5f) * SimConstants.MetersPerTile;
+            var cx = metersX * _unitsPerMeter;
+            var cz = metersY * _unitsPerMeter;
+            var y0 = SampleGroundUnits(metersX, metersY);
+            var y1 = y0 + heightUnits;
+            if (!RayCylinderHit(origin, dir, cx, cz, radiusUnits, y0, y1, out var tHit)) continue;
+            if (tHit < bestDist)
+            {
+                bestDist = tHit;
+                best = b.EntityId;
+            }
+        }
+        return best == -1 ? null : best;
+    }
+
     private bool TryOpenItemContextMenu(Camera3D camera, Vector2 mousePos)
     {
         if (_contextMenu is null) return false;
@@ -301,6 +376,7 @@ public partial class SelectionService : Node
         if (SelectedEntityId is not null) SelectedEntityId = null;
         if (SelectedZoneId is not null) SelectedZoneId = null;
         if (SelectedTreeId is not null) SelectedTreeId = null;
+        if (SelectedBoulderId is not null) SelectedBoulderId = null;
         SelectionChanged?.Invoke();
         return true;
     }
@@ -344,6 +420,8 @@ public partial class SelectionService : Node
         SelectedTreeId = id;
         if (SelectedEntityId is not null) SelectedEntityId = null;
         if (SelectedZoneId is not null) SelectedZoneId = null;
+        if (SelectedBoulderId is not null) SelectedBoulderId = null;
+        if (SelectedItemId is not null) SelectedItemId = null;
         SelectionChanged?.Invoke();
         return true;
     }
@@ -357,6 +435,7 @@ public partial class SelectionService : Node
         SelectedEntityId = entityId;
         if (SelectedZoneId is not null) SelectedZoneId = null;
         if (SelectedTreeId is not null) SelectedTreeId = null;
+        if (SelectedBoulderId is not null) SelectedBoulderId = null;
         if (SelectedItemId is not null) SelectedItemId = null;
         if (SelectedBlueprintId is not null) SelectedBlueprintId = null;
         if (SelectedStructureId is not null) SelectedStructureId = null;
@@ -395,6 +474,8 @@ public partial class SelectionService : Node
         SelectedEntityId = best;
         if (SelectedZoneId is not null) SelectedZoneId = null;
         if (SelectedTreeId is not null) SelectedTreeId = null;
+        if (SelectedBoulderId is not null) SelectedBoulderId = null;
+        if (SelectedItemId is not null) SelectedItemId = null;
         SelectionChanged?.Invoke();
         return true;
     }

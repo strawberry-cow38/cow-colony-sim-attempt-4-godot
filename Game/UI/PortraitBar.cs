@@ -8,10 +8,12 @@ namespace CowColonySim.Game.UI;
 
 // Top-center bar of one portrait per colonist. Each portrait is a tiny
 // SubViewport rendering a 3D body (capsule today, clothed mesh later)
-// over a tinted background, framed in a Button so clicks focus the
-// camera + select the colonist. Portraits are rebuilt only when the
-// colonist roster changes — per-frame work just moves the camera +
-// updates the highlight.
+// over a solid dark gray background, framed in a Button so clicks focus
+// the camera + select the colonist. The portrait box has a colored
+// border keyed to the colonist's mood (placeholder until mood data is
+// wired). Below each portrait is a name label. Portraits are rebuilt
+// only when the colonist roster changes — per-frame work just moves the
+// camera + updates the border + selection ring.
 public partial class PortraitBar : CanvasLayer
 {
     private const int PortraitWidth = 88;
@@ -19,6 +21,16 @@ public partial class PortraitBar : CanvasLayer
     private const float CapsuleRadiusMeters = 0.25f;
     private const float CapsuleHeightMeters = 1.7f;
     private const float UnitsPerMeter = SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile;
+    private static readonly Color BackgroundGray = new(0.16f, 0.16f, 0.18f);
+
+    // Placeholder name pool used until colonists carry real names. Pick
+    // deterministically by entity id so the same colonist always reads
+    // with the same label across reloads.
+    private static readonly string[] PlaceholderNames =
+    {
+        "Aki", "Bex", "Cal", "Dro", "Ena", "Fen", "Gus", "Hao",
+        "Iri", "Jun", "Kio", "Lev", "Mio", "Nyx", "Ona", "Pip",
+    };
 
     private SelectionService _selection = null!;
     private SnapshotPublisher _publisher = null!;
@@ -30,8 +42,11 @@ public partial class PortraitBar : CanvasLayer
     private sealed class PortraitSlot
     {
         public int EntityId;
+        public Control Root = null!;
         public Button Button = null!;
-        public Panel HighlightFrame = null!;
+        public Panel BorderFrame = null!;
+        public StyleBoxFlat BorderStyle = null!;
+        public Panel SelectionRing = null!;
     }
 
     public void Configure(SelectionService selection, SnapshotPublisher publisher, CameraRig cameraRig)
@@ -47,7 +62,7 @@ public partial class PortraitBar : CanvasLayer
         var root = new Control
         {
             AnchorLeft = 0f, AnchorRight = 1f, AnchorTop = 0f, AnchorBottom = 0f,
-            OffsetLeft = 0f, OffsetRight = 0f, OffsetTop = 8f, OffsetBottom = PortraitHeight + 16f,
+            OffsetLeft = 0f, OffsetRight = 0f, OffsetTop = 8f, OffsetBottom = PortraitHeight + 48f,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         AddChild(root);
@@ -80,7 +95,7 @@ public partial class PortraitBar : CanvasLayer
         }
         if (same) return;
 
-        foreach (var slot in _slots) slot.Button.QueueFree();
+        foreach (var slot in _slots) slot.Root.QueueFree();
         _slots.Clear();
         foreach (var child in _bar.GetChildren()) child.QueueFree();
 
@@ -89,7 +104,7 @@ public partial class PortraitBar : CanvasLayer
             var c = colonists[i];
             var slot = BuildSlot(c.EntityId);
             _slots.Add(slot);
-            _bar.AddChild(slot.Button);
+            _bar.AddChild(slot.Root);
         }
 
         // Center the bar after children settle (HBoxContainer min-size only
@@ -106,6 +121,13 @@ public partial class PortraitBar : CanvasLayer
 
     private PortraitSlot BuildSlot(int entityId)
     {
+        // Each slot stacks: portrait button on top, name label under it.
+        var column = new VBoxContainer
+        {
+            CustomMinimumSize = new Vector2(PortraitWidth, PortraitHeight + 24f),
+        };
+        column.AddThemeConstantOverride("separation", 4);
+
         var btn = new Button
         {
             CustomMinimumSize = new Vector2(PortraitWidth, PortraitHeight),
@@ -114,12 +136,14 @@ public partial class PortraitBar : CanvasLayer
             ToggleMode = false,
             ClipContents = true,
         };
+        column.AddChild(btn);
 
-        // Background tinted from entity id so each colonist reads as a
-        // distinct portrait without needing per-colonist art yet.
+        // Solid dark gray background — single color across all portraits;
+        // identity comes from the body itself + name + mood border, not the
+        // background tint.
         var bg = new ColorRect
         {
-            Color = TintFromId(entityId),
+            Color = BackgroundGray,
             AnchorLeft = 0f, AnchorRight = 1f, AnchorTop = 0f, AnchorBottom = 1f,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
@@ -164,14 +188,13 @@ public partial class PortraitBar : CanvasLayer
 
         var halfHeightUnits = CapsuleHeightMeters * 0.5f * UnitsPerMeter;
         // Default Camera3D forward is -Z, so a position offset on +Z with no
-        // rotation already frames the body at the origin. Avoid Node3D.LookAt
-        // here — it requires the camera to be inside the tree, but we
-        // configure it before AddChild.
+        // rotation already frames the body at the origin. Distance + Fov
+        // chosen so the full ~73u capsule fits with margin top and bottom.
         var camera = new Camera3D
         {
-            Position = new Vector3(0f, halfHeightUnits, 80f),
+            Position = new Vector3(0f, halfHeightUnits, 140f),
             Current = true,
-            Fov = 28f,
+            Fov = 36f,
         };
         viewport.AddChild(camera);
 
@@ -182,24 +205,60 @@ public partial class PortraitBar : CanvasLayer
         };
         viewport.AddChild(light);
 
-        // Selection highlight — a Panel with stylebox border on top of
-        // everything else. Visibility flips in UpdateHighlights.
-        var highlight = new Panel
+        // Mood-color border lives on top of the portrait. Style is rebuilt
+        // each frame in UpdateBorders to track the colonist's current mood
+        // (placeholder until mood data is wired). The selection ring is a
+        // separate panel layered above so it doesn't clobber the mood color.
+        var border = new Panel
+        {
+            AnchorLeft = 0f, AnchorRight = 1f, AnchorTop = 0f, AnchorBottom = 1f,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        var borderStyle = new StyleBoxFlat
+        {
+            BgColor = new Color(0, 0, 0, 0),
+            BorderColor = MoodPlaceholderColor(entityId),
+            BorderWidthLeft = 3, BorderWidthRight = 3, BorderWidthTop = 3, BorderWidthBottom = 3,
+        };
+        border.AddThemeStyleboxOverride("panel", borderStyle);
+        btn.AddChild(border);
+
+        var ring = new Panel
         {
             AnchorLeft = 0f, AnchorRight = 1f, AnchorTop = 0f, AnchorBottom = 1f,
             MouseFilter = Control.MouseFilterEnum.Ignore,
             Visible = false,
         };
-        var hlStyle = new StyleBoxFlat
+        var ringStyle = new StyleBoxFlat
         {
             BgColor = new Color(0, 0, 0, 0),
             BorderColor = new Color(1f, 0.95f, 0.5f),
-            BorderWidthLeft = 3, BorderWidthRight = 3, BorderWidthTop = 3, BorderWidthBottom = 3,
+            BorderWidthLeft = 2, BorderWidthRight = 2, BorderWidthTop = 2, BorderWidthBottom = 2,
         };
-        highlight.AddThemeStyleboxOverride("panel", hlStyle);
-        btn.AddChild(highlight);
+        ring.AddThemeStyleboxOverride("panel", ringStyle);
+        btn.AddChild(ring);
 
-        var slot = new PortraitSlot { EntityId = entityId, Button = btn, HighlightFrame = highlight };
+        var nameLabel = new Label
+        {
+            Text = NameForId(entityId),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            CustomMinimumSize = new Vector2(PortraitWidth, 0f),
+        };
+        nameLabel.AddThemeColorOverride("font_color", new Color(1f, 1f, 1f));
+        nameLabel.AddThemeColorOverride("font_outline_color", new Color(0f, 0f, 0f));
+        nameLabel.AddThemeConstantOverride("outline_size", 4);
+        nameLabel.AddThemeFontSizeOverride("font_size", 13);
+        column.AddChild(nameLabel);
+
+        var slot = new PortraitSlot
+        {
+            EntityId = entityId,
+            Root = column,
+            Button = btn,
+            BorderFrame = border,
+            BorderStyle = borderStyle,
+            SelectionRing = ring,
+        };
         var captureId = entityId;
         btn.Pressed += () => OnPortraitPressed(captureId);
         return slot;
@@ -223,20 +282,30 @@ public partial class PortraitBar : CanvasLayer
         var sel = _selection.SelectedEntityId;
         for (var i = 0; i < _slots.Count; i++)
         {
-            _slots[i].HighlightFrame.Visible = sel.HasValue && _slots[i].EntityId == sel.Value;
+            _slots[i].SelectionRing.Visible = sel.HasValue && _slots[i].EntityId == sel.Value;
         }
     }
 
-    // Cheap deterministic hue from entity id so each colonist's portrait
-    // background reads as theirs across reloads. Saturation/value are
-    // fixed so contrast against the body stays predictable.
-    private static Color TintFromId(int id)
+    // Placeholder mood color until colonists carry real mood data. Hue is
+    // deterministic per entity id so portraits read distinctly during dev,
+    // but this whole function should be replaced with a snap-driven mood
+    // lookup once moods are wired (red for angry, green for content, etc).
+    private static Color MoodPlaceholderColor(int id)
     {
         unchecked
         {
             var h = (uint)id * 2654435761u;
             var hue = (h % 360u) / 360f;
-            return Color.FromHsv(hue, 0.45f, 0.35f);
+            return Color.FromHsv(hue, 0.55f, 0.95f);
+        }
+    }
+
+    private static string NameForId(int id)
+    {
+        unchecked
+        {
+            var h = (uint)id * 2654435761u;
+            return PlaceholderNames[h % (uint)PlaceholderNames.Length];
         }
     }
 }

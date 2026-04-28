@@ -102,6 +102,36 @@ public partial class ContextMenu : CanvasLayer
         Show(screenPos);
     }
 
+    public void OpenForBoulder(int boulderId, Vector2 screenPos)
+    {
+        var snap = _publisher.Current;
+        BoulderView? boulder = null;
+        for (var i = 0; i < snap.Boulders.Count; i++)
+        {
+            if (snap.Boulders[i].EntityId != boulderId) continue;
+            boulder = snap.Boulders[i];
+            break;
+        }
+        if (boulder is null) return;
+        var tx = boulder.Value.TileX;
+        var ty = boulder.Value.TileY;
+        var colonistId = _selection.SelectedEntityId ?? 0;
+
+        ClearItems();
+        if (HasMineDesignation(snap, tx, ty))
+        {
+            AddOption("cancel mine",
+                () => _commands.Submit(new EraseInRectCommand(new TileRect(tx, ty, tx, ty))));
+        }
+        else
+        {
+            AddOption("designate mine",
+                () => _commands.Submit(new StampDesignationsCommand(
+                    DesignationKind.Mine, new TileRect(tx, ty, tx, ty))));
+        }
+        Show(screenPos);
+    }
+
     public void OpenForItem(int itemId, Vector2 screenPos)
     {
         var snap = _publisher.Current;
@@ -193,6 +223,17 @@ public partial class ContextMenu : CanvasLayer
         {
             var d = snap.Designations[i];
             if (d.Kind != DesignationKind.ChopTree) continue;
+            if (d.TileX == tx && d.TileY == ty) return true;
+        }
+        return false;
+    }
+
+    private static bool HasMineDesignation(SimSnapshot snap, int tx, int ty)
+    {
+        for (var i = 0; i < snap.Designations.Count; i++)
+        {
+            var d = snap.Designations[i];
+            if (d.Kind != DesignationKind.Mine) continue;
             if (d.TileX == tx && d.TileY == ty) return true;
         }
         return false;

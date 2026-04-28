@@ -87,7 +87,37 @@ public partial class BouldersRenderer : Node3D
     {
         var merged = new ArrayMesh();
         CollectByName(root, Transform3D.Identity, targetName, merged, ancestorMatch: false);
-        return merged.GetSurfaceCount() > 0 ? merged : null;
+        if (merged.GetSurfaceCount() == 0) return null;
+        // Each named submesh in boulder.glb is laid out at a different X/Z in the
+        // source scene for Blender layout. Recenter X/Z so each variant sits at
+        // origin and snaps onto its tile. Keep Y so the rock still sits on the
+        // ground plane authored in Blender.
+        var aabb = merged.GetAabb();
+        var shift = new Vector3(-(aabb.Position.X + aabb.Size.X * 0.5f), 0f, -(aabb.Position.Z + aabb.Size.Z * 0.5f));
+        if (shift.X == 0f && shift.Z == 0f) return merged;
+        return RebuildShifted(merged, shift);
+    }
+
+    // ArrayMesh has no in-place vertex mutation, so we rebuild surface-by-
+    // surface with shifted positions and return the new mesh. Materials are
+    // copied across.
+    private static ArrayMesh RebuildShifted(ArrayMesh src, Vector3 shift)
+    {
+        var rebuilt = new ArrayMesh();
+        for (var s = 0; s < src.GetSurfaceCount(); s++)
+        {
+            var arrays = src.SurfaceGetArrays(s);
+            if (arrays.Count > (int)Mesh.ArrayType.Vertex)
+            {
+                var positions = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                for (var i = 0; i < positions.Length; i++) positions[i] += shift;
+                arrays[(int)Mesh.ArrayType.Vertex] = positions;
+            }
+            rebuilt.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            var mat = src.SurfaceGetMaterial(s);
+            if (mat is not null) rebuilt.SurfaceSetMaterial(rebuilt.GetSurfaceCount() - 1, mat);
+        }
+        return rebuilt;
     }
 
     private static void CollectByName(Node n, Transform3D parentXform, string targetName, ArrayMesh into, bool ancestorMatch)

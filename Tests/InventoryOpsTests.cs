@@ -39,19 +39,19 @@ public class InventoryOpsTests
     [Fact]
     public void Add_caps_at_room_for_weight()
     {
-        // 10 strength -> 50 kg cap. wood = 5 kg. exactly 10 fit.
+        // 10 strength -> 50 kg cap. wood = 1 kg. exactly 50 fit.
         var (inv, caps) = Fresh(strength: 10, baseBulk: 1000f);
         var added = InventoryOps.Add(ref inv, caps, "wood", 999);
-        Assert.Equal(10, added);
+        Assert.Equal(50, added);
     }
 
     [Fact]
     public void Add_caps_at_room_for_bulk()
     {
-        // wood = 4 L. base bulk 10 L -> 2 fit before bulk caps.
+        // wood = 0.4 L. base bulk 10 L -> 25 fit before bulk caps.
         var (inv, caps) = Fresh(strength: 1000, baseBulk: 10f);
         var added = InventoryOps.Add(ref inv, caps, "wood", 999);
-        Assert.Equal(2, added);
+        Assert.Equal(25, added);
     }
 
     [Fact]

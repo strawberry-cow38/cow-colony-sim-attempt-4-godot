@@ -574,6 +574,7 @@ public partial class InfoPanel : CanvasLayer
     private static string KindLabel(ItemKind kind) => kind switch
     {
         ItemKind.Wood => "wood",
+        ItemKind.Stone => "stone",
         ItemKind.Wheat => "wheat",
         ItemKind.Minified => "minified thing",
         _ => "item",
@@ -582,6 +583,7 @@ public partial class InfoPanel : CanvasLayer
     private static string KindDescription(ItemKind kind) => kind switch
     {
         ItemKind.Wood => "rough cut from a felled pine. fuel, walls, and tool handles. stacks to 50.",
+        ItemKind.Stone => "rough chunks knocked off a boulder. walls, foundations, and roads. stacks to 50.",
         ItemKind.Wheat => "harvested grain. food crop yield. stacks to 50.",
         ItemKind.Minified => "a packaged structure ready to reinstall.",
         _ => "raw resource.",

@@ -1,3 +1,4 @@
+using CowColonySim.Sim.Designations;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.World;
 using CowColonySim.Sim.World.Components;
@@ -46,8 +47,11 @@ public sealed class JobSystem : ITickSystem
             ref var work = ref entity.GetComponent<WorkJob>();
 
             // Player-forced work overrides everything — they'll work until
-            // they die before we let needs hijack the colonist.
-            if (work.Active && work.Forced)
+            // they die before we let needs hijack the colonist. Hauls are
+            // also non-preemptable: dropping a stack mid-trip leaves the
+            // item stranded between source and dest, so we ride out the
+            // haul before letting needs grab the colonist.
+            if (work.Active && (work.Forced || work.Kind == WorkKind.HaulItem))
             {
                 if (job.Active)
                 {

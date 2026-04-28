@@ -2,10 +2,12 @@ using CowColonySim.Game.Terrain;
 using CowColonySim.Game.UI;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Commands;
+using CowColonySim.Sim.Designations;
 using CowColonySim.Sim.Logging;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Terrain;
+using CowColonySim.Sim.Zones;
 using Godot;
 
 namespace CowColonySim.Game.Selection;
@@ -117,6 +119,131 @@ public partial class SelectionService : Node
         SelectionChanged?.Invoke();
     }
 
+    // Keyboard shortcuts that act on the currently-selected entity.
+    //   F  = toggle forbid (items)
+    //   X  = "do the work" — designate chop on a tree, mine on a boulder,
+    //        deconstruct a structure, delete a zone
+    //   C  = cancel — erase any designation tagged on the selected target
+    // We dispatch by which Selected*Id is set; if nothing is selected, the
+    // key falls through to the rest of the unhandled-input chain.
+    private void HandleSelectionShortcut(InputEventKey ke)
+    {
+        switch (ke.PhysicalKeycode)
+        {
+            case Key.F:
+                ApplyForbidShortcut();
+                break;
+            case Key.X:
+                ApplyWorkShortcut();
+                break;
+            case Key.C:
+                ApplyCancelShortcut();
+                break;
+        }
+    }
+
+    private void ApplyForbidShortcut()
+    {
+        if (SelectedItemId is not int id) return;
+        var snap = _publisher.Current;
+        for (var i = 0; i < snap.Items.Count; i++)
+        {
+            var it = snap.Items[i];
+            if (it.EntityId != id) continue;
+            _commands.Submit(new SetItemForbiddenCommand(id, !it.Forbidden));
+            return;
+        }
+    }
+
+    private void ApplyWorkShortcut()
+    {
+        var snap = _publisher.Current;
+        if (SelectedTreeId is int treeId)
+        {
+            for (var i = 0; i < snap.Trees.Count; i++)
+            {
+                var t = snap.Trees[i];
+                if (t.EntityId != treeId) continue;
+                _commands.Submit(new StampDesignationsCommand(
+                    DesignationKind.ChopTree,
+                    new TileRect(t.TileX, t.TileY, t.TileX, t.TileY)));
+                return;
+            }
+            return;
+        }
+        if (SelectedBoulderId is int boulderId)
+        {
+            for (var i = 0; i < snap.Boulders.Count; i++)
+            {
+                var b = snap.Boulders[i];
+                if (b.EntityId != boulderId) continue;
+                _commands.Submit(new StampDesignationsCommand(
+                    DesignationKind.Mine,
+                    new TileRect(b.TileX, b.TileY, b.TileX, b.TileY)));
+                return;
+            }
+            return;
+        }
+        if (SelectedStructureId is int structId)
+        {
+            _commands.Submit(new DeconstructStructureCommand(structId));
+            return;
+        }
+        if (SelectedZoneId is int zoneId)
+        {
+            for (var i = 0; i < snap.Zones.Count; i++)
+            {
+                var z = snap.Zones[i];
+                if (z.ZoneId != zoneId) continue;
+                _commands.Submit(new EraseInRectCommand(
+                    new TileRect(z.MinTileX, z.MinTileY, z.MaxTileX, z.MaxTileY)));
+                return;
+            }
+        }
+    }
+
+    private void ApplyCancelShortcut()
+    {
+        var snap = _publisher.Current;
+        if (SelectedTreeId is int treeId)
+        {
+            for (var i = 0; i < snap.Trees.Count; i++)
+            {
+                var t = snap.Trees[i];
+                if (t.EntityId != treeId) continue;
+                _commands.Submit(new EraseInRectCommand(
+                    new TileRect(t.TileX, t.TileY, t.TileX, t.TileY)));
+                return;
+            }
+            return;
+        }
+        if (SelectedBoulderId is int boulderId)
+        {
+            for (var i = 0; i < snap.Boulders.Count; i++)
+            {
+                var b = snap.Boulders[i];
+                if (b.EntityId != boulderId) continue;
+                _commands.Submit(new EraseInRectCommand(
+                    new TileRect(b.TileX, b.TileY, b.TileX, b.TileY)));
+                return;
+            }
+            return;
+        }
+        if (SelectedStructureId is int structId)
+        {
+            for (var i = 0; i < snap.Structures.Count; i++)
+            {
+                var s = snap.Structures[i];
+                if (s.EntityId != structId) continue;
+                // Cancel any uninstall/deconstruct designation on this tile —
+                // EraseInRect drops designations + blueprints in the rect.
+                _commands.Submit(new EraseInRectCommand(
+                    new TileRect(s.TileX, s.TileY, s.TileX, s.TileY)));
+                return;
+            }
+        }
+    }
+
     private void DropStaleItemSelection()
     {
         if (SelectedItemId is not int id) return;
@@ -132,6 +259,11 @@ public partial class SelectionService : Node
 
     public override void _UnhandledInput(InputEvent ev)
     {
+        if (ev is InputEventKey ke && ke.Pressed && !ke.Echo)
+        {
+            HandleSelectionShortcut(ke);
+            return;
+        }
         if (ev is not InputEventMouseButton mb || !mb.Pressed) return;
         if (_tools is not null && !string.IsNullOrEmpty(_tools.ActiveToolId)) return;
 

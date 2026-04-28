@@ -41,6 +41,7 @@ public partial class BuildBar : CanvasLayer
             {
                 new Tool("zone.stockpile", "Stockpile (drag rect)"),
                 new Tool("zone.farm",      "Farm (drag rect)"),
+                new Tool("zone.delete",    "Delete Zone (drag rect)"),
             }),
             new Category("designators", "Designators", new[]
             {

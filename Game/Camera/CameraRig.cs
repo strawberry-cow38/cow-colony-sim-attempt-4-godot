@@ -18,6 +18,8 @@ public partial class CameraRig : Node3D
     private const float DefaultMaxDistance = 900f;
     private const float ZoomStep = 1.18f;
     private const float ZoomLerp = 12f;
+    // Exponential smoothing rate for portrait-driven focus moves. Higher = snappier.
+    private const float FocusLerp = 9f;
     private const float OrbitYawDegPerPx = 0.3f;
     private const float OrbitPitchDegPerPx = 0.2f;
     private const float MinPitchDeg = -85f;
@@ -36,6 +38,10 @@ public partial class CameraRig : Node3D
     private float _distanceTarget = Distance;
     private Vector2 _boundsMax = new(2048f, 2048f);
     private float _maxDistance = DefaultMaxDistance;
+    // When non-null, _Process lerps Position toward this point and clears
+    // it once the rig is essentially on top. Keyboard pan or middle-drag
+    // also clear the target so player input wins over the focus glide.
+    private Vector3? _focusTarget;
 
     public float CurrentDistance => _distance;
     public float MinZoomDistance => MinDistance;
@@ -84,6 +90,9 @@ public partial class CameraRig : Node3D
         var inputZ = (Input.IsPhysicalKeyPressed(Key.S) ? 1f : 0f) - (Input.IsPhysicalKeyPressed(Key.W) ? 1f : 0f);
         if (inputX != 0f || inputZ != 0f)
         {
+            // Player took manual control — abort any in-progress focus glide
+            // so the rig doesn't fight the keyboard.
+            _focusTarget = null;
             var yawBasis = Basis.FromEuler(new Vector3(0f, _yaw, 0f));
             var move = yawBasis * new Vector3(inputX, 0f, inputZ);
             var distRatio = Mathf.Clamp(_distance / Distance, 0.25f, 5f);
@@ -121,6 +130,25 @@ public partial class CameraRig : Node3D
         {
             _distance = Mathf.Lerp(_distance, _distanceTarget, 1f - Mathf.Exp(-ZoomLerp * dt));
             _camera.Position = new Vector3(0f, 0f, _distance);
+        }
+
+        if (_focusTarget is Vector3 target)
+        {
+            var t = 1f - Mathf.Exp(-FocusLerp * dt);
+            var p = Position;
+            p.X = Mathf.Lerp(p.X, target.X, t);
+            p.Z = Mathf.Lerp(p.Z, target.Z, t);
+            Position = p;
+            ClampToBounds();
+            // Stop the lerp once we're within ~0.05 tile so we don't burn
+            // cycles inching toward the target forever.
+            var stopThreshold = 2f;
+            if (Mathf.Abs(p.X - target.X) < stopThreshold && Mathf.Abs(p.Z - target.Z) < stopThreshold)
+            {
+                Position = new Vector3(target.X, p.Y, target.Z);
+                ClampToBounds();
+                _focusTarget = null;
+            }
         }
     }
 
@@ -184,12 +212,13 @@ public partial class CameraRig : Node3D
         _yawTweenT = 0f;
     }
 
-    // Snap the rig pivot to a world-space (X, Z) point in Godot units.
-    // Used by the colonist portrait bar to focus on a specific colonist.
+    // Smoothly slide the rig pivot toward a world-space (X, Z) point.
+    // _Process picks up the target and lerps each frame; player input
+    // (WASD / middle-drag pan) cancels the glide. Used by the portrait
+    // bar to focus on a colonist without snapping the camera.
     public void FocusOnUnits(float unitsX, float unitsZ)
     {
-        Position = new Vector3(unitsX, 0f, unitsZ);
-        ClampToBounds();
+        _focusTarget = new Vector3(unitsX, 0f, unitsZ);
     }
 
     private void ClampToBounds()

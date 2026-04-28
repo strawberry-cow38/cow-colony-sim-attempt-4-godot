@@ -193,9 +193,12 @@ public partial class PortraitBar : CanvasLayer
         // Default Camera3D forward is -Z, so a position offset on +Z with no
         // rotation already frames the body at the origin. Distance + Fov
         // chosen so the full ~73u capsule fits with margin top and bottom.
+        // Distance pulled in 10% from the original framing to make the body
+        // read bigger inside the portrait box. Keep Fov fixed so the
+        // perspective stays consistent.
         var camera = new Camera3D
         {
-            Position = new Vector3(0f, halfHeightUnits, 140f),
+            Position = new Vector3(0f, halfHeightUnits, 127f),
             Current = true,
             Fov = 36f,
         };

@@ -5,18 +5,23 @@ using Godot;
 
 namespace CowColonySim.Game.Selection;
 
-// Flat torus ring that hovers under the currently selected colonist.
-// Hidden when nothing is selected. Reads SelectionService for the id
-// and the snapshot for the colonist's current position.
+// Flat torus ring that hovers under the currently selected entity.
+// Hidden when nothing is selected. Boulders use a wider ring at the
+// same y so the ring isn't hidden under the rock; the mesh swaps based
+// on selection kind.
 public partial class SelectionRing : MeshInstance3D
 {
     private const float RingRadiusMeters = 0.6f;
     private const float RingThicknessMeters = 0.05f;
+    private const float BoulderRingRadiusMeters = 1.1f;
+    private const float BoulderRingThicknessMeters = 0.06f;
 
     private SelectionService _selection = null!;
     private SnapshotPublisher _publisher = null!;
     private Heightfield _heightfield = null!;
     private float _unitsPerMeter;
+    private TorusMesh _defaultMesh = null!;
+    private TorusMesh _boulderMesh = null!;
 
     public void Configure(SelectionService selection, SnapshotPublisher publisher, Heightfield heightfield)
     {
@@ -29,17 +34,26 @@ public partial class SelectionRing : MeshInstance3D
     {
         _unitsPerMeter = SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile;
 
-        Mesh = new TorusMesh
+        var material = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(1f, 0.85f, 0.2f),
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        };
+        _defaultMesh = new TorusMesh
         {
             InnerRadius = (RingRadiusMeters - RingThicknessMeters) * _unitsPerMeter,
             OuterRadius = RingRadiusMeters * _unitsPerMeter,
             RingSegments = 32,
-            Material = new StandardMaterial3D
-            {
-                AlbedoColor = new Color(1f, 0.85f, 0.2f),
-                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            },
+            Material = material,
         };
+        _boulderMesh = new TorusMesh
+        {
+            InnerRadius = (BoulderRingRadiusMeters - BoulderRingThicknessMeters) * _unitsPerMeter,
+            OuterRadius = BoulderRingRadiusMeters * _unitsPerMeter,
+            RingSegments = 32,
+            Material = material,
+        };
+        Mesh = _defaultMesh;
         CastShadow = ShadowCastingSetting.Off;
         Visible = false;
     }
@@ -56,6 +70,7 @@ public partial class SelectionRing : MeshInstance3D
                 var x = c.MetersX * _unitsPerMeter;
                 var z = c.MetersY * _unitsPerMeter;
                 var y = SampleGroundUnits(c.MetersX, c.MetersY) + 1f;
+                Mesh = _defaultMesh;
                 Position = new Vector3(x, y, z);
                 Visible = true;
                 return;
@@ -72,6 +87,24 @@ public partial class SelectionRing : MeshInstance3D
                 var x = metersX * _unitsPerMeter;
                 var z = metersY * _unitsPerMeter;
                 var y = SampleGroundUnits(metersX, metersY) + 1f;
+                Mesh = _defaultMesh;
+                Position = new Vector3(x, y, z);
+                Visible = true;
+                return;
+            }
+        }
+        if (_selection.SelectedBoulderId is int boulderId)
+        {
+            for (var i = 0; i < snap.Boulders.Count; i++)
+            {
+                var b = snap.Boulders[i];
+                if (b.EntityId != boulderId) continue;
+                var metersX = (b.TileX + 0.5f) * SimConstants.MetersPerTile;
+                var metersY = (b.TileY + 0.5f) * SimConstants.MetersPerTile;
+                var x = metersX * _unitsPerMeter;
+                var z = metersY * _unitsPerMeter;
+                var y = SampleGroundUnits(metersX, metersY) + 1f;
+                Mesh = _boulderMesh;
                 Position = new Vector3(x, y, z);
                 Visible = true;
                 return;

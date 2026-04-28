@@ -185,7 +185,16 @@ public partial class PlacementTool : Node
 
         var rect = TileRect.FromCorners(start.X, start.Y, tile.X, tile.Y);
 
-        if (toolId.StartsWith("zone."))
+        if (toolId == "zone.delete")
+        {
+            // Reuse EraseInRectCommand: it subtracts the rect from any
+            // overlapping zone and deletes zones whose mask becomes empty.
+            // It also clears designations + blueprints in the rect, which
+            // is the same behavior the dedicated erase tool uses, so the
+            // "Delete Zone" button is just a discoverable shortcut.
+            _commands.Submit(new EraseInRectCommand(rect));
+        }
+        else if (toolId.StartsWith("zone."))
         {
             var type = toolId switch
             {
@@ -364,6 +373,7 @@ public partial class PlacementTool : Node
     {
         "zone.stockpile" => new Color(0.85f, 0.65f, 0.35f, 0.30f),
         "zone.farm" => new Color(0.35f, 0.75f, 0.30f, 0.30f),
+        "zone.delete" => new Color(0.95f, 0.20f, 0.20f, 0.35f),
         "designate.chop_tree" => new Color(0.95f, 0.25f, 0.20f, 0.30f),
         "designate.mine" => new Color(0.55f, 0.55f, 0.6f, 0.30f),
         "designate.harvest" => new Color(0.95f, 0.85f, 0.30f, 0.30f),

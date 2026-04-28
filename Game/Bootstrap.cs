@@ -45,6 +45,7 @@ public partial class Bootstrap : Node3D
         _runtime.Scheduler.Register(new NeedDecaySystem(_runtime.World));
         _runtime.Scheduler.Register(new JobSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new ChopJobSystem(_runtime.World, planner, grid));
+        _runtime.Scheduler.Register(new MineJobSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new PlantJobSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new FarmAutoDesignateSystem(_runtime.World));
         _runtime.Scheduler.Register(new SowJobSystem(_runtime.World, planner, grid));
@@ -64,6 +65,7 @@ public partial class Bootstrap : Node3D
         SpawnNeedSpots(_runtime);
         SpawnDummyFrameworkObjects(_runtime);
         SpawnTrees(_runtime, _heightfield, grid);
+        SpawnBoulders(_runtime, _heightfield, grid);
         _runtime.Start();
 
         var env = AddEnvironment();
@@ -81,6 +83,7 @@ public partial class Bootstrap : Node3D
         AddBlueprintGhosts(_runtime, _heightfield);
         AddStructures(_runtime, _heightfield);
         AddTrees(_runtime, _heightfield);
+        AddBoulders(_runtime, _heightfield);
         AddChopAudio(_runtime, _heightfield);
         AddTreeFallAudio(_runtime, _heightfield);
         AddItems(_runtime, _heightfield);
@@ -178,6 +181,41 @@ public partial class Bootstrap : Node3D
         var renderer = new TreesRenderer { Name = "Trees" };
         renderer.Configure(runtime.Publisher, field);
         AddChild(renderer);
+    }
+
+    private void AddBoulders(SimRuntime runtime, Heightfield field)
+    {
+        var renderer = new BouldersRenderer { Name = "Boulders" };
+        renderer.Configure(runtime.Publisher, field);
+        AddChild(renderer);
+    }
+
+    // Scatter boulders on open tiles, deterministic from a fixed seed.
+    // Variant picks one of the 4 mesh buckets so the field reads varied.
+    // Lower count than trees — boulders are landmarks, not background.
+    private static void SpawnBoulders(SimRuntime runtime, Heightfield field, HeightGrid grid)
+    {
+        const int target = 80;
+        const int clearRadius = 14;
+        const int variantCount = 4;
+        var center = PreviewTileCount / 2;
+        var rng = new Random(unchecked((int)0xB0B0B0B0u));
+        var placed = 0;
+        var attempts = 0;
+        while (placed < target && attempts < target * 8)
+        {
+            attempts++;
+            var tx = rng.Next(2, field.VertWidth - 2);
+            var ty = rng.Next(2, field.VertHeight - 2);
+            var dx = tx - center;
+            var dy = ty - center;
+            if (dx * dx + dy * dy < clearRadius * clearRadius) continue;
+            if (grid.IsBlocked(tx, ty)) continue;
+            var seed = unchecked((uint)rng.Next());
+            runtime.World.SpawnBoulder(tx, ty, seed, rng.Next(variantCount));
+            grid.MarkBlocked(tx, ty, true);
+            placed++;
+        }
     }
 
     private void AddChopAudio(SimRuntime runtime, Heightfield field)

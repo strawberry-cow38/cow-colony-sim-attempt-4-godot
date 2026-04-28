@@ -20,6 +20,13 @@ public static class ItemCatalog
         });
         Register(new ItemDef
         {
+            Id = "stone", Kind = ItemKind.Stone,
+            DisplayName = "Stone chunk", Description = "Mined boulder fragment. Walls, hearths.",
+            Weight = 3f, Bulk = 1.5f, SellValue = 3,
+            Stackable = true, StackCapacity = 50,
+        });
+        Register(new ItemDef
+        {
             Id = "wheat", Kind = ItemKind.Wheat,
             DisplayName = "Wheat", Description = "Harvested grain. Mills to flour.",
             Weight = 0.4f, Bulk = 0.3f, SellValue = 1,

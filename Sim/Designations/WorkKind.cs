@@ -23,4 +23,7 @@ public enum WorkKind
     // Walk to a designated structure, tick progress, then refund half
     // the materials and remove the structure.
     Deconstruct = 10,
+    // Walk adjacent to a Mine-designated boulder, tick progress, then
+    // delete it and drop a stone stack on the tile.
+    Mine = 11,
 }

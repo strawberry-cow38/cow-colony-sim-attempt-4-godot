@@ -100,6 +100,7 @@ public sealed class SimRuntime : IDisposable
                     Designations: BuildDesignationViews(),
                     BlueprintGhosts: BuildBlueprintGhostViews(),
                     Trees: BuildTreeViews(),
+                    Boulders: BuildBoulderViews(),
                     Items: BuildItemViews(),
                     Structures: BuildStructureViews(),
                     TreeFalls: _world.DrainTreeFalls(),
@@ -292,6 +293,35 @@ public sealed class SimRuntime : IDisposable
             ref var p = ref entity.GetComponent<TilePosition>();
             var growth = entity.HasComponent<Plant>() ? entity.GetComponent<Plant>().Growth : 100f;
             views[i++] = new TreeView(entity.Id, p.TileX, p.TileY, t.Health, t.VariantSeed, activeChops.Contains(entity.Id), t.HitCount, growth);
+        }
+        return views;
+    }
+
+    private BoulderView[] BuildBoulderViews()
+    {
+        var activeMines = new HashSet<int>();
+        var workQuery = _world.Store.Query<Colonist, WorkJob, Job, TilePosition>();
+        foreach (var entity in workQuery.Entities)
+        {
+            ref var w = ref entity.GetComponent<WorkJob>();
+            if (!w.Active || w.Kind != WorkKind.Mine || w.TargetEntityId == 0) continue;
+            ref var j = ref entity.GetComponent<Job>();
+            if (j.Active) continue;
+            ref var pos = ref entity.GetComponent<TilePosition>();
+            if (Math.Abs(pos.TileX - w.TargetTileX) > 1 || Math.Abs(pos.TileY - w.TargetTileY) > 1) continue;
+            activeMines.Add(w.TargetEntityId);
+        }
+
+        var query = _world.Store.Query<Boulder, TilePosition>();
+        var views = new BoulderView[query.Count];
+        var i = 0;
+        foreach (var entity in query.Entities)
+        {
+            ref var b = ref entity.GetComponent<Boulder>();
+            ref var p = ref entity.GetComponent<TilePosition>();
+            views[i++] = new BoulderView(
+                entity.Id, p.TileX, p.TileY, b.Health, b.VariantSeed, b.Variant,
+                activeMines.Contains(entity.Id), b.HitCount);
         }
         return views;
     }

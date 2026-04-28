@@ -88,6 +88,19 @@ public sealed class SimWorld
         return e;
     }
 
+    public Entity SpawnBoulder(int tileX, int tileY, uint variantSeed, int variant, int health = 30)
+    {
+        var e = Store.CreateEntity();
+        e.AddComponent(new TilePosition(tileX, tileY, 0, 0.5f, 0.5f));
+        e.AddComponent(new Boulder
+        {
+            Health = health,
+            VariantSeed = variantSeed,
+            Variant = variant,
+        });
+        return e;
+    }
+
     // Drop a fresh stack of `kind` on the tile, or merge into the first
     // existing stack at that tile that has room. Returns the affected
     // entity (new or updated). Mirrors attempt-2's addItemToTile so chop

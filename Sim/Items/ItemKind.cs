@@ -15,4 +15,6 @@ public enum ItemKind
     Apparel = 4,
     // Equipped weapon. Single instance per colonist.
     Weapon = 5,
+    // Mined boulder yield. Stacks like wood; recipes coming as masonry lands.
+    Stone = 6,
 }

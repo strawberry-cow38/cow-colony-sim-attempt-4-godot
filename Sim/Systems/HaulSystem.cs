@@ -170,7 +170,8 @@ public sealed class HaulSystem : ITickSystem
                 "HAUL drop-arrived colonist={Cid} drop=({DX},{DY}) carryKind={K} stacks={Sc}",
                 entity.Id, work.DropTileX, work.DropTileY, work.CarryKind,
                 inv.Stacks?.Count ?? 0);
-            DrainCarriedToTile(ref inv, work.DropTileX, work.DropTileY);
+            DrainAndScatterToStockpiles(ref inv, work.DropTileX, work.DropTileY,
+                work.DropTileX, work.DropTileY, itemsByTile, stockpileTiles);
             ClearWork(ref work, ref pf);
             return;
         }
@@ -329,10 +330,85 @@ public sealed class HaulSystem : ITickSystem
         EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
     }
 
-    // Drain every non-locked, non-equipped inv stack onto a tile. Mixed
-    // kinds all land here — sorting them back to per-kind stockpile tiles
-    // is a follow-up auto-haul tick's problem. Minified items keep their
-    // wrapped DefId via SpawnMinifiedThing.
+    // Drain every non-locked, non-equipped inv stack and scatter each
+    // kind to the closest stockpile tile that accepts it (single-kind +
+    // has room). Falls back to (fallbackX, fallbackY) when no fit is
+    // found. Prevents mixed-kind super-stacks at the colonist's drop
+    // tile that would hide stacks behind byTile last-writer-wins.
+    private void DrainAndScatterToStockpiles(
+        ref Inventory inv, int colonistX, int colonistY,
+        int fallbackX, int fallbackY,
+        Dictionary<(int, int), List<ItemSnapshot>> itemsByTile,
+        HashSet<(int, int)> stockpileTiles)
+    {
+        if (inv.Stacks is null) return;
+        var reserved = new HashSet<(int, int)>();
+        for (var i = inv.Stacks.Count - 1; i >= 0; i--)
+        {
+            var s = inv.Stacks[i];
+            if (s.Locked || s.Equipped) continue;
+            var def = ItemCatalog.Get(s.DefId);
+            var tx = fallbackX;
+            var ty = fallbackY;
+            if (FindNearestStockpileTileFor(def.Kind, colonistX, colonistY,
+                itemsByTile, stockpileTiles, reserved, out var bx, out var by))
+            {
+                tx = bx;
+                ty = by;
+            }
+            reserved.Add((tx, ty));
+            var miniDef = def.Kind == ItemKind.Minified ? s.DefId : string.Empty;
+            _deposits.Add(new DepositAction(tx, ty, def.Kind, s.Count, miniDef));
+            inv.Stacks.RemoveAt(i);
+        }
+    }
+
+    private bool FindNearestStockpileTileFor(
+        ItemKind kind, int fromX, int fromY,
+        Dictionary<(int, int), List<ItemSnapshot>> itemsByTile,
+        HashSet<(int, int)> stockpileTiles,
+        HashSet<(int, int)> reserved,
+        out int outX, out int outY)
+    {
+        outX = 0;
+        outY = 0;
+        var bestDist = float.PositiveInfinity;
+        var found = false;
+        foreach (var tile in stockpileTiles)
+        {
+            if (reserved.Contains(tile)) continue;
+            if ((uint)tile.Item1 >= (uint)_grid.Width || (uint)tile.Item2 >= (uint)_grid.Height) continue;
+            if (_grid.IsBlocked(tile.Item1, tile.Item2)) continue;
+            if (itemsByTile.TryGetValue(tile, out var existing))
+            {
+                var ok = true;
+                var hasRoom = false;
+                for (var ei = 0; ei < existing.Count; ei++)
+                {
+                    var ex = existing[ei];
+                    if (ex.Kind != kind) { ok = false; break; }
+                    if (ex.Capacity - ex.Count > 0) hasRoom = true;
+                }
+                if (!ok) continue;
+                if (existing.Count > 0 && !hasRoom) continue;
+            }
+            var dx = tile.Item1 - fromX;
+            var dy = tile.Item2 - fromY;
+            var d = dx * dx + dy * dy;
+            if (d < bestDist)
+            {
+                bestDist = d;
+                outX = tile.Item1;
+                outY = tile.Item2;
+                found = true;
+            }
+        }
+        return found;
+    }
+
+    // Drain every non-locked, non-equipped inv stack onto a single tile.
+    // Used for path-failure fallback where the colonist couldn't reach
+    // their drop. Auto-haul will re-pick up the next tick.
     private void DrainCarriedToTile(ref Inventory inv, int tileX, int tileY)
     {
         if (inv.Stacks is null) return;

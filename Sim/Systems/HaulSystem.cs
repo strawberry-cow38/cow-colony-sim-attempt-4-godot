@@ -19,6 +19,12 @@ namespace CowColonySim.Sim.Systems;
 // All entity creation/deletion is deferred outside the colonist loop.
 public sealed class HaulSystem : ITickSystem
 {
+    // Chain pickups bound by this many tiles from the colonist's current
+    // tile. Keeps haulers from sprinting across the map for one stray log
+    // when their inventory has room left.
+    private const int ChainRadiusTiles = 12;
+    private const int ChainRadiusTilesSq = ChainRadiusTiles * ChainRadiusTiles;
+
     private readonly SimWorld _world;
     private readonly PathPlanner _planner;
     private readonly HeightGrid _grid;
@@ -271,6 +277,7 @@ public sealed class HaulSystem : ITickSystem
             var dx = it.TileX - pos.TileX;
             var dy = it.TileY - pos.TileY;
             var d = dx * dx + dy * dy;
+            if (d > ChainRadiusTilesSq) continue;
             if (d < bestDist)
             {
                 bestDist = d;

@@ -374,7 +374,9 @@ public partial class InfoPanel : CanvasLayer
             var stack = inv[i];
             var row = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
             var tag = stack.Equipped ? " [E]" : stack.Locked ? " [L]" : string.Empty;
-            var nameLabel = MakeLabel($"{stack.DisplayName} ×{stack.Count}{tag}");
+            var displayName = !string.IsNullOrEmpty(stack.WrappedDefId)
+                ? MinifiedLabel(stack.WrappedDefId) : stack.DisplayName;
+            var nameLabel = MakeLabel($"{displayName} ×{stack.Count}{tag}");
             nameLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
             row.AddChild(nameLabel);
 
@@ -438,9 +440,12 @@ public partial class InfoPanel : CanvasLayer
 
     private void ShowItemInfo(InventoryStackView stack)
     {
-        _itemInfoDialog.Title = stack.DisplayName;
+        var title = !string.IsNullOrEmpty(stack.WrappedDefId)
+            ? MinifiedLabel(stack.WrappedDefId) : stack.DisplayName;
+        _itemInfoDialog.Title = title;
         var lines = new System.Text.StringBuilder();
-        lines.AppendLine(stack.Description);
+        lines.AppendLine(!string.IsNullOrEmpty(stack.WrappedDefId)
+            ? MinifiedDescription(stack.WrappedDefId) : stack.Description);
         lines.AppendLine();
         lines.AppendLine($"weight: {stack.Weight:F1} kg ea");
         lines.AppendLine($"bulk: {stack.Bulk:F1} L ea");
@@ -492,10 +497,15 @@ public partial class InfoPanel : CanvasLayer
         {
             var it = snap.Items[i];
             if (it.EntityId != id) continue;
+            var label = it.Kind == ItemKind.Minified
+                ? MinifiedLabel(it.MinifiedDefId)
+                : KindLabel(it.Kind);
             _itemHeader.Text =
-                $"{KindLabel(it.Kind)} ×{it.Count}\n" +
+                $"{label} ×{it.Count}\n" +
                 $"tile ({it.TileX}, {it.TileY})";
-            _itemDescription.Text = KindDescription(it.Kind);
+            _itemDescription.Text = it.Kind == ItemKind.Minified
+                ? MinifiedDescription(it.MinifiedDefId)
+                : KindDescription(it.Kind);
             _forbidSyncing = true;
             _forbidCheck.ButtonPressed = it.Forbidden;
             _forbidSyncing = false;
@@ -519,6 +529,7 @@ public partial class InfoPanel : CanvasLayer
     {
         ItemKind.Wood => "wood",
         ItemKind.Wheat => "wheat",
+        ItemKind.Minified => "minified thing",
         _ => "item",
     };
 
@@ -526,8 +537,28 @@ public partial class InfoPanel : CanvasLayer
     {
         ItemKind.Wood => "rough cut from a felled pine. fuel, walls, and tool handles. stacks to 50.",
         ItemKind.Wheat => "harvested grain. food crop yield. stacks to 50.",
+        ItemKind.Minified => "a packaged structure ready to reinstall.",
         _ => "raw resource.",
     };
+
+    // Resolve a minified item's wrapped blueprint to its display name —
+    // ground stacks come with the wrapper id; if none provided, fall back
+    // to the generic minified label.
+    private static string MinifiedLabel(string? wrappedDefId)
+    {
+        if (string.IsNullOrEmpty(wrappedDefId)) return "minified thing";
+        if (BlueprintCatalog.TryGet(wrappedDefId, out var def) && def is not null)
+            return $"minified {def.DisplayName}";
+        return $"minified {wrappedDefId}";
+    }
+
+    private static string MinifiedDescription(string? wrappedDefId)
+    {
+        if (string.IsNullOrEmpty(wrappedDefId)) return "a packaged structure ready to reinstall.";
+        if (BlueprintCatalog.TryGet(wrappedDefId, out var def) && def is not null)
+            return $"a packaged {def.DisplayName} ready to reinstall.";
+        return "a packaged structure ready to reinstall.";
+    }
 
     private static bool HasChopDesignation(SimSnapshot snap, int tx, int ty)
     {

@@ -115,6 +115,21 @@ public static class InventoryOps
         return 1;
     }
 
+    // Minified pickup. Inventory entry stores DefId="minified" (generic
+    // catalog entry for weight/bulk math) plus the wrapped blueprint id
+    // so drop/drain can recreate the right structure. Always non-stackable
+    // count=1; multiple minified pickups stack as separate entries.
+    public static int AddMinified(ref Inventory inv, in CarryCaps caps, string wrappedDefId)
+    {
+        if (string.IsNullOrEmpty(wrappedDefId)) return 0;
+        inv.Stacks ??= new List<InventoryStack>();
+        var genericId = ItemCatalog.DefaultIdFor(ItemKind.Minified);
+        var room = RoomFor(genericId, caps, inv);
+        if (room <= 0) return 0;
+        inv.Stacks.Add(new InventoryStack(genericId, 1, wrappedDefId: wrappedDefId));
+        return 1;
+    }
+
     // Force-pickup variant: merges into an existing locked stack of the
     // same DefId, or appends a new locked stack. Keeps the locked pile
     // separate from any auto-haul stack the colonist might already
@@ -166,13 +181,14 @@ public static class InventoryOps
     }
 
     // Force-drop a specific stack regardless of equipped state. Returns
-    // the (defId, count) the caller should spawn on the ground.
-    public static (string defId, int count) RemoveAt(ref Inventory inv, int index)
+    // the (defId, count, wrappedDefId) the caller should spawn on the
+    // ground. wrappedDefId is non-empty only for minified entries.
+    public static (string defId, int count, string wrappedDefId) RemoveAt(ref Inventory inv, int index)
     {
-        if (inv.Stacks is null || index < 0 || index >= inv.Stacks.Count) return (string.Empty, 0);
+        if (inv.Stacks is null || index < 0 || index >= inv.Stacks.Count) return (string.Empty, 0, string.Empty);
         var s = inv.Stacks[index];
         inv.Stacks.RemoveAt(index);
-        return (s.DefId, s.Count);
+        return (s.DefId, s.Count, s.WrappedDefId ?? string.Empty);
     }
 
     // Equip the stack at index. Only one weapon equipped at a time

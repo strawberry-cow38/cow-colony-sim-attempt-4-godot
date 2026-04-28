@@ -141,16 +141,16 @@ public sealed class CommandSystem : ITickSystem
         if (!colonist.HasComponent<Inventory>() || !colonist.HasComponent<TilePosition>()) return;
         ref var inv = ref colonist.GetComponent<Inventory>();
         ref var pos = ref colonist.GetComponent<TilePosition>();
-        var (defId, count) = InventoryOps.RemoveAt(ref inv, cmd.StackIndex);
+        var (defId, count, wrappedDefId) = InventoryOps.RemoveAt(ref inv, cmd.StackIndex);
         if (count <= 0 || string.IsNullOrEmpty(defId)) return;
         var def = ItemCatalog.Get(defId);
         if (def.Kind == ItemKind.Minified)
         {
-            // Inventory doesn't carry per-instance minified metadata yet —
-            // dropping packages a fresh minified at the colonist's tile
-            // using the inventory entry's defId as the wrapped def.
-            // Phase-3 follow-up: persist Rotation/BaseLayer in the stack.
-            _world.SpawnMinifiedThing(defId, pos.TileX, pos.TileY, 0, 0);
+            // Wrapped blueprint id rides on the inv stack so we can
+            // recreate the right structure here. Rotation/BaseLayer
+            // aren't persisted in the stack yet — Phase-3 follow-up.
+            if (string.IsNullOrEmpty(wrappedDefId)) return;
+            _world.SpawnMinifiedThing(wrappedDefId, pos.TileX, pos.TileY, 0, 0);
         }
         else
         {
@@ -443,9 +443,14 @@ public sealed class CommandSystem : ITickSystem
             var def = ItemCatalog.Get(s.DefId);
             if (def.Kind != kind) continue;
             if (def.Kind == ItemKind.Minified)
-                _world.SpawnMinifiedThing(s.DefId, pos.TileX, pos.TileY, 0, 0);
+            {
+                if (!string.IsNullOrEmpty(s.WrappedDefId))
+                    _world.SpawnMinifiedThing(s.WrappedDefId, pos.TileX, pos.TileY, 0, 0);
+            }
             else
+            {
                 _world.AddOrMergeItem(pos.TileX, pos.TileY, def.Kind, s.Count);
+            }
             inv.Stacks.RemoveAt(i);
         }
     }

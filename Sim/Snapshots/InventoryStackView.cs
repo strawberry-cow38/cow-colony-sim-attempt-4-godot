@@ -16,4 +16,5 @@ public readonly record struct InventoryStackView(
     bool Equipped,
     bool Locked,
     bool IsWeapon,
-    bool IsClothing);
+    bool IsClothing,
+    string WrappedDefId = "");

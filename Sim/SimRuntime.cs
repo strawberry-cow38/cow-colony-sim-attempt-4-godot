@@ -178,7 +178,8 @@ public sealed class SimRuntime : IDisposable
                         invView[s] = new InventoryStackView(
                             s, stack.DefId, def.DisplayName, def.Description,
                             stack.Count, def.Weight, def.Bulk, def.SellValue,
-                            stack.Equipped, stack.Locked, def.IsWeapon, def.IsClothing);
+                            stack.Equipped, stack.Locked, def.IsWeapon, def.IsClothing,
+                            stack.WrappedDefId ?? string.Empty);
                     }
                 }
             }

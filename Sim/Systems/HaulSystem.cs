@@ -206,8 +206,15 @@ public sealed class HaulSystem : ITickSystem
         }
 
         // At pickup tile — pull the whole stack (or as much as fits) into Inventory.
+        // Minified routes through AddMinified so the wrapped blueprint id
+        // travels in the inv stack — drop/drain needs it to call
+        // SpawnMinifiedThing with the right structure def.
         var defId = ResolveDefId(item);
-        var added = InventoryOps.Add(ref inv, in caps, defId, item.Count);
+        int added;
+        if (item.Kind == ItemKind.Minified)
+            added = InventoryOps.AddMinified(ref inv, in caps, item.MinifiedDefId);
+        else
+            added = InventoryOps.Add(ref inv, in caps, defId, item.Count);
         SimLog.Logger.Information(
             "HAUL pickup colonist={Cid} at ({X},{Y}) defId={Def} item.Count={N} added={Added} drop=({DX},{DY})",
             entity.Id, pos.TileX, pos.TileY, defId, item.Count, added, work.DropTileX, work.DropTileY);
@@ -350,7 +357,7 @@ public sealed class HaulSystem : ITickSystem
             if (s.Locked || s.Equipped) continue;
             var def = ItemCatalog.Get(s.DefId);
             if (def.Kind != kind) continue;
-            var miniDef = def.Kind == ItemKind.Minified ? s.DefId : string.Empty;
+            var miniDef = def.Kind == ItemKind.Minified ? (s.WrappedDefId ?? string.Empty) : string.Empty;
             _deposits.Add(new DepositAction(tileX, tileY, def.Kind, s.Count, miniDef));
             inv.Stacks.RemoveAt(i);
         }
@@ -397,7 +404,7 @@ public sealed class HaulSystem : ITickSystem
             if (s.Locked || s.Equipped) continue;
             var def = ItemCatalog.Get(s.DefId);
             if (def.Kind == ItemKind.Minified)
-                _deposits.Add(new DepositAction(tileX, tileY, def.Kind, s.Count, s.DefId));
+                _deposits.Add(new DepositAction(tileX, tileY, def.Kind, s.Count, s.WrappedDefId ?? string.Empty));
             else
                 _deposits.Add(new DepositAction(tileX, tileY, def.Kind, s.Count, string.Empty));
             inv.Stacks.RemoveAt(i);

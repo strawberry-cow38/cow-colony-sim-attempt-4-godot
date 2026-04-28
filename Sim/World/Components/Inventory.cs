@@ -17,13 +17,20 @@ public struct InventoryStack
     // locked stacks — they sit in inventory until the player force-drops
     // them. Cleared on force-drop only.
     public bool Locked;
+    // For Minified: the wrapped structure's blueprint defId (e.g.
+    // "wall.wood"). DefId stays the generic "minified" so weight/bulk
+    // math via ItemCatalog still resolves; this carries the wrapper so
+    // SpawnMinifiedThing on drop/drain can recreate the right structure.
+    // Empty string for non-minified stacks.
+    public string WrappedDefId;
 
-    public InventoryStack(string defId, int count, bool equipped = false, bool locked = false)
+    public InventoryStack(string defId, int count, bool equipped = false, bool locked = false, string wrappedDefId = "")
     {
         DefId = defId;
         Count = count;
         Equipped = equipped;
         Locked = locked;
+        WrappedDefId = wrappedDefId ?? string.Empty;
     }
 }
 

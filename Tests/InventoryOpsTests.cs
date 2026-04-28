@@ -108,7 +108,7 @@ public class InventoryOpsTests
         var (inv, caps) = Fresh();
         InventoryOps.Add(ref inv, caps, "weapon.club", 1);
         InventoryOps.Equip(ref inv, 0);
-        var (defId, count) = InventoryOps.RemoveAt(ref inv, 0);
+        var (defId, count, _) = InventoryOps.RemoveAt(ref inv, 0);
         Assert.Equal("weapon.club", defId);
         Assert.Equal(1, count);
         Assert.Empty(inv.Stacks);

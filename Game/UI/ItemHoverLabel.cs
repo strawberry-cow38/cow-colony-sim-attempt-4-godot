@@ -1,6 +1,7 @@
 using CowColonySim.Game.Camera;
 using CowColonySim.Game.Terrain;
 using CowColonySim.Sim;
+using CowColonySim.Sim.Blueprints;
 using CowColonySim.Sim.Items;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Terrain;
@@ -115,7 +116,10 @@ public partial class ItemHoverLabel : Node3D
             by * _unitsPerMeter);
 
         var prefix = view.Forbidden ? "[forbidden] " : "";
-        _label.Text = $"{prefix}{KindLabel(view.Kind)} ×{view.Count}";
+        var label = view.Kind == ItemKind.Minified
+            ? MinifiedLabel(view.MinifiedDefId)
+            : KindLabel(view.Kind);
+        _label.Text = $"{prefix}{label} ×{view.Count}";
         if (_cameraRig is not null && _cameraRig.CurrentDistance > 0f)
         {
             // FixedSize=true treats PixelSize as a screen-pixel scalar. Scaling
@@ -132,6 +136,15 @@ public partial class ItemHoverLabel : Node3D
     {
         ItemKind.Wood => "wood",
         ItemKind.Wheat => "wheat",
+        ItemKind.Minified => "minified thing",
         _ => "item",
     };
+
+    private static string MinifiedLabel(string? wrappedDefId)
+    {
+        if (string.IsNullOrEmpty(wrappedDefId)) return "minified thing";
+        if (BlueprintCatalog.TryGet(wrappedDefId, out var def) && def is not null)
+            return $"minified {def.DisplayName}";
+        return $"minified {wrappedDefId}";
+    }
 }

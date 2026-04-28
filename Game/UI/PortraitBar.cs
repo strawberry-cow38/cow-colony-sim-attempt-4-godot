@@ -169,8 +169,13 @@ public partial class PortraitBar : CanvasLayer
         // Body: same capsule the world renderer uses, framed by a small
         // perspective camera. Lighting via a single directional light
         // keyed to the front so silhouettes read clean.
+        var halfHeightUnits = CapsuleHeightMeters * 0.5f * UnitsPerMeter;
+        // Translate the capsule up so its feet sit on y=0 instead of straddling
+        // the origin. Otherwise the frame center lands mid-torso and the lower
+        // body falls off the bottom of the SubViewport.
         var body = new MeshInstance3D
         {
+            Position = new Vector3(0f, halfHeightUnits, 0f),
             Mesh = new CapsuleMesh
             {
                 Radius = CapsuleRadiusMeters * UnitsPerMeter,
@@ -185,8 +190,6 @@ public partial class PortraitBar : CanvasLayer
             },
         };
         viewport.AddChild(body);
-
-        var halfHeightUnits = CapsuleHeightMeters * 0.5f * UnitsPerMeter;
         // Default Camera3D forward is -Z, so a position offset on +Z with no
         // rotation already frames the body at the origin. Distance + Fov
         // chosen so the full ~73u capsule fits with margin top and bottom.

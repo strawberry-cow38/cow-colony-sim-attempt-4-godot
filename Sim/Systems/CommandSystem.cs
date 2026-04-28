@@ -174,40 +174,48 @@ public sealed class CommandSystem : ITickSystem
         InventoryOps.Unequip(ref inv, cmd.StackIndex);
     }
 
-    private void Apply(UninstallStructureCommand cmd)
-    {
-        var ent = _world.Store.GetEntityById(cmd.EntityId);
-        if (ent == default || !ent.HasComponent<Structure>() || !ent.HasComponent<TilePosition>()) return;
-        ref var s = ref ent.GetComponent<Structure>();
-        ref var pos = ref ent.GetComponent<TilePosition>();
-        var def = BlueprintCatalog.Get(s.DefId);
+    // Toggle a structure-work designation on the structure's tile. If a
+    // matching designation already exists, this cancels it (clears any
+    // matching active WorkJob too). Otherwise stamps a new designation
+    // for StructureWorkSystem to pick up.
+    private void Apply(UninstallStructureCommand cmd) =>
+        ToggleStructureDesignation(cmd.EntityId, DesignationKind.Uninstall, WorkKind.Uninstall);
 
-        UnblockFootprintIfStructure(def, s.Rotation, pos.TileX, pos.TileY);
-        var defId = s.DefId;
-        var rotation = s.Rotation;
-        var baseLayer = s.BaseLayer;
-        var tileX = pos.TileX;
-        var tileY = pos.TileY;
-        ent.DeleteEntity();
-        _world.SpawnMinifiedThing(defId, tileX, tileY, rotation, baseLayer);
-    }
+    private void ApplyDeconstruct(int structureId) =>
+        ToggleStructureDesignation(structureId, DesignationKind.Deconstruct, WorkKind.Deconstruct);
 
-    private void ApplyDeconstruct(int structureId)
+    private void ToggleStructureDesignation(int structureId, DesignationKind dKind, WorkKind wKind)
     {
         var ent = _world.Store.GetEntityById(structureId);
         if (ent == default || !ent.HasComponent<Structure>() || !ent.HasComponent<TilePosition>()) return;
-        ref var s = ref ent.GetComponent<Structure>();
         ref var pos = ref ent.GetComponent<TilePosition>();
-        var def = BlueprintCatalog.Get(s.DefId);
-        var mats = def.MaterialsOrEmpty;
-        for (var i = 0; i < mats.Count; i++)
+        var tx = pos.TileX;
+        var ty = pos.TileY;
+
+        // Cancel branch: nuke an existing matching designation + any
+        // colonist actively working on it.
+        foreach (var d in _world.Store.Query<Designation, TilePosition>().Entities)
         {
-            var m = mats[i];
-            var refund = m.Count / 2;
-            if (refund > 0) _world.AddOrMergeItem(pos.TileX, pos.TileY, m.Kind, refund);
+            ref var dc = ref d.GetComponent<Designation>();
+            if (dc.Kind != dKind) continue;
+            ref var dp = ref d.GetComponent<TilePosition>();
+            if (dp.TileX != tx || dp.TileY != ty) continue;
+            d.DeleteEntity();
+            ClearStructureWorkers(structureId, wKind);
+            return;
         }
-        UnblockFootprintIfStructure(def, s.Rotation, pos.TileX, pos.TileY);
-        ent.DeleteEntity();
+        _world.SpawnDesignation(tx, ty, dKind);
+    }
+
+    private void ClearStructureWorkers(int structureId, WorkKind wKind)
+    {
+        foreach (var c in _world.Store.Query<Colonist, WorkJob, PathFollower>().Entities)
+        {
+            ref var w = ref c.GetComponent<WorkJob>();
+            if (!w.Active || w.Kind != wKind || w.TargetEntityId != structureId) continue;
+            ref var pf = ref c.GetComponent<PathFollower>();
+            ResetWorkJob(ref w, ref pf);
+        }
     }
 
     private void UnblockFootprintIfStructure(BlueprintDef def, int rotation, int tileX, int tileY)

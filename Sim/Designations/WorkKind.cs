@@ -17,4 +17,10 @@ public enum WorkKind
     // with the Locked flag set, then idle. Auto-systems leave the colonist
     // alone after — only ForceDrop releases the stack.
     ForcePickup = 8,
+    // Walk to a designated structure, tick progress, then swap the
+    // structure to a minified package on the ground.
+    Uninstall = 9,
+    // Walk to a designated structure, tick progress, then refund half
+    // the materials and remove the structure.
+    Deconstruct = 10,
 }

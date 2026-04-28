@@ -286,9 +286,24 @@ public partial class InfoPanel : CanvasLayer
             _structureHeader.Text =
                 $"{name}\n" +
                 $"tile ({s.TileX}, {s.TileY})";
+            var uninstallDesignated = HasStructureDesignation(snap, s.TileX, s.TileY, DesignationKind.Uninstall);
+            var deconstructDesignated = HasStructureDesignation(snap, s.TileX, s.TileY, DesignationKind.Deconstruct);
+            _uninstallBtn.Text = uninstallDesignated ? "cancel uninstall" : "uninstall";
+            _deconstructBtn.Text = deconstructDesignated ? "cancel deconstruct" : "deconstruct (returns half)";
             return;
         }
         _structureHeader.Text = $"structure #{id} (gone)";
+    }
+
+    private static bool HasStructureDesignation(SimSnapshot snap, int tx, int ty, DesignationKind kind)
+    {
+        for (var i = 0; i < snap.Designations.Count; i++)
+        {
+            var d = snap.Designations[i];
+            if (d.Kind != kind) continue;
+            if (d.TileX == tx && d.TileY == ty) return true;
+        }
+        return false;
     }
 
     private void OnCancelBlueprint()

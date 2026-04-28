@@ -12,4 +12,9 @@ public enum DesignationKind
     Harvest = 2,
     CutPlant = 3,
     Sow = 4,
+    // Player marked this structure tile for uninstall — walk a colonist
+    // over, tick progress, then swap the structure to a minified package.
+    Uninstall = 5,
+    // Same flow as Uninstall but yields half the materials back instead.
+    Deconstruct = 6,
 }

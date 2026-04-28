@@ -26,6 +26,8 @@ public partial class DesignationsRenderer : Node3D
     private MultiMeshInstance3D _harvest = null!;
     private MultiMeshInstance3D _cut = null!;
     private MultiMeshInstance3D _sow = null!;
+    private MultiMeshInstance3D _uninstall = null!;
+    private MultiMeshInstance3D _deconstruct = null!;
 
     public void Configure(SnapshotPublisher publisher, Heightfield heightfield)
     {
@@ -41,11 +43,15 @@ public partial class DesignationsRenderer : Node3D
         _harvest = MakeBucket("HarvestMarkers", new Color(0.95f, 0.85f, 0.30f));
         _cut = MakeBucket("CutMarkers", new Color(0.95f, 0.55f, 0.20f));
         _sow = MakeBucket("SowMarkers", new Color(0.30f, 0.85f, 0.40f));
+        _uninstall = MakeBucket("UninstallMarkers", new Color(0.30f, 0.55f, 0.95f));
+        _deconstruct = MakeBucket("DeconstructMarkers", new Color(0.55f, 0.30f, 0.85f));
         AddChild(_chop);
         AddChild(_mine);
         AddChild(_harvest);
         AddChild(_cut);
         AddChild(_sow);
+        AddChild(_uninstall);
+        AddChild(_deconstruct);
     }
 
     private MultiMeshInstance3D MakeBucket(string name, Color color)
@@ -85,6 +91,7 @@ public partial class DesignationsRenderer : Node3D
         for (var i = 0; i < trees.Count; i++) treeTiles.Add((trees[i].TileX, trees[i].TileY));
 
         var chopN = 0; var mineN = 0; var harvestN = 0; var cutN = 0; var sowN = 0;
+        var uninstallN = 0; var deconstructN = 0;
         for (var i = 0; i < ds.Count; i++)
         {
             var d = ds[i];
@@ -97,6 +104,8 @@ public partial class DesignationsRenderer : Node3D
                 case DesignationKind.Harvest: harvestN++; break;
                 case DesignationKind.CutPlant: cutN++; break;
                 case DesignationKind.Sow: sowN++; break;
+                case DesignationKind.Uninstall: uninstallN++; break;
+                case DesignationKind.Deconstruct: deconstructN++; break;
             }
         }
         EnsureCount(_chop, chopN);
@@ -104,9 +113,12 @@ public partial class DesignationsRenderer : Node3D
         EnsureCount(_harvest, harvestN);
         EnsureCount(_cut, cutN);
         EnsureCount(_sow, sowN);
+        EnsureCount(_uninstall, uninstallN);
+        EnsureCount(_deconstruct, deconstructN);
 
         var hoverUnits = HoverMeters * _unitsPerMeter;
         var ci = 0; var mi = 0; var hi = 0; var cuti = 0; var sowi = 0;
+        var ui = 0; var di_ = 0;
         for (var i = 0; i < ds.Count; i++)
         {
             var d = ds[i];
@@ -125,6 +137,8 @@ public partial class DesignationsRenderer : Node3D
                 case DesignationKind.Harvest: _harvest.Multimesh.SetInstanceTransform(hi++, xf); break;
                 case DesignationKind.CutPlant: _cut.Multimesh.SetInstanceTransform(cuti++, xf); break;
                 case DesignationKind.Sow: _sow.Multimesh.SetInstanceTransform(sowi++, xf); break;
+                case DesignationKind.Uninstall: _uninstall.Multimesh.SetInstanceTransform(ui++, xf); break;
+                case DesignationKind.Deconstruct: _deconstruct.Multimesh.SetInstanceTransform(di_++, xf); break;
             }
         }
     }

@@ -51,6 +51,7 @@ public partial class Bootstrap : Node3D
         _runtime.Scheduler.Register(new ForcePickupSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new HaulSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new ConstructionJobSystem(_runtime.World, planner, grid));
+        _runtime.Scheduler.Register(new StructureWorkSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new WanderSystem(_runtime.World, planner, grid));
         var lighting = new LightingSystem(_runtime.World, grid.Width, grid.Height);
         _runtime.Scheduler.Register(lighting);

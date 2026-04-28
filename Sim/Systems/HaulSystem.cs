@@ -106,7 +106,7 @@ public sealed class HaulSystem : ITickSystem
 
             if (work.Active && work.Kind == WorkKind.HaulItem)
             {
-                ProgressHaul(entity, ref work, ref pf, ref pos, itemsByTile, itemsByEntity, stockpileTiles, claimedItems);
+                ProgressHaul(entity, ref work, ref pf, ref pos, itemsByTile, itemsByEntity, stockpileTiles, claimedItems, occupiedDropTiles);
             }
             else if (!work.Active)
             {
@@ -147,7 +147,8 @@ public sealed class HaulSystem : ITickSystem
         Dictionary<(int, int), List<ItemSnapshot>> itemsByTile,
         Dictionary<int, ItemSnapshot> itemsByEntity,
         HashSet<(int, int)> stockpileTiles,
-        HashSet<int> claimedItems)
+        HashSet<int> claimedItems,
+        HashSet<(int, int)> occupiedDropTiles)
     {
         ref var inv = ref entity.GetComponent<Inventory>();
         ref var caps = ref entity.GetComponent<CarryCaps>();
@@ -170,8 +171,16 @@ public sealed class HaulSystem : ITickSystem
                 "HAUL drop-arrived colonist={Cid} drop=({DX},{DY}) carryKind={K} stacks={Sc}",
                 entity.Id, work.DropTileX, work.DropTileY, work.CarryKind,
                 inv.Stacks?.Count ?? 0);
-            DrainAndScatterToStockpiles(ref inv, work.DropTileX, work.DropTileY,
-                work.DropTileX, work.DropTileY, itemsByTile, stockpileTiles);
+            // Drop only the current CarryKind here; if more kinds remain
+            // in inv, retarget DropTile to the next kind's stockpile and
+            // walk over.
+            DrainKindToTile(ref inv, work.CarryKind, work.DropTileX, work.DropTileY);
+            if (TryRetargetNextKindDrop(entity, ref work, ref pf, ref pos, ref inv,
+                itemsByTile, occupiedDropTiles))
+                return;
+            // Anything left that had no stockpile fit — drop on the
+            // current tile so it doesn't ride along forever.
+            DrainCarriedToTile(ref inv, work.DropTileX, work.DropTileY);
             ClearWork(ref work, ref pf);
             return;
         }
@@ -330,80 +339,50 @@ public sealed class HaulSystem : ITickSystem
         EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
     }
 
-    // Drain every non-locked, non-equipped inv stack and scatter each
-    // kind to the closest stockpile tile that accepts it (single-kind +
-    // has room). Falls back to (fallbackX, fallbackY) when no fit is
-    // found. Prevents mixed-kind super-stacks at the colonist's drop
-    // tile that would hide stacks behind byTile last-writer-wins.
-    private void DrainAndScatterToStockpiles(
-        ref Inventory inv, int colonistX, int colonistY,
-        int fallbackX, int fallbackY,
-        Dictionary<(int, int), List<ItemSnapshot>> itemsByTile,
-        HashSet<(int, int)> stockpileTiles)
+    // Drain only stacks matching `kind` onto the tile. Other kinds stay
+    // in the inventory for the next leg of the trip.
+    private void DrainKindToTile(ref Inventory inv, ItemKind kind, int tileX, int tileY)
     {
-        if (inv.Stacks is null) return;
-        var reserved = new HashSet<(int, int)>();
+        if (inv.Stacks is null || kind == ItemKind.None) return;
         for (var i = inv.Stacks.Count - 1; i >= 0; i--)
         {
             var s = inv.Stacks[i];
             if (s.Locked || s.Equipped) continue;
             var def = ItemCatalog.Get(s.DefId);
-            var tx = fallbackX;
-            var ty = fallbackY;
-            if (FindNearestStockpileTileFor(def.Kind, colonistX, colonistY,
-                itemsByTile, stockpileTiles, reserved, out var bx, out var by))
-            {
-                tx = bx;
-                ty = by;
-            }
-            reserved.Add((tx, ty));
+            if (def.Kind != kind) continue;
             var miniDef = def.Kind == ItemKind.Minified ? s.DefId : string.Empty;
-            _deposits.Add(new DepositAction(tx, ty, def.Kind, s.Count, miniDef));
+            _deposits.Add(new DepositAction(tileX, tileY, def.Kind, s.Count, miniDef));
             inv.Stacks.RemoveAt(i);
         }
     }
 
-    private bool FindNearestStockpileTileFor(
-        ItemKind kind, int fromX, int fromY,
+    // After dropping the current kind, find the next kind still in inv
+    // that has a viable stockpile tile and repath there. Returns false
+    // when nothing left to deliver (or no stockpile tile fits any
+    // remaining kind).
+    private bool TryRetargetNextKindDrop(
+        Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
+        ref Inventory inv,
         Dictionary<(int, int), List<ItemSnapshot>> itemsByTile,
-        HashSet<(int, int)> stockpileTiles,
-        HashSet<(int, int)> reserved,
-        out int outX, out int outY)
+        HashSet<(int, int)> occupiedDropTiles)
     {
-        outX = 0;
-        outY = 0;
-        var bestDist = float.PositiveInfinity;
-        var found = false;
-        foreach (var tile in stockpileTiles)
+        if (inv.Stacks is null) return false;
+        for (var i = 0; i < inv.Stacks.Count; i++)
         {
-            if (reserved.Contains(tile)) continue;
-            if ((uint)tile.Item1 >= (uint)_grid.Width || (uint)tile.Item2 >= (uint)_grid.Height) continue;
-            if (_grid.IsBlocked(tile.Item1, tile.Item2)) continue;
-            if (itemsByTile.TryGetValue(tile, out var existing))
-            {
-                var ok = true;
-                var hasRoom = false;
-                for (var ei = 0; ei < existing.Count; ei++)
-                {
-                    var ex = existing[ei];
-                    if (ex.Kind != kind) { ok = false; break; }
-                    if (ex.Capacity - ex.Count > 0) hasRoom = true;
-                }
-                if (!ok) continue;
-                if (existing.Count > 0 && !hasRoom) continue;
-            }
-            var dx = tile.Item1 - fromX;
-            var dy = tile.Item2 - fromY;
-            var d = dx * dx + dy * dy;
-            if (d < bestDist)
-            {
-                bestDist = d;
-                outX = tile.Item1;
-                outY = tile.Item2;
-                found = true;
-            }
+            var s = inv.Stacks[i];
+            if (s.Locked || s.Equipped) continue;
+            if (s.Count <= 0) continue;
+            var def = ItemCatalog.Get(s.DefId);
+            if (!TryFindDropTile(def.Kind, s.Count, itemsByTile, occupiedDropTiles, out var nx, out var ny))
+                continue;
+            work.CarryKind = def.Kind;
+            work.DropTileX = nx;
+            work.DropTileY = ny;
+            occupiedDropTiles.Add((nx, ny));
+            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, nx, ny);
+            return true;
         }
-        return found;
+        return false;
     }
 
     // Drain every non-locked, non-equipped inv stack onto a single tile.

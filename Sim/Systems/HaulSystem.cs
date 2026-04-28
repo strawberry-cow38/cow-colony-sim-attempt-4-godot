@@ -159,7 +159,7 @@ public sealed class HaulSystem : ITickSystem
             {
                 if (pf.LastPathFailed)
                 {
-                    DrainCarriedToTile(ref inv, pos.TileX, pos.TileY, work.CarryKind);
+                    DrainCarriedToTile(ref inv, pos.TileX, pos.TileY);
                     ClearWork(ref work, ref pf);
                     return;
                 }
@@ -170,7 +170,7 @@ public sealed class HaulSystem : ITickSystem
                 "HAUL drop-arrived colonist={Cid} drop=({DX},{DY}) carryKind={K} stacks={Sc}",
                 entity.Id, work.DropTileX, work.DropTileY, work.CarryKind,
                 inv.Stacks?.Count ?? 0);
-            DrainCarriedToTile(ref inv, work.DropTileX, work.DropTileY, work.CarryKind);
+            DrainCarriedToTile(ref inv, work.DropTileX, work.DropTileY);
             ClearWork(ref work, ref pf);
             return;
         }
@@ -251,8 +251,9 @@ public sealed class HaulSystem : ITickSystem
             SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
     }
 
-    // Chain: if there's another nearby item of the same CarryKind that
-    // fits in remaining inventory room, retarget WorkJob and repath.
+    // Chain: nearest item of any kind in radius that still fits somewhere
+    // in remaining inventory room. Mixed-kind hauls land at the original
+    // CarryKind's drop tile; sorting back out is the next tick's problem.
     private bool TryChainNextPickup(
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
         Dictionary<(int, int), ItemSnapshot> itemsByTile,
@@ -260,10 +261,6 @@ public sealed class HaulSystem : ITickSystem
         HashSet<int> claimedItems,
         in Inventory inv, in CarryCaps caps)
     {
-        if (work.CarryKind == ItemKind.None) return false;
-        var room = InventoryOps.RoomFor(ItemCatalog.DefaultIdFor(work.CarryKind), in caps, in inv);
-        if (room <= 0) return false;
-
         var bestId = 0;
         var bestX = 0;
         var bestY = 0;
@@ -271,9 +268,11 @@ public sealed class HaulSystem : ITickSystem
         foreach (var kv in itemsByTile)
         {
             var it = kv.Value;
-            if (it.Kind != work.CarryKind || it.Forbidden) continue;
+            if (it.Forbidden) continue;
             if (claimedItems.Contains(it.EntityId)) continue;
             if (stockpileTiles.Contains((it.TileX, it.TileY))) continue;
+            var defId = ResolveDefId(it);
+            if (InventoryOps.RoomFor(defId, in caps, in inv) <= 0) continue;
             var dx = it.TileX - pos.TileX;
             var dy = it.TileY - pos.TileY;
             var d = dx * dx + dy * dy;
@@ -300,7 +299,8 @@ public sealed class HaulSystem : ITickSystem
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
         ref Inventory inv)
     {
-        // Nothing actually carried? Just abort.
+        // Nothing actually carried? Just abort. Mixed-kind hauls count any
+        // unlocked + unequipped stack as "holds" so we still walk to drop.
         var holds = false;
         if (inv.Stacks is not null)
         {
@@ -308,8 +308,7 @@ public sealed class HaulSystem : ITickSystem
             {
                 var s = inv.Stacks[i];
                 if (s.Locked || s.Equipped) continue;
-                var def = ItemCatalog.Get(s.DefId);
-                if (def.Kind != work.CarryKind) continue;
+                if (s.Count <= 0) continue;
                 holds = true;
                 break;
             }
@@ -326,17 +325,18 @@ public sealed class HaulSystem : ITickSystem
         EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
     }
 
-    // Drain non-locked, non-equipped inv stacks of the given kind onto a
-    // tile. Minified items keep their wrapped DefId via SpawnMinifiedThing.
-    private void DrainCarriedToTile(ref Inventory inv, int tileX, int tileY, ItemKind kind)
+    // Drain every non-locked, non-equipped inv stack onto a tile. Mixed
+    // kinds all land here — sorting them back to per-kind stockpile tiles
+    // is a follow-up auto-haul tick's problem. Minified items keep their
+    // wrapped DefId via SpawnMinifiedThing.
+    private void DrainCarriedToTile(ref Inventory inv, int tileX, int tileY)
     {
-        if (inv.Stacks is null || kind == ItemKind.None) return;
+        if (inv.Stacks is null) return;
         for (var i = inv.Stacks.Count - 1; i >= 0; i--)
         {
             var s = inv.Stacks[i];
             if (s.Locked || s.Equipped) continue;
             var def = ItemCatalog.Get(s.DefId);
-            if (def.Kind != kind) continue;
             if (def.Kind == ItemKind.Minified)
                 _deposits.Add(new DepositAction(tileX, tileY, def.Kind, s.Count, s.DefId));
             else

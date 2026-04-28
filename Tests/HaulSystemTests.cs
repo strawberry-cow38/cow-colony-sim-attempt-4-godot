@@ -33,13 +33,16 @@ public class HaulSystemTests
         var (world, grid, planner) = MakeWorld();
 
         var colonist = world.SpawnColonist(0xCAFEBABE, 4, 4);
-        // Force the legacy small caps so the partial-pickup branch is
-        // actually exercised. Default caps would carry 5 wood in one trip.
+        // Force tiny caps so the partial-pickup branch is actually
+        // exercised. Default colonist caps would carry the whole pile in
+        // one trip. Strength=1 → 5kg weight cap; BaseBulk=2 → 5L bulk cap.
+        // Wood is 1kg / 0.4L → 5 wood per trip (weight-limited).
         ref var caps = ref colonist.GetComponent<CarryCaps>();
-        caps.Strength = 10;
-        caps.BaseBulk = 10f;
-        // 5 wood at tile (5, 4). Wood = 4L bulk. BaseBulk = 10L → only 2 fit per trip.
-        var item = world.AddOrMergeItem(5, 4, ItemKind.Wood, 5);
+        caps.Strength = 1;
+        caps.BaseBulk = 2f;
+        // 8 wood at (5,4) forces at least one partial pickup: trip 1 takes
+        // 5, leftover 3; trip 2 takes 3, source done.
+        var item = world.AddOrMergeItem(5, 4, ItemKind.Wood, 8);
         var stockpileRect = new TileRect(6, 4, 7, 5);
         world.SpawnZone(1, ZoneType.Stockpile, stockpileRect, TileMask.Filled(stockpileRect), "sp");
 

@@ -15,8 +15,8 @@ public static class ItemCatalog
         {
             Id = "wood", Kind = ItemKind.Wood,
             DisplayName = "Wood log", Description = "Felled tree segment. Splits into planks.",
-            Weight = 5f, Bulk = 4f, SellValue = 2,
-            Stackable = true, StackCapacity = 50,
+            Weight = 1f, Bulk = 0.4f, SellValue = 2,
+            Stackable = true, StackCapacity = 75,
         });
         Register(new ItemDef
         {

@@ -92,9 +92,10 @@ public sealed class SimWorld
     // existing stack at that tile that has room. Returns the affected
     // entity (new or updated). Mirrors attempt-2's addItemToTile so chop
     // yields collapse onto one stack instead of pebble-spamming entities.
-    public Entity AddOrMergeItem(int tileX, int tileY, ItemKind kind, int count, int capacity = 50)
+    public Entity AddOrMergeItem(int tileX, int tileY, ItemKind kind, int count, int capacity = 0)
     {
         if (count <= 0) return default;
+        if (capacity <= 0) capacity = ItemCatalog.DefaultFor(kind).StackCapacity;
         var query = Store.Query<Item, TilePosition>();
         foreach (var entity in query.Entities)
         {

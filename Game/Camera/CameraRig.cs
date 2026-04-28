@@ -184,6 +184,14 @@ public partial class CameraRig : Node3D
         _yawTweenT = 0f;
     }
 
+    // Snap the rig pivot to a world-space (X, Z) point in Godot units.
+    // Used by the colonist portrait bar to focus on a specific colonist.
+    public void FocusOnUnits(float unitsX, float unitsZ)
+    {
+        Position = new Vector3(unitsX, 0f, unitsZ);
+        ClampToBounds();
+    }
+
     private void ClampToBounds()
     {
         var p = Position;

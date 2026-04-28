@@ -89,6 +89,7 @@ public partial class Bootstrap : Node3D
         AddSelectionRing(selection, _runtime, _heightfield);
         AddReservationOverlay(selection, _runtime, _heightfield);
         AddInfoPanel(selection, _runtime);
+        AddPortraitBar(selection, _runtime);
         AddContextMenu(selection, _runtime);
         AddItemHoverLabel(_runtime, _heightfield);
         AddZoneSettingsPanel(selection, _runtime);
@@ -393,6 +394,13 @@ public partial class Bootstrap : Node3D
         var panel = new InfoPanel { Name = "InfoPanel" };
         panel.Configure(selection, runtime.Publisher, runtime.Commands);
         AddChild(panel);
+    }
+
+    private void AddPortraitBar(SelectionService selection, SimRuntime runtime)
+    {
+        var bar = new PortraitBar { Name = "PortraitBar" };
+        bar.Configure(selection, runtime.Publisher, _cameraRig!);
+        AddChild(bar);
     }
 
     private void AddContextMenu(SelectionService selection, SimRuntime runtime)

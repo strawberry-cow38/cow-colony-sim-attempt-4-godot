@@ -348,6 +348,21 @@ public partial class SelectionService : Node
         return true;
     }
 
+    // Select a colonist by entity id directly — used by the portrait bar
+    // when the player clicks a portrait. Mirrors SelectColonistNearRay's
+    // clearing behavior so other selections drop together.
+    public void SelectColonist(int entityId)
+    {
+        if (SelectedEntityId == entityId) return;
+        SelectedEntityId = entityId;
+        if (SelectedZoneId is not null) SelectedZoneId = null;
+        if (SelectedTreeId is not null) SelectedTreeId = null;
+        if (SelectedItemId is not null) SelectedItemId = null;
+        if (SelectedBlueprintId is not null) SelectedBlueprintId = null;
+        if (SelectedStructureId is not null) SelectedStructureId = null;
+        SelectionChanged?.Invoke();
+    }
+
     private bool SelectColonistNearRay(Camera3D camera, Vector2 mousePos)
     {
         var origin = camera.ProjectRayOrigin(mousePos);

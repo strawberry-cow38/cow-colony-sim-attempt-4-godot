@@ -38,6 +38,10 @@ public partial class PortraitBar : CanvasLayer
 
     private HBoxContainer _bar = null!;
     private readonly List<PortraitSlot> _slots = new();
+    // Entity currently locked to the camera via portrait double-click.
+    // Kept until the rig itself reports IsFollowing=false (e.g. WASD
+    // broke the lock), at which point we forget it.
+    private int? _followingEntityId;
 
     private sealed class PortraitSlot
     {
@@ -81,6 +85,26 @@ public partial class PortraitBar : CanvasLayer
         var snap = _publisher.Current;
         SyncRoster(snap.Colonists);
         UpdateHighlights();
+        DriveFollow(snap);
+    }
+
+    private void DriveFollow(SimSnapshot snap)
+    {
+        if (_followingEntityId is not int id) return;
+        if (!_cameraRig.IsFollowing)
+        {
+            _followingEntityId = null;
+            return;
+        }
+        for (var i = 0; i < snap.Colonists.Count; i++)
+        {
+            var c = snap.Colonists[i];
+            if (c.EntityId != id) continue;
+            _cameraRig.FollowAt(c.MetersX * UnitsPerMeter, c.MetersY * UnitsPerMeter);
+            return;
+        }
+        // Target gone (despawned) — forget it.
+        _followingEntityId = null;
     }
 
     private void SyncRoster(IReadOnlyList<ColonistView> colonists)
@@ -193,12 +217,12 @@ public partial class PortraitBar : CanvasLayer
         // Default Camera3D forward is -Z, so a position offset on +Z with no
         // rotation already frames the body at the origin. Distance + Fov
         // chosen so the full ~73u capsule fits with margin top and bottom.
-        // Distance pulled in 10% from the original framing to make the body
-        // read bigger inside the portrait box. Keep Fov fixed so the
-        // perspective stays consistent.
+        // Distance pulled in twice (10% each pass) from the original framing
+        // to make the body read bigger inside the portrait box. Keep Fov
+        // fixed so the perspective stays consistent.
         var camera = new Camera3D
         {
-            Position = new Vector3(0f, halfHeightUnits, 127f),
+            Position = new Vector3(0f, halfHeightUnits, 115f),
             Current = true,
             Fov = 36f,
         };
@@ -266,19 +290,38 @@ public partial class PortraitBar : CanvasLayer
             SelectionRing = ring,
         };
         var captureId = entityId;
-        btn.Pressed += () => OnPortraitPressed(captureId);
+        // Use GuiInput rather than Pressed so we can tell single-click from
+        // double-click. Single = just select. Double = focus + lock follow.
+        btn.GuiInput += ev => OnPortraitGuiInput(captureId, ev);
         return slot;
     }
 
-    private void OnPortraitPressed(int entityId)
+    private void OnPortraitGuiInput(int entityId, InputEvent ev)
+    {
+        if (ev is not InputEventMouseButton mb) return;
+        if (!mb.Pressed || mb.ButtonIndex != MouseButton.Left) return;
+
+        if (mb.DoubleClick)
+        {
+            FocusAndFollow(entityId);
+        }
+        else
+        {
+            _selection.SelectColonist(entityId);
+        }
+    }
+
+    private void FocusAndFollow(int entityId)
     {
         var snap = _publisher.Current;
         for (var i = 0; i < snap.Colonists.Count; i++)
         {
             var c = snap.Colonists[i];
             if (c.EntityId != entityId) continue;
-            _cameraRig.FocusOnUnits(c.MetersX * UnitsPerMeter, c.MetersY * UnitsPerMeter);
             _selection.SelectColonist(entityId);
+            _cameraRig.BeginFollow();
+            _cameraRig.FollowAt(c.MetersX * UnitsPerMeter, c.MetersY * UnitsPerMeter);
+            _followingEntityId = entityId;
             return;
         }
     }

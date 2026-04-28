@@ -96,13 +96,24 @@ public partial class ZonesRenderer : Node3D
             z.MinTileX, z.MinTileY, z.MaxTileX, z.MaxTileY,
             HoverUnits, z.Mask);
 
-    private static StandardMaterial3D MakeMaterial(ZoneType type) => new()
+    // PerPixel shading instead of Unshaded so zones follow scene lighting —
+    // they used to look like glow-in-the-dark patches at night because
+    // Unshaded ignores ambient. A small Emission keeps a faint tint visible
+    // even with the sun down so zones stay legible.
+    private static StandardMaterial3D MakeMaterial(ZoneType type)
     {
-        AlbedoColor = ColorFor(type),
-        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-    };
+        var color = ColorFor(type);
+        return new StandardMaterial3D
+        {
+            AlbedoColor = color,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.PerPixel,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            EmissionEnabled = true,
+            Emission = new Color(color.R, color.G, color.B),
+            EmissionEnergyMultiplier = 0.12f,
+        };
+    }
 
     private static int RectKey(ZoneView z) =>
         HashCode.Combine(z.MinTileX, z.MinTileY, z.MaxTileX, z.MaxTileY);

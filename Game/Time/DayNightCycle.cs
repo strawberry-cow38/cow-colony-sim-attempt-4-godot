@@ -49,14 +49,17 @@ public partial class DayNightCycle : Node3D
             Mathf.Lerp(a.AmbientEnergy, b.AmbientEnergy, t));
     }
 
+    // Night used to be near-black (sun 0.05 / ambient 0.10) which made the
+    // whole map unreadable. Lifted to a clear moonlit floor: scene still
+    // reads blue and "nighty", but colonists and terrain are visible.
     private static readonly Palette Night = new(
-        skyTop: new Color(0.015f, 0.025f, 0.075f),
-        skyHorizon: new Color(0.05f, 0.07f, 0.15f),
-        groundHorizon: new Color(0.04f, 0.05f, 0.10f),
+        skyTop: new Color(0.04f, 0.06f, 0.14f),
+        skyHorizon: new Color(0.10f, 0.13f, 0.22f),
+        groundHorizon: new Color(0.07f, 0.09f, 0.16f),
         sunColor: new Color(0.55f, 0.65f, 0.85f),
-        sunEnergy: 0.05f,
-        ambient: new Color(0.05f, 0.07f, 0.14f),
-        ambientEnergy: 0.10f);
+        sunEnergy: 0.30f,
+        ambient: new Color(0.20f, 0.26f, 0.40f),
+        ambientEnergy: 0.55f);
 
     private static readonly Palette Dawn = new(
         skyTop: new Color(0.30f, 0.32f, 0.55f),

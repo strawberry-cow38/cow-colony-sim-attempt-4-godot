@@ -241,6 +241,21 @@ public partial class SelectionService : Node
                     new TileRect(s.TileX, s.TileY, s.TileX, s.TileY)));
                 return;
             }
+            return;
+        }
+        if (SelectedBlueprintId is int bpId)
+        {
+            for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+            {
+                var g = snap.BlueprintGhosts[i];
+                if (g.EntityId != bpId) continue;
+                if (!Sim.Blueprints.BlueprintCatalog.TryGet(g.DefId, out var def) || def is null) continue;
+                var (w, h) = (g.Rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+                _commands.Submit(new EraseInRectCommand(new TileRect(
+                    g.OriginTileX, g.OriginTileY,
+                    g.OriginTileX + w - 1, g.OriginTileY + h - 1)));
+                return;
+            }
         }
     }
 

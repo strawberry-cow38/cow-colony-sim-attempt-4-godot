@@ -42,6 +42,11 @@ public partial class CameraRig : Node3D
     // it once the rig is essentially on top. Keyboard pan or middle-drag
     // also clear the target so player input wins over the focus glide.
     private Vector3? _focusTarget;
+    // Hard-follow mode driven by the portrait double-click. The owner
+    // (PortraitBar) calls FollowAt every frame to keep the rig glued to
+    // a moving entity; any keyboard pan breaks the lock.
+    private bool _isFollowing;
+    public bool IsFollowing => _isFollowing;
 
     public float CurrentDistance => _distance;
     public float MinZoomDistance => MinDistance;
@@ -91,8 +96,9 @@ public partial class CameraRig : Node3D
         if (inputX != 0f || inputZ != 0f)
         {
             // Player took manual control — abort any in-progress focus glide
-            // so the rig doesn't fight the keyboard.
+            // or hard-follow lock so the rig doesn't fight the keyboard.
             _focusTarget = null;
+            _isFollowing = false;
             var yawBasis = Basis.FromEuler(new Vector3(0f, _yaw, 0f));
             var move = yawBasis * new Vector3(inputX, 0f, inputZ);
             var distRatio = Mathf.Clamp(_distance / Distance, 0.25f, 5f);
@@ -219,6 +225,23 @@ public partial class CameraRig : Node3D
     public void FocusOnUnits(float unitsX, float unitsZ)
     {
         _focusTarget = new Vector3(unitsX, 0f, unitsZ);
+    }
+
+    // Begin a hard-follow lock. The owner must keep calling FollowAt each
+    // frame to drive the rig; WASD breaks the lock by clearing _isFollowing.
+    public void BeginFollow()
+    {
+        _isFollowing = true;
+        _focusTarget = null;
+    }
+
+    // Snap the rig pivot to a follow target. No-op once the player breaks
+    // the lock (so a stale per-frame call doesn't yank the camera back).
+    public void FollowAt(float unitsX, float unitsZ)
+    {
+        if (!_isFollowing) return;
+        Position = new Vector3(unitsX, Position.Y, unitsZ);
+        ClampToBounds();
     }
 
     private void ClampToBounds()

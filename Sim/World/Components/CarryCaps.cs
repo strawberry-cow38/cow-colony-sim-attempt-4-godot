@@ -18,8 +18,8 @@ public struct CarryCaps : IComponent
 
     public static CarryCaps Default() => new()
     {
-        Strength = 10,
-        BaseBulk = 10f,
+        Strength = 16,
+        BaseBulk = 30f,
         BonusWeight = 0f,
         BonusBulk = 0f,
     };

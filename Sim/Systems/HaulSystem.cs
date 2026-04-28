@@ -25,6 +25,7 @@ public sealed class HaulSystem : ITickSystem
 
     private readonly List<int> _pickupsToDelete = new();
     private readonly List<DepositAction> _deposits = new();
+    private readonly List<RespawnAction> _partialRespawns = new();
 
     private readonly struct DepositAction
     {
@@ -35,6 +36,30 @@ public sealed class HaulSystem : ITickSystem
         public readonly string MinifiedDefId;
         public DepositAction(int tx, int ty, ItemKind kind, int count, string miniDef)
         { TileX = tx; TileY = ty; Kind = kind; Count = count; MinifiedDefId = miniDef; }
+    }
+
+    // Partial pickup leaves a leftover. We delete the source entity and
+    // respawn a fresh one with the same metadata so downstream lookups
+    // (HaulSystem byTile, UI, reservations) treat it as a brand new stack.
+    private readonly struct RespawnAction
+    {
+        public readonly int TileX;
+        public readonly int TileY;
+        public readonly ItemKind Kind;
+        public readonly int Count;
+        public readonly int Capacity;
+        public readonly bool Forbidden;
+        public readonly bool HasMinified;
+        public readonly string MinifiedDefId;
+        public readonly int MinifiedRotation;
+        public readonly int MinifiedBaseLayer;
+        public RespawnAction(int tx, int ty, ItemKind kind, int count, int capacity, bool forbidden,
+            bool hasMini, string miniDef, int miniRot, int miniLayer)
+        {
+            TileX = tx; TileY = ty; Kind = kind; Count = count; Capacity = capacity;
+            Forbidden = forbidden; HasMinified = hasMini; MinifiedDefId = miniDef;
+            MinifiedRotation = miniRot; MinifiedBaseLayer = miniLayer;
+        }
     }
 
     public HaulSystem(SimWorld world, PathPlanner planner, HeightGrid grid)
@@ -48,6 +73,7 @@ public sealed class HaulSystem : ITickSystem
     {
         _pickupsToDelete.Clear();
         _deposits.Clear();
+        _partialRespawns.Clear();
 
         var stockpileTiles = CollectStockpileTiles();
         var (itemsByTile, itemsByEntity) = CollectItems();
@@ -86,6 +112,19 @@ public sealed class HaulSystem : ITickSystem
         {
             var item = _world.Store.GetEntityById(_pickupsToDelete[i]);
             if (item != default) item.DeleteEntity();
+        }
+        for (var i = 0; i < _partialRespawns.Count; i++)
+        {
+            var r = _partialRespawns[i];
+            if (r.Count <= 0) continue;
+            if (r.HasMinified && !string.IsNullOrEmpty(r.MinifiedDefId))
+            {
+                _world.SpawnMinifiedThing(r.MinifiedDefId, r.TileX, r.TileY, r.MinifiedRotation, r.MinifiedBaseLayer);
+                continue;
+            }
+            var e = _world.Store.CreateEntity();
+            e.AddComponent(new TilePosition(r.TileX, r.TileY, 0, 0.5f, 0.5f));
+            e.AddComponent(new Item { Kind = r.Kind, Count = r.Count, Capacity = r.Capacity, Forbidden = r.Forbidden });
         }
         for (var i = 0; i < _deposits.Count; i++)
         {
@@ -166,16 +205,33 @@ public sealed class HaulSystem : ITickSystem
 
         if (added < item.Count)
         {
-            // Partial fill — decrement the source stack count rather than
-            // delete it, then go drop what we have.
+            // Partial fill — delete the source entity and respawn a fresh
+            // one with the leftover count. Mutating Count in place left the
+            // same entity id with a "fake stack" feel that downstream
+            // lookups (byTile last-writer-wins, UI cached views, future
+            // reservations) sometimes failed to re-pick.
+            var leftover = item.Count - added;
             var src = _world.Store.GetEntityById(work.TargetEntityId);
-            if (src != default && src.HasComponent<Item>())
+            if (src != default && src.HasComponent<Item>() && src.HasComponent<TilePosition>())
             {
                 ref var srcIt = ref src.GetComponent<Item>();
-                srcIt.Count = Math.Max(0, srcIt.Count - added);
-                if (srcIt.Count == 0) _pickupsToDelete.Add(work.TargetEntityId);
+                ref var srcPos = ref src.GetComponent<TilePosition>();
+                var hasMini = src.HasComponent<MinifiedThing>();
+                var miniDef = string.Empty;
+                var miniRot = 0;
+                var miniLayer = 0;
+                if (hasMini)
+                {
+                    ref var m = ref src.GetComponent<MinifiedThing>();
+                    miniDef = m.DefId;
+                    miniRot = m.Rotation;
+                    miniLayer = m.BaseLayer;
+                }
+                _partialRespawns.Add(new RespawnAction(
+                    srcPos.TileX, srcPos.TileY, srcIt.Kind, leftover, srcIt.Capacity, srcIt.Forbidden,
+                    hasMini, miniDef, miniRot, miniLayer));
             }
-            // Refresh snapshot so chain logic doesn't re-target same id.
+            _pickupsToDelete.Add(work.TargetEntityId);
             claimedItems.Add(work.TargetEntityId);
             SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
             return;

@@ -144,7 +144,7 @@ public sealed class HaulSystem : ITickSystem
 
     private void ProgressHaul(
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
-        Dictionary<(int, int), ItemSnapshot> itemsByTile,
+        Dictionary<(int, int), List<ItemSnapshot>> itemsByTile,
         Dictionary<int, ItemSnapshot> itemsByEntity,
         HashSet<(int, int)> stockpileTiles,
         HashSet<int> claimedItems)
@@ -256,7 +256,7 @@ public sealed class HaulSystem : ITickSystem
     // CarryKind's drop tile; sorting back out is the next tick's problem.
     private bool TryChainNextPickup(
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
-        Dictionary<(int, int), ItemSnapshot> itemsByTile,
+        Dictionary<(int, int), List<ItemSnapshot>> itemsByTile,
         HashSet<(int, int)> stockpileTiles,
         HashSet<int> claimedItems,
         in Inventory inv, in CarryCaps caps)
@@ -267,22 +267,26 @@ public sealed class HaulSystem : ITickSystem
         var bestDist = float.PositiveInfinity;
         foreach (var kv in itemsByTile)
         {
-            var it = kv.Value;
-            if (it.Forbidden) continue;
-            if (claimedItems.Contains(it.EntityId)) continue;
-            if (stockpileTiles.Contains((it.TileX, it.TileY))) continue;
-            var defId = ResolveDefId(it);
-            if (InventoryOps.RoomFor(defId, in caps, in inv) <= 0) continue;
-            var dx = it.TileX - pos.TileX;
-            var dy = it.TileY - pos.TileY;
-            var d = dx * dx + dy * dy;
-            if (d > ChainRadiusTilesSq) continue;
-            if (d < bestDist)
+            var list = kv.Value;
+            for (var i = 0; i < list.Count; i++)
             {
-                bestDist = d;
-                bestId = it.EntityId;
-                bestX = it.TileX;
-                bestY = it.TileY;
+                var it = list[i];
+                if (it.Forbidden) continue;
+                if (claimedItems.Contains(it.EntityId)) continue;
+                if (stockpileTiles.Contains((it.TileX, it.TileY))) continue;
+                var defId = ResolveDefId(it);
+                if (InventoryOps.RoomFor(defId, in caps, in inv) <= 0) continue;
+                var dx = it.TileX - pos.TileX;
+                var dy = it.TileY - pos.TileY;
+                var d = dx * dx + dy * dy;
+                if (d > ChainRadiusTilesSq) continue;
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    bestId = it.EntityId;
+                    bestX = it.TileX;
+                    bestY = it.TileY;
+                }
             }
         }
         if (bestId == 0) return false;
@@ -361,7 +365,7 @@ public sealed class HaulSystem : ITickSystem
 
     private void TryAssignHaul(
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
-        Dictionary<(int, int), ItemSnapshot> itemsByTile, HashSet<(int, int)> stockpileTiles,
+        Dictionary<(int, int), List<ItemSnapshot>> itemsByTile, HashSet<(int, int)> stockpileTiles,
         HashSet<int> claimedItems, HashSet<(int, int)> occupiedDropTiles)
     {
         var bestItem = -1;
@@ -372,21 +376,25 @@ public sealed class HaulSystem : ITickSystem
         var bestDistSq = float.PositiveInfinity;
         foreach (var kv in itemsByTile)
         {
-            var item = kv.Value;
-            if (item.Forbidden) continue;
-            if (claimedItems.Contains(item.EntityId)) continue;
-            if (stockpileTiles.Contains((item.TileX, item.TileY))) continue;
-            var dx = item.TileX - pos.TileX;
-            var dy = item.TileY - pos.TileY;
-            var d = dx * dx + dy * dy;
-            if (d < bestDistSq)
+            var list = kv.Value;
+            for (var i = 0; i < list.Count; i++)
             {
-                bestDistSq = d;
-                bestItem = item.EntityId;
-                bestKind = item.Kind;
-                bestCount = item.Count;
-                bestItemTileX = item.TileX;
-                bestItemTileY = item.TileY;
+                var item = list[i];
+                if (item.Forbidden) continue;
+                if (claimedItems.Contains(item.EntityId)) continue;
+                if (stockpileTiles.Contains((item.TileX, item.TileY))) continue;
+                var dx = item.TileX - pos.TileX;
+                var dy = item.TileY - pos.TileY;
+                var d = dx * dx + dy * dy;
+                if (d < bestDistSq)
+                {
+                    bestDistSq = d;
+                    bestItem = item.EntityId;
+                    bestKind = item.Kind;
+                    bestCount = item.Count;
+                    bestItemTileX = item.TileX;
+                    bestItemTileY = item.TileY;
+                }
             }
         }
         if (bestItem == -1) return;
@@ -423,7 +431,7 @@ public sealed class HaulSystem : ITickSystem
 
     private bool TryFindDropTile(
         ItemKind kind, int count,
-        Dictionary<(int, int), ItemSnapshot> itemsByTile,
+        Dictionary<(int, int), List<ItemSnapshot>> itemsByTile,
         HashSet<(int, int)> occupiedDropTiles,
         out int dropX, out int dropY)
     {
@@ -454,10 +462,26 @@ public sealed class HaulSystem : ITickSystem
                     var partial = -1;
                     if (itemsByTile.TryGetValue((tx, ty), out var existing))
                     {
-                        if (existing.Kind != kind) continue;
-                        var room = existing.Capacity - existing.Count;
-                        if (room <= 0) continue;
-                        partial = existing.Count;
+                        // Tile already has stuff. Only viable if every
+                        // stack here is the same kind we're dropping AND
+                        // at least one has room to merge into.
+                        var ok = true;
+                        var bestRoomSeen = -1;
+                        var bestCountSeen = -1;
+                        for (var ei = 0; ei < existing.Count; ei++)
+                        {
+                            var ex = existing[ei];
+                            if (ex.Kind != kind) { ok = false; break; }
+                            var room = ex.Capacity - ex.Count;
+                            if (room > bestRoomSeen)
+                            {
+                                bestRoomSeen = room;
+                                bestCountSeen = ex.Count;
+                            }
+                        }
+                        if (!ok) continue;
+                        if (bestRoomSeen <= 0) continue;
+                        partial = bestCountSeen;
                     }
                     var better = priority > bestPriority
                         || (priority == bestPriority && partial > bestPartialFill);
@@ -535,9 +559,9 @@ public sealed class HaulSystem : ITickSystem
         }
     }
 
-    private (Dictionary<(int, int), ItemSnapshot>, Dictionary<int, ItemSnapshot>) CollectItems()
+    private (Dictionary<(int, int), List<ItemSnapshot>>, Dictionary<int, ItemSnapshot>) CollectItems()
     {
-        var byTile = new Dictionary<(int, int), ItemSnapshot>();
+        var byTile = new Dictionary<(int, int), List<ItemSnapshot>>();
         var byEntity = new Dictionary<int, ItemSnapshot>();
         foreach (var entity in _world.Store.Query<Item, TilePosition>().Entities)
         {
@@ -546,7 +570,13 @@ public sealed class HaulSystem : ITickSystem
             var miniDef = entity.HasComponent<MinifiedThing>()
                 ? entity.GetComponent<MinifiedThing>().DefId : string.Empty;
             var snap = new ItemSnapshot(entity.Id, it.Kind, it.Count, it.Capacity, pos.TileX, pos.TileY, it.Forbidden, miniDef);
-            byTile[(pos.TileX, pos.TileY)] = snap;
+            var key = (pos.TileX, pos.TileY);
+            if (!byTile.TryGetValue(key, out var list))
+            {
+                list = new List<ItemSnapshot>(1);
+                byTile[key] = list;
+            }
+            list.Add(snap);
             byEntity[entity.Id] = snap;
         }
         return (byTile, byEntity);

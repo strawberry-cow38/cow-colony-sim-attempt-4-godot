@@ -354,13 +354,21 @@ public sealed class CommandSystem : ITickSystem
         var bestY = 0;
 
         // Snapshot existing items keyed by tile so we can prefer
-        // partial-fill stacks of the same kind over empty tiles.
-        var itemsByTile = new Dictionary<(int, int), (ItemKind kind, int count, int capacity)>();
+        // partial-fill stacks of the same kind over empty tiles. Multiple
+        // entities can share a tile (mixed-kind drops) so this is a
+        // multi-map, not a last-writer-wins single value.
+        var itemsByTile = new Dictionary<(int, int), List<(ItemKind kind, int count, int capacity)>>();
         foreach (var entity in _world.Store.Query<Item, TilePosition>().Entities)
         {
             ref var it = ref entity.GetComponent<Item>();
             ref var pos = ref entity.GetComponent<TilePosition>();
-            itemsByTile[(pos.TileX, pos.TileY)] = (it.Kind, it.Count, it.Capacity);
+            var key = (pos.TileX, pos.TileY);
+            if (!itemsByTile.TryGetValue(key, out var list))
+            {
+                list = new List<(ItemKind, int, int)>(1);
+                itemsByTile[key] = list;
+            }
+            list.Add((it.Kind, it.Count, it.Capacity));
         }
 
         foreach (var entity in _world.Store.Query<Zone>().Entities)
@@ -381,9 +389,23 @@ public sealed class CommandSystem : ITickSystem
                     var partial = -1;
                     if (itemsByTile.TryGetValue((tx, ty), out var existing))
                     {
-                        if (existing.kind != kind) continue;
-                        if (existing.capacity - existing.count <= 0) continue;
-                        partial = existing.count;
+                        var ok = true;
+                        var bestRoom = -1;
+                        var bestExistingCount = -1;
+                        for (var ei = 0; ei < existing.Count; ei++)
+                        {
+                            var ex = existing[ei];
+                            if (ex.kind != kind) { ok = false; break; }
+                            var room = ex.capacity - ex.count;
+                            if (room > bestRoom)
+                            {
+                                bestRoom = room;
+                                bestExistingCount = ex.count;
+                            }
+                        }
+                        if (!ok) continue;
+                        if (bestRoom <= 0) continue;
+                        partial = bestExistingCount;
                     }
                     var better = priority > bestPriority
                         || (priority == bestPriority && partial > bestPartialFill);

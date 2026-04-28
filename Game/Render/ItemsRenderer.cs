@@ -20,15 +20,23 @@ public partial class ItemsRenderer : Node3D
         "res://assets/models/wood_2.glb",
         "res://assets/models/wood_3.glb",
     };
+    private static readonly string[] StoneTierPaths =
+    {
+        "res://assets/models/stone.glb",
+        "res://assets/models/stone_2.glb",
+        "res://assets/models/stone_3.glb",
+    };
 
     private SnapshotPublisher _publisher = null!;
     private Heightfield _heightfield = null!;
     private float _unitsPerMeter;
     private readonly MultiMeshInstance3D?[] _woodTiers = new MultiMeshInstance3D?[3];
+    private readonly MultiMeshInstance3D?[] _stoneTiers = new MultiMeshInstance3D?[3];
     // Per-tier vertical offset so the mesh's lowest vert sits on the
     // ground instead of clipping through it. Pulled from each merged
     // mesh's AABB at load time.
     private readonly float[] _woodGroundOffsetUnits = new float[3];
+    private readonly float[] _stoneGroundOffsetUnits = new float[3];
 
     public void Configure(SnapshotPublisher publisher, Heightfield heightfield)
     {
@@ -39,17 +47,23 @@ public partial class ItemsRenderer : Node3D
     public override void _Ready()
     {
         _unitsPerMeter = SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile;
-        for (var i = 0; i < WoodTierPaths.Length; i++)
+        LoadTiers("Wood", WoodTierPaths, _woodTiers, _woodGroundOffsetUnits);
+        LoadTiers("Stone", StoneTierPaths, _stoneTiers, _stoneGroundOffsetUnits);
+    }
+
+    private void LoadTiers(string name, string[] paths, MultiMeshInstance3D?[] tiers, float[] groundOffsets)
+    {
+        for (var i = 0; i < paths.Length; i++)
         {
-            var mesh = LoadMergedMesh(WoodTierPaths[i]);
+            var mesh = LoadMergedMesh(paths[i]);
             if (mesh is null)
             {
-                GD.PushWarning($"ItemsRenderer: failed to load {WoodTierPaths[i]}");
+                GD.PushWarning($"ItemsRenderer: failed to load {paths[i]}");
                 continue;
             }
             var bucket = new MultiMeshInstance3D
             {
-                Name = $"WoodTier{i}",
+                Name = $"{name}Tier{i}",
                 Multimesh = new MultiMesh
                 {
                     TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
@@ -59,12 +73,12 @@ public partial class ItemsRenderer : Node3D
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
             };
             AddChild(bucket);
-            _woodTiers[i] = bucket;
+            tiers[i] = bucket;
             // mesh aabb is in the glb's authored space (meters). Lift the
             // instance by -minY so the lowest vertex meets the ground;
             // add 1cm so we don't z-fight the terrain.
             var aabb = mesh.GetAabb();
-            _woodGroundOffsetUnits[i] = (-aabb.Position.Y + 0.01f) * _unitsPerMeter;
+            groundOffsets[i] = (-aabb.Position.Y + 0.01f) * _unitsPerMeter;
         }
     }
 
@@ -82,34 +96,41 @@ public partial class ItemsRenderer : Node3D
     {
         var snap = _publisher.Current;
         var items = snap.Items;
+        RenderKind(items, ItemKind.Wood, _woodTiers, _woodGroundOffsetUnits);
+        RenderKind(items, ItemKind.Stone, _stoneTiers, _stoneGroundOffsetUnits);
+    }
 
-        var counts = new int[3];
+    private void RenderKind(
+        IReadOnlyList<ItemView> items, ItemKind kind,
+        MultiMeshInstance3D?[] tiers, float[] groundOffsets)
+    {
+        Span<int> counts = stackalloc int[3];
         for (var i = 0; i < items.Count; i++)
         {
-            if (items[i].Kind != ItemKind.Wood) continue;
+            if (items[i].Kind != kind) continue;
             counts[PileTier(items[i].Count, items[i].Capacity)]++;
         }
         for (var t = 0; t < 3; t++)
         {
-            var bucket = _woodTiers[t];
+            var bucket = tiers[t];
             if (bucket is null) continue;
             if (bucket.Multimesh.InstanceCount != counts[t]) bucket.Multimesh.InstanceCount = counts[t];
         }
 
-        var idx = new int[3];
+        Span<int> idx = stackalloc int[3];
         for (var i = 0; i < items.Count; i++)
         {
             var it = items[i];
-            if (it.Kind != ItemKind.Wood) continue;
+            if (it.Kind != kind) continue;
             var tier = PileTier(it.Count, it.Capacity);
-            var bucket = _woodTiers[tier];
+            var bucket = tiers[tier];
             if (bucket is null) continue;
 
             var metersX = (it.TileX + 0.5f) * SimConstants.MetersPerTile;
             var metersY = (it.TileY + 0.5f) * SimConstants.MetersPerTile;
             var x = metersX * _unitsPerMeter;
             var z = metersY * _unitsPerMeter;
-            var y = SampleGround(metersX, metersY) + _woodGroundOffsetUnits[tier];
+            var y = SampleGround(metersX, metersY) + groundOffsets[tier];
 
             var seed = unchecked((uint)it.EntityId * 2654435761u);
             var angle = (seed % 3600u) * 0.1f * Mathf.Pi / 180f;

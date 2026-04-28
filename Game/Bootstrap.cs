@@ -197,7 +197,9 @@ public partial class Bootstrap : Node3D
     {
         const int target = 80;
         const int clearRadius = 14;
-        const int variantCount = 4;
+        // 6 variants: 3 shapes (a/b/c) × {clean, mossy}. Mossy biased rarer
+        // so the field reads stone-mostly with occasional moss accents.
+        const int variantCount = 6;
         var center = PreviewTileCount / 2;
         var rng = new Random(unchecked((int)0xB0B0B0B0u));
         var placed = 0;
@@ -212,7 +214,13 @@ public partial class Bootstrap : Node3D
             if (dx * dx + dy * dy < clearRadius * clearRadius) continue;
             if (grid.IsBlocked(tx, ty)) continue;
             var seed = unchecked((uint)rng.Next());
-            runtime.World.SpawnBoulder(tx, ty, seed, rng.Next(variantCount));
+            // 30% mossy. Shape (0..2) picked uniformly. Variant index:
+            // 0..2 = clean, 3..5 = mossy.
+            var shape = rng.Next(3);
+            var mossy = rng.NextDouble() < 0.30;
+            var variant = mossy ? shape + 3 : shape;
+            _ = variantCount;
+            runtime.World.SpawnBoulder(tx, ty, seed, variant);
             grid.MarkBlocked(tx, ty, true);
             placed++;
         }

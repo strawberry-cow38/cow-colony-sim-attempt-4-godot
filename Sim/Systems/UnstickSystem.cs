@@ -31,8 +31,14 @@ public sealed class UnstickSystem : ITickSystem
         foreach (var entity in query.Entities)
         {
             ref var pos = ref entity.GetComponent<TilePosition>();
+            ref var pf = ref entity.GetComponent<PathFollower>();
             if (!InBounds(pos.TileX, pos.TileY)) continue;
             if (!_grid.IsBlocked(pos.TileX, pos.TileY)) continue;
+            // Diagonal-cut false alarm: while a path is active, the colonist is
+            // interpolating between two walkable waypoints and may briefly floor
+            // into a blocked corner tile. They're not stuck — only treat as
+            // stuck when there's no active path consuming the position.
+            if (pf.Tiles is not null && pf.Index < pf.Tiles.Length) continue;
             if (!TryFindNearestWalkable(pos.TileX, pos.TileY, out var nx, out var ny)) continue;
             SimLog.Logger.Information(
                 "UNSTICK colonist={Cid} from=({FX},{FY}) to=({TX},{TY})",
@@ -41,7 +47,6 @@ public sealed class UnstickSystem : ITickSystem
             pos.TileY = ny;
             pos.SubX = 0.5f;
             pos.SubY = 0.5f;
-            ref var pf = ref entity.GetComponent<PathFollower>();
             pf.Tiles = null;
             pf.Index = 0;
             pf.PendingRequest = false;

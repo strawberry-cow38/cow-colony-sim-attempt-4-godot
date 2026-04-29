@@ -2,6 +2,7 @@ using CowColonySim.Sim;
 using CowColonySim.Sim.Blueprints;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Terrain;
+using CowColonySim.Sim.World.Components;
 using Godot;
 
 namespace CowColonySim.Game.Render;
@@ -38,8 +39,11 @@ public partial class StructuresRenderer : Node3D
         for (var i = 0; i < structures.Count; i++)
         {
             var s = structures[i];
-            seen.Add(s.EntityId);
             if (!BlueprintCatalog.TryGet(s.DefId, out var def) || def is null) continue;
+            // Pylons are drawn by PylonsRenderer (.glb meshes); skip them here so
+            // the placeholder box doesn't render on top.
+            if (def.Power == PowerNodeKind.Pylon) continue;
+            seen.Add(s.EntityId);
 
             if (!_boxes.TryGetValue(s.EntityId, out var box))
             {

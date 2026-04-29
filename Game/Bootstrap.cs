@@ -91,6 +91,7 @@ public partial class Bootstrap : Node3D
         AddDesignations(_runtime, _heightfield);
         AddBlueprintGhosts(_runtime, _heightfield);
         AddStructures(_runtime, _heightfield);
+        AddPylons(_runtime, _heightfield);
         AddTrees(_runtime, _heightfield);
         AddBoulders(_runtime, _heightfield);
         AddChopAudio(_runtime, _heightfield);
@@ -428,6 +429,13 @@ public partial class Bootstrap : Node3D
     private void AddStructures(SimRuntime runtime, Heightfield field)
     {
         var renderer = new StructuresRenderer { Name = "Structures" };
+        renderer.Configure(runtime.Publisher, field);
+        AddChild(renderer);
+    }
+
+    private void AddPylons(SimRuntime runtime, Heightfield field)
+    {
+        var renderer = new PylonsRenderer { Name = "Pylons" };
         renderer.Configure(runtime.Publisher, field);
         AddChild(renderer);
     }

@@ -1,3 +1,4 @@
+using CowColonySim.Sim.Blueprints;
 using CowColonySim.Sim.Designations;
 using CowColonySim.Sim.Items;
 using CowColonySim.Sim.Logging;
@@ -513,12 +514,26 @@ public sealed class HaulSystem : ITickSystem
         // common case.
         if (!TryFindDropTile(bestKind, bestCount, itemsByTile, occupiedDropTiles, out var dropX, out var dropY))
             return;
+
+        // Prefer routing this haul to a hungry blueprint when the bp is
+        // closer to the item than the chosen stockpile drop tile. Saves
+        // the round-trip of dropping at stockpile then re-hauling later.
+        // ConstructionJobSystem owns HaulToBlueprint progression; it'll
+        // pick the colonist up next tick via the existing-haulers prepass.
+        var workKind = WorkKind.HaulItem;
+        if (TryFindCloserBlueprint(bestKind, bestItemTileX, bestItemTileY, dropX, dropY, out var bpDropX, out var bpDropY))
+        {
+            workKind = WorkKind.HaulToBlueprint;
+            dropX = bpDropX;
+            dropY = bpDropY;
+        }
+
         SimLog.Logger.Information(
-            "HAUL assign colonist={Cid} pos=({X},{Y}) item={I} src=({SX},{SY}) drop=({DX},{DY})",
-            entity.Id, pos.TileX, pos.TileY, bestItem, bestItemTileX, bestItemTileY, dropX, dropY);
+            "HAUL assign colonist={Cid} pos=({X},{Y}) item={I} src=({SX},{SY}) drop=({DX},{DY}) kind={WK}",
+            entity.Id, pos.TileX, pos.TileY, bestItem, bestItemTileX, bestItemTileY, dropX, dropY, workKind);
 
         work.Active = true;
-        work.Kind = WorkKind.HaulItem;
+        work.Kind = workKind;
         work.TargetEntityId = bestItem;
         work.TargetTileX = bestItemTileX;
         work.TargetTileY = bestItemTileY;
@@ -651,6 +666,52 @@ public sealed class HaulSystem : ITickSystem
         dropX = bestX;
         dropY = bestY;
         return true;
+    }
+
+    // Scan blueprints whose def consumes this kind and that still have an
+    // unmet material gap. Pick the one closest to the item; if its tile
+    // beats the stockpile drop's distance to the item, return true and
+    // the bp tile takes over as the haul destination.
+    private bool TryFindCloserBlueprint(
+        ItemKind kind, int itemX, int itemY, int stockX, int stockY,
+        out int bpX, out int bpY)
+    {
+        bpX = 0;
+        bpY = 0;
+        var stockDx = stockX - itemX;
+        var stockDy = stockY - itemY;
+        var stockDistSq = stockDx * stockDx + stockDy * stockDy;
+        var bestDistSq = stockDistSq;
+        var found = false;
+        foreach (var entity in _world.Store.Query<BlueprintGhost, TilePosition>().Entities)
+        {
+            ref var g = ref entity.GetComponent<BlueprintGhost>();
+            ref var bpos = ref entity.GetComponent<TilePosition>();
+            var def = BlueprintCatalog.Get(g.DefId);
+            var required = TotalMaterialOf(def, kind);
+            if (required <= 0) continue;
+            if (g.MaterialDeposited >= required) continue;
+            var dx = bpos.TileX - itemX;
+            var dy = bpos.TileY - itemY;
+            var d = dx * dx + dy * dy;
+            if (d >= bestDistSq) continue;
+            bestDistSq = d;
+            bpX = bpos.TileX;
+            bpY = bpos.TileY;
+            found = true;
+        }
+        return found;
+    }
+
+    private static int TotalMaterialOf(BlueprintDef def, ItemKind kind)
+    {
+        var sum = 0;
+        var list = def.MaterialsOrEmpty;
+        for (var i = 0; i < list.Count; i++)
+        {
+            if (list[i].Kind == kind) sum += list[i].Count;
+        }
+        return sum;
     }
 
     private void EnsurePath(Entity entity, ref PathFollower pf, int fromX, int fromY, int toX, int toY)

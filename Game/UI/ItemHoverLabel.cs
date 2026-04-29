@@ -136,6 +136,7 @@ public partial class ItemHoverLabel : Node3D
     {
         ItemKind.Wood => "wood",
         ItemKind.Wheat => "wheat",
+        ItemKind.Stone => "stone",
         ItemKind.Minified => "minified thing",
         _ => "item",
     };

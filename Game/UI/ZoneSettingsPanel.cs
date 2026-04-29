@@ -1,5 +1,6 @@
 using CowColonySim.Game.Selection;
 using CowColonySim.Sim.Commands;
+using CowColonySim.Sim.Items;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Zones;
@@ -25,6 +26,9 @@ public partial class ZoneSettingsPanel : CanvasLayer
     private SpinBox _cropDefId = null!;
     private CheckBox _allowSowing = null!;
     private CheckBox _allowHarvest = null!;
+    private Label _filtersHeader = null!;
+    private VBoxContainer _filtersBox = null!;
+    private readonly Dictionary<ItemKind, CheckBox> _filterChecks = new();
     private Button _apply = null!;
     private Button _delete = null!;
     private TileRect _boundRect;
@@ -87,6 +91,23 @@ public partial class ZoneSettingsPanel : CanvasLayer
         _allowHarvest.Toggled += _ => _userEdited = true;
         box.AddChild(_allowHarvest);
 
+        _filtersHeader = MakeLabel("accepts");
+        box.AddChild(_filtersHeader);
+        _filtersBox = new VBoxContainer();
+        _filtersBox.AddThemeConstantOverride("separation", 0);
+        box.AddChild(_filtersBox);
+        // One checkbox per real ItemKind. Layout in declaration order so
+        // we don't have to track display priority — enum order is good
+        // enough until the filter list grows past a screenful.
+        foreach (ItemKind kind in System.Enum.GetValues(typeof(ItemKind)))
+        {
+            if (kind == ItemKind.None) continue;
+            var cb = new CheckBox { Text = FilterLabel(kind), ButtonPressed = true };
+            cb.Toggled += _ => _userEdited = true;
+            _filtersBox.AddChild(cb);
+            _filterChecks[kind] = cb;
+        }
+
         _apply = new Button { Text = "Apply" };
         _apply.Pressed += OnApply;
         box.AddChild(_apply);
@@ -137,6 +158,10 @@ public partial class ZoneSettingsPanel : CanvasLayer
             _cropRow.Visible = z.Type == ZoneType.Farm;
             _allowSowing.Visible = z.Type == ZoneType.Farm;
             _allowHarvest.Visible = z.Type == ZoneType.Farm;
+            _filtersHeader.Visible = z.Type == ZoneType.Stockpile;
+            _filtersBox.Visible = z.Type == ZoneType.Stockpile;
+            foreach (var kv in _filterChecks)
+                kv.Value.ButtonPressed = StockpileFilter.MaskAccepts(z.AllowedKindsMask, kv.Key);
             _boundZoneId = z.ZoneId;
             _boundRect = new TileRect(z.MinTileX, z.MinTileY, z.MaxTileX, z.MaxTileY);
             _userEdited = false;
@@ -150,13 +175,17 @@ public partial class ZoneSettingsPanel : CanvasLayer
     private void OnApply()
     {
         if (_boundZoneId < 0) return;
+        var mask = 0UL;
+        foreach (var kv in _filterChecks)
+            if (kv.Value.ButtonPressed) mask |= 1UL << (int)kv.Key;
         _commands.Submit(new SetZoneSettingsCommand(
             _boundZoneId,
             _nameEdit.Text,
             (int)_priority.Value,
             (int)_cropDefId.Value,
             _allowSowing.ButtonPressed,
-            _allowHarvest.ButtonPressed));
+            _allowHarvest.ButtonPressed,
+            mask));
         _userEdited = false;
     }
 
@@ -165,6 +194,20 @@ public partial class ZoneSettingsPanel : CanvasLayer
         if (_boundZoneId < 0) return;
         _commands.Submit(new EraseInRectCommand(_boundRect));
     }
+
+    // Player-facing label for each ItemKind toggle. Falls back to the
+    // raw enum name for kinds that haven't been categorized yet so the
+    // UI never silently drops a kind.
+    private static string FilterLabel(ItemKind kind) => kind switch
+    {
+        ItemKind.Wood => "wood",
+        ItemKind.Wheat => "wheat",
+        ItemKind.Stone => "stone",
+        ItemKind.Apparel => "apparel",
+        ItemKind.Weapon => "weapons",
+        ItemKind.Minified => "minified things",
+        _ => kind.ToString().ToLowerInvariant(),
+    };
 
     private static Label MakeLabel(string text)
     {

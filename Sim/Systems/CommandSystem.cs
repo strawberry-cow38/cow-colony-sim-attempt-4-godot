@@ -383,8 +383,15 @@ public sealed class CommandSystem : ITickSystem
         {
             ref var z = ref entity.GetComponent<Zone>();
             if (z.Type != ZoneType.Stockpile) continue;
-            var priority = entity.HasComponent<StockpileSettings>()
-                ? entity.GetComponent<StockpileSettings>().Priority : 0;
+            var priority = 0;
+            var allowedMask = StockpileFilter.DefaultMask;
+            if (entity.HasComponent<StockpileSettings>())
+            {
+                ref var s = ref entity.GetComponent<StockpileSettings>();
+                priority = s.Priority;
+                allowedMask = s.AllowedKindsMask;
+            }
+            if (!StockpileFilter.MaskAccepts(allowedMask, kind)) continue;
             if (priority < bestPriority) continue;
 
             for (var ty = z.Rect.MinY; ty <= z.Rect.MaxY; ty++)
@@ -701,6 +708,7 @@ public sealed class CommandSystem : ITickSystem
         {
             ref var s = ref entity.GetComponent<StockpileSettings>();
             s.Priority = cmd.Priority;
+            s.AllowedKindsMask = cmd.AllowedKindsMask;
         }
         if (entity.HasComponent<FarmSettings>())
         {

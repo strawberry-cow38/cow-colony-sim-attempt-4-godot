@@ -146,7 +146,7 @@ public sealed class HaulSystem : ITickSystem
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
         Dictionary<(int, int), List<ItemSnapshot>> itemsByTile,
         Dictionary<int, ItemSnapshot> itemsByEntity,
-        HashSet<(int, int)> stockpileTiles,
+        Dictionary<(int, int), ulong> stockpileTiles,
         HashSet<int> claimedItems,
         HashSet<(int, int)> occupiedDropTiles)
     {
@@ -274,7 +274,7 @@ public sealed class HaulSystem : ITickSystem
     private bool TryChainNextPickup(
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
         Dictionary<(int, int), List<ItemSnapshot>> itemsByTile,
-        HashSet<(int, int)> stockpileTiles,
+        Dictionary<(int, int), ulong> stockpileTiles,
         HashSet<int> claimedItems,
         in Inventory inv, in CarryCaps caps)
     {
@@ -290,7 +290,7 @@ public sealed class HaulSystem : ITickSystem
                 var it = list[i];
                 if (it.Forbidden) continue;
                 if (claimedItems.Contains(it.EntityId)) continue;
-                if (stockpileTiles.Contains((it.TileX, it.TileY))) continue;
+                if (StockpileAccepts(stockpileTiles, it.TileX, it.TileY, it.Kind)) continue;
                 var defId = ResolveDefId(it);
                 if (InventoryOps.RoomFor(defId, in caps, in inv) <= 0) continue;
                 var dx = it.TileX - pos.TileX;
@@ -427,7 +427,7 @@ public sealed class HaulSystem : ITickSystem
 
     private void TryAssignHaul(
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
-        Dictionary<(int, int), List<ItemSnapshot>> itemsByTile, HashSet<(int, int)> stockpileTiles,
+        Dictionary<(int, int), List<ItemSnapshot>> itemsByTile, Dictionary<(int, int), ulong> stockpileTiles,
         HashSet<int> claimedItems, HashSet<(int, int)> occupiedDropTiles)
     {
         var bestItem = -1;
@@ -444,7 +444,7 @@ public sealed class HaulSystem : ITickSystem
                 var item = list[i];
                 if (item.Forbidden) continue;
                 if (claimedItems.Contains(item.EntityId)) continue;
-                if (stockpileTiles.Contains((item.TileX, item.TileY))) continue;
+                if (StockpileAccepts(stockpileTiles, item.TileX, item.TileY, item.Kind)) continue;
                 var dx = item.TileX - pos.TileX;
                 var dy = item.TileY - pos.TileY;
                 var d = dx * dx + dy * dy;
@@ -509,8 +509,15 @@ public sealed class HaulSystem : ITickSystem
         {
             ref var z = ref entity.GetComponent<Zone>();
             if (z.Type != ZoneType.Stockpile) continue;
-            var priority = entity.HasComponent<StockpileSettings>()
-                ? entity.GetComponent<StockpileSettings>().Priority : 0;
+            var priority = 0;
+            var allowedMask = StockpileFilter.DefaultMask;
+            if (entity.HasComponent<StockpileSettings>())
+            {
+                ref var s = ref entity.GetComponent<StockpileSettings>();
+                priority = s.Priority;
+                allowedMask = s.AllowedKindsMask;
+            }
+            if (!StockpileFilter.MaskAccepts(allowedMask, kind)) continue;
             if (priority < bestPriority) continue;
 
             for (var ty = z.Rect.MinY; ty <= z.Rect.MaxY; ty++)
@@ -583,6 +590,11 @@ public sealed class HaulSystem : ITickSystem
         _planner.Request(entity.Id, start, goal);
     }
 
+    private static bool StockpileAccepts(
+        Dictionary<(int, int), ulong> tiles, int tx, int ty, ItemKind kind) =>
+        tiles.TryGetValue((tx, ty), out var mask)
+            && StockpileFilter.MaskAccepts(mask, kind);
+
     private static void ClearWork(ref WorkJob work, ref PathFollower pf)
     {
         work.Active = false;
@@ -644,18 +656,28 @@ public sealed class HaulSystem : ITickSystem
         return (byTile, byEntity);
     }
 
-    private HashSet<(int, int)> CollectStockpileTiles()
+    // Stockpile tiles keyed to the union of kinds the underlying zone
+    // accepts. A pickup at a tile is suppressed only when the tile's
+    // stockpile accepts that item's kind — items that no longer match
+    // their stockpile's filter become haulable so they can move out.
+    private Dictionary<(int, int), ulong> CollectStockpileTiles()
     {
-        var tiles = new HashSet<(int, int)>();
+        var tiles = new Dictionary<(int, int), ulong>();
         foreach (var entity in _world.Store.Query<Zone>().Entities)
         {
             ref var z = ref entity.GetComponent<Zone>();
             if (z.Type != ZoneType.Stockpile) continue;
+            var mask = entity.HasComponent<StockpileSettings>()
+                ? entity.GetComponent<StockpileSettings>().AllowedKindsMask
+                : StockpileFilter.DefaultMask;
             for (var ty = z.Rect.MinY; ty <= z.Rect.MaxY; ty++)
             {
                 for (var tx = z.Rect.MinX; tx <= z.Rect.MaxX; tx++)
                 {
-                    if (z.ContainsTile(tx, ty)) tiles.Add((tx, ty));
+                    if (!z.ContainsTile(tx, ty)) continue;
+                    var key = (tx, ty);
+                    tiles.TryGetValue(key, out var existing);
+                    tiles[key] = existing | mask;
                 }
             }
         }

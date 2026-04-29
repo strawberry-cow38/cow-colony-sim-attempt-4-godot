@@ -235,8 +235,14 @@ public sealed class SimRuntime : IDisposable
         foreach (var entity in query.Entities)
         {
             ref var z = ref entity.GetComponent<Zone>();
-            var priority = entity.HasComponent<StockpileSettings>()
-                ? entity.GetComponent<StockpileSettings>().Priority : 0;
+            var priority = 0;
+            var allowedMask = StockpileFilter.DefaultMask;
+            if (entity.HasComponent<StockpileSettings>())
+            {
+                ref var s = ref entity.GetComponent<StockpileSettings>();
+                priority = s.Priority;
+                allowedMask = s.AllowedKindsMask;
+            }
             var cropDefId = 0;
             var allowSow = false;
             var allowHarv = false;
@@ -250,7 +256,7 @@ public sealed class SimRuntime : IDisposable
             views[i++] = new ZoneView(
                 z.ZoneId, z.Type,
                 z.Rect.MinX, z.Rect.MinY, z.Rect.MaxX, z.Rect.MaxY,
-                z.Mask, z.Name, priority, cropDefId, allowSow, allowHarv);
+                z.Mask, z.Name, priority, cropDefId, allowSow, allowHarv, allowedMask);
         }
         return views;
     }

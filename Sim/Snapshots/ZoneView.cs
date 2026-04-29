@@ -18,7 +18,8 @@ public readonly record struct ZoneView(
     int Priority,
     int CropDefId,
     bool AllowSowing,
-    bool AllowHarvest)
+    bool AllowHarvest,
+    ulong AllowedKindsMask)
 {
     public int Width => MaxTileX - MinTileX + 1;
     public int Height => MaxTileY - MinTileY + 1;

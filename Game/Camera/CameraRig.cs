@@ -235,12 +235,29 @@ public partial class CameraRig : Node3D
         _focusTarget = null;
     }
 
-    // Snap the rig pivot to a follow target. No-op once the player breaks
-    // the lock (so a stale per-frame call doesn't yank the camera back).
+    // Drive the rig toward a follow target. Lerps in (so the initial
+    // double-click handoff stays smooth) and snaps once close enough so
+    // tracking a moving colonist doesn't trail forever. No-op once the
+    // player breaks the lock — a stale per-frame call won't yank back.
     public void FollowAt(float unitsX, float unitsZ)
     {
         if (!_isFollowing) return;
-        Position = new Vector3(unitsX, Position.Y, unitsZ);
+        var dt = (float)GetProcessDeltaTime();
+        var t = 1f - Mathf.Exp(-FocusLerp * dt);
+        var p = Position;
+        var dx = unitsX - p.X;
+        var dz = unitsZ - p.Z;
+        if (Mathf.Abs(dx) < 1f && Mathf.Abs(dz) < 1f)
+        {
+            p.X = unitsX;
+            p.Z = unitsZ;
+        }
+        else
+        {
+            p.X = Mathf.Lerp(p.X, unitsX, t);
+            p.Z = Mathf.Lerp(p.Z, unitsZ, t);
+        }
+        Position = p;
         ClampToBounds();
     }
 

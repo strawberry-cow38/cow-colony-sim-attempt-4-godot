@@ -48,6 +48,7 @@ public partial class CameraRig : Node3D
     private bool _isFollowing;
     public bool IsFollowing => _isFollowing;
 
+    public float Yaw => _yaw;
     public float CurrentDistance => _distance;
     public float MinZoomDistance => MinDistance;
     public float MaxZoomDistance => _maxDistance;
@@ -171,8 +172,8 @@ public partial class CameraRig : Node3D
         switch (ev)
         {
             case InputEventKey k when k.Pressed && !k.Echo:
-                if (k.PhysicalKeycode == Key.Q) StartYawTween(+SnapStepRad);
-                else if (k.PhysicalKeycode == Key.E) StartYawTween(-SnapStepRad);
+                if (k.PhysicalKeycode == Key.Q) SnapToNextCardinal(+1);
+                else if (k.PhysicalKeycode == Key.E) SnapToNextCardinal(-1);
                 break;
 
             case InputEventMouseButton mb when mb.ButtonIndex == MouseButton.Middle:
@@ -215,6 +216,30 @@ public partial class CameraRig : Node3D
             _yawTweening = true;
         }
         _yawTweenFrom = _yaw;
+        _yawTweenT = 0f;
+    }
+
+    // Snap to the next cardinal yaw in the given direction (+1 = CCW/Q, -1 = CW/E).
+    // Free-orbit middle-drag leaves _yaw at arbitrary angles, so Q/E should
+    // always land back on a cardinal instead of stacking 90deg deltas.
+    private void SnapToNextCardinal(int dir)
+    {
+        var step = SnapStepRad;
+        var basis = _yawTweening ? _yawTarget : _yaw;
+        float target;
+        if (dir > 0)
+        {
+            var k = Mathf.FloorToInt(basis / step + 0.001f);
+            target = (k + 1) * step;
+        }
+        else
+        {
+            var k = Mathf.CeilToInt(basis / step - 0.001f);
+            target = (k - 1) * step;
+        }
+        _yawTweenFrom = _yaw;
+        _yawTarget = target;
+        _yawTweening = true;
         _yawTweenT = 0f;
     }
 

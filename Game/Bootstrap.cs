@@ -104,6 +104,7 @@ public partial class Bootstrap : Node3D
         AddTimeHud(_runtime);
         AddBuildBar(selection);
         AddRain(_runtime);
+        AddWeatherGimbal(_runtime);
 
         SimLog.Logger.Information(
             "Bootstrap ready. SimThread at {Hz} Hz. World has {Count} entities. " +
@@ -442,6 +443,13 @@ public partial class Bootstrap : Node3D
         var rain = new RainEffect { Name = "Rain" };
         rain.Configure(runtime.Publisher);
         AddChild(rain);
+    }
+
+    private void AddWeatherGimbal(SimRuntime runtime)
+    {
+        var gimbal = new WeatherGimbal { Name = "WeatherGimbal" };
+        gimbal.Configure(_cameraRig!, runtime.Publisher);
+        AddChild(gimbal);
     }
 
     private void AddReservationOverlay(SelectionService selection, SimRuntime runtime, Heightfield field)

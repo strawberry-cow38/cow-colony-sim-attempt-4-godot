@@ -17,6 +17,11 @@ public sealed class WeatherSystem : ITickSystem
     public MapClimate Climate { get; }
     public float CurrentCelsius { get; private set; }
     public float CurrentRainfall { get; private set; }
+    // World-space yaw the wind blows TOWARD, in radians. 0 = +Z. Cycles
+    // slowly with tick so the gimbal arrow drifts instead of jittering.
+    public float CurrentWindRad { get; private set; }
+    // Wind speed, m/s. Same cheap synthesized curve until biome inputs land.
+    public float CurrentWindSpeed { get; private set; }
 
     public WeatherSystem(SimWorld world, int width, int height, MapClimate climate)
     {
@@ -30,6 +35,15 @@ public sealed class WeatherSystem : ITickSystem
     {
         CurrentCelsius = TempCurve.CelsiusAtTick(ctx.TickNumber, Climate);
         CurrentRainfall = RainCurve.IntensityAtTick(ctx.TickNumber, Climate);
+        // Cheap continuous wind: slow primary rotation + low-amplitude
+        // secondary so direction wanders naturally over a sim day.
+        var t = ctx.TickNumber * (1f / 3600f); // ≈ 1 rad / minute base
+        CurrentWindRad = MathF.Atan2(
+            MathF.Sin(t) + 0.3f * MathF.Sin(t * 4.7f),
+            MathF.Cos(t) + 0.3f * MathF.Cos(t * 3.1f));
+        // 2..14 m/s baseline + storm boost when rainfall climbs.
+        var gust = 0.5f + 0.5f * MathF.Sin(t * 1.7f);
+        CurrentWindSpeed = 2f + 8f * gust + 6f * CurrentRainfall;
         Temperature.Fill(CurrentCelsius);
         Rainfall.Fill(CurrentRainfall);
     }

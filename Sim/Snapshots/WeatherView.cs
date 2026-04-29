@@ -11,9 +11,11 @@ public sealed record WeatherView(
     float[] Rainfall,
     float CurrentCelsius,
     float CurrentRainfall,
-    float AnnualRainfallMm)
+    float AnnualRainfallMm,
+    float CurrentWindRad,
+    float CurrentWindSpeed)
 {
-    public static WeatherView Empty { get; } = new(0, 0, Array.Empty<float>(), Array.Empty<float>(), 0f, 0f, 0f);
+    public static WeatherView Empty { get; } = new(0, 0, Array.Empty<float>(), Array.Empty<float>(), 0f, 0f, 0f, 0f, 0f);
 
     public float TempAt(int tileX, int tileY)
     {

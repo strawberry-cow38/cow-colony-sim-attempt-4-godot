@@ -40,6 +40,7 @@ public sealed class JobSystem : ITickSystem
         var query = _world.Store.Query<Colonist, Needs, Job, TilePosition, WorkJob>();
         foreach (var entity in query.Entities)
         {
+            if (entity.HasComponent<Drafted>() && entity.GetComponent<Drafted>().Active) continue;
             ref var needs = ref entity.GetComponent<Needs>();
             ref var job = ref entity.GetComponent<Job>();
             ref var pos = ref entity.GetComponent<TilePosition>();

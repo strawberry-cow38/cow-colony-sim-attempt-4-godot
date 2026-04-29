@@ -97,6 +97,7 @@ public sealed class HaulSystem : ITickSystem
 
         foreach (var entity in query.Entities)
         {
+            if (entity.HasComponent<Drafted>() && entity.GetComponent<Drafted>().Active) continue;
             ref var job = ref entity.GetComponent<Job>();
             if (job.Active) continue;
             if (!entity.HasComponent<Inventory>() || !entity.HasComponent<CarryCaps>()) continue;

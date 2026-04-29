@@ -51,6 +51,7 @@ public partial class PortraitBar : CanvasLayer
         public Panel BorderFrame = null!;
         public StyleBoxFlat BorderStyle = null!;
         public Panel SelectionRing = null!;
+        public Label DraftBadge = null!;
     }
 
     public void Configure(SelectionService selection, SnapshotPublisher publisher, CameraRig cameraRig)
@@ -278,6 +279,32 @@ public partial class PortraitBar : CanvasLayer
         ring.AddThemeStyleboxOverride("panel", ringStyle);
         btn.AddChild(ring);
 
+        // Drafted badge — small red "R" pinned to the top-left corner of
+        // the portrait. Visibility toggled per-frame from snapshot.Drafted.
+        var draftBadge = new Label
+        {
+            Text = "R",
+            AnchorLeft = 0f, AnchorTop = 0f, AnchorRight = 0f, AnchorBottom = 0f,
+            OffsetLeft = 4f, OffsetTop = 2f, OffsetRight = 22f, OffsetBottom = 22f,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            Visible = false,
+        };
+        draftBadge.AddThemeColorOverride("font_color", new Color(1f, 1f, 1f));
+        draftBadge.AddThemeColorOverride("font_outline_color", new Color(0.5f, 0f, 0f));
+        draftBadge.AddThemeConstantOverride("outline_size", 4);
+        draftBadge.AddThemeFontSizeOverride("font_size", 14);
+        var draftBg = new ColorRect
+        {
+            Color = new Color(0.85f, 0.15f, 0.15f, 0.9f),
+            AnchorLeft = 0f, AnchorRight = 1f, AnchorTop = 0f, AnchorBottom = 1f,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            ShowBehindParent = true,
+        };
+        draftBadge.AddChild(draftBg);
+        btn.AddChild(draftBadge);
+
         var nameLabel = new Label
         {
             Text = NameForId(entityId),
@@ -298,6 +325,7 @@ public partial class PortraitBar : CanvasLayer
             BorderFrame = border,
             BorderStyle = borderStyle,
             SelectionRing = ring,
+            DraftBadge = draftBadge,
         };
         var captureId = entityId;
         // Use GuiInput rather than Pressed so we can tell single-click from
@@ -339,10 +367,22 @@ public partial class PortraitBar : CanvasLayer
     private void UpdateHighlights()
     {
         var sel = _selection.SelectedEntityId;
+        var snap = _publisher.Current;
         for (var i = 0; i < _slots.Count; i++)
         {
             _slots[i].SelectionRing.Visible = sel.HasValue && _slots[i].EntityId == sel.Value;
+            _slots[i].DraftBadge.Visible = IsDrafted(snap, _slots[i].EntityId);
         }
+    }
+
+    private static bool IsDrafted(SimSnapshot snap, int entityId)
+    {
+        for (var i = 0; i < snap.Colonists.Count; i++)
+        {
+            var c = snap.Colonists[i];
+            if (c.EntityId == entityId) return c.Drafted;
+        }
+        return false;
     }
 
     // Placeholder mood color until colonists carry real mood data. Hue is

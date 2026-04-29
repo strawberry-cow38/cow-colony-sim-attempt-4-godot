@@ -13,6 +13,13 @@ public interface ISimCommand { }
 
 public readonly record struct MoveCommand(int EntityId, TileCoord Target) : ISimCommand;
 
+// Toggle Drafted.Active on the listed colonists. Drafted colonists
+// stand still (no auto-jobs / hauls / wander) and only follow direct
+// MoveCommand orders. Undrafted colonists ignore MoveCommand orders.
+// Multi-id form so a multi-select R-press flips them as one batch
+// without one mid-batch tick wedging the group out of sync.
+public readonly record struct SetDraftedCommand(IReadOnlyList<int> EntityIds, bool Drafted) : ISimCommand;
+
 // Tile bbox (inclusive) where the heightfield just changed. CommandSystem
 // drops any active path intersecting it so colonists re-plan instead of
 // happily walking into a freshly-raised cliff.

@@ -64,6 +64,7 @@ public sealed class StructureWorkSystem : ITickSystem
         _completions.Clear();
         foreach (var entity in query.Entities)
         {
+            if (entity.HasComponent<Drafted>() && entity.GetComponent<Drafted>().Active) continue;
             ref var job = ref entity.GetComponent<Job>();
             ref var work = ref entity.GetComponent<WorkJob>();
             ref var pos = ref entity.GetComponent<TilePosition>();

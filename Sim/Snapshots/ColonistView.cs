@@ -25,4 +25,5 @@ public readonly record struct ColonistView(
     float MaxWeight,
     float CarryBulk,
     float MaxBulk,
-    IReadOnlyList<InventoryStackView> Inventory);
+    IReadOnlyList<InventoryStackView> Inventory,
+    bool Drafted);

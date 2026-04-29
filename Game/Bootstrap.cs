@@ -369,6 +369,10 @@ public partial class Bootstrap : Node3D
         var renderer = new ColonistsRenderer { Name = "Colonists" };
         renderer.Configure(runtime.Publisher, field);
         AddChild(renderer);
+
+        var badges = new DraftedBadgesRenderer { Name = "DraftedBadges" };
+        badges.Configure(runtime.Publisher, field);
+        AddChild(badges);
     }
 
     private void AddSpots(SimRuntime runtime, Heightfield field)

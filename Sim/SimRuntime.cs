@@ -185,12 +185,13 @@ public sealed class SimRuntime : IDisposable
                 }
             }
 
+            var drafted = entity.HasComponent<Drafted>() && entity.GetComponent<Drafted>().Active;
             views[i++] = new ColonistView(
                 entity.Id, p.MetersX, p.MetersY,
                 n.Hunger, n.Thirst, n.Energy,
                 j.Active, j.NeedKind,
                 w.Active, w.Kind, w.Carrying, w.CarryKind, w.CarryCount,
-                carryWeight, maxWeight, carryBulk, maxBulk, invView);
+                carryWeight, maxWeight, carryBulk, maxBulk, invView, drafted);
         }
         return views;
     }

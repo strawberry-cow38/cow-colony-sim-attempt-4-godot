@@ -63,11 +63,13 @@ public sealed class WanderSystem : ITickSystem
             ref var job = ref entity.GetComponent<Job>();
             ref var work = ref entity.GetComponent<WorkJob>();
 
+            var drafted = entity.HasComponent<Drafted>() && entity.GetComponent<Drafted>().Active;
+
             if (pf.Tiles is null || pf.Index >= pf.Tiles.Length)
             {
                 pf.Tiles = null;
                 pf.PlayerForced = false;
-                if (!pf.PendingRequest && !job.Active && !work.Active)
+                if (!drafted && !pf.PendingRequest && !job.Active && !work.Active)
                 {
                     RequestRandomPath(entity, pos);
                     pf.PendingRequest = true;

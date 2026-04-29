@@ -139,6 +139,22 @@ public partial class SelectionService : Node
             case Key.C:
                 ApplyCancelShortcut();
                 break;
+            case Key.R:
+                ApplyDraftToggleShortcut();
+                break;
+        }
+    }
+
+    private void ApplyDraftToggleShortcut()
+    {
+        if (SelectedEntityId is not int id) return;
+        var snap = _publisher.Current;
+        for (var i = 0; i < snap.Colonists.Count; i++)
+        {
+            var c = snap.Colonists[i];
+            if (c.EntityId != id) continue;
+            _commands.Submit(new SetDraftedCommand(new[] { id }, !c.Drafted));
+            return;
         }
     }
 

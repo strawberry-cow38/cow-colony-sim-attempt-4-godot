@@ -86,6 +86,50 @@ public sealed class CommandSystem : ITickSystem
                 case UnequipInventoryCommand uq:
                     Apply(uq);
                     break;
+                case SetDraftedCommand sdr:
+                    Apply(sdr);
+                    break;
+            }
+        }
+    }
+
+    private void Apply(SetDraftedCommand cmd)
+    {
+        if (cmd.EntityIds is null) return;
+        for (var i = 0; i < cmd.EntityIds.Count; i++)
+        {
+            var entity = _world.Store.GetEntityById(cmd.EntityIds[i]);
+            if (entity == default || !entity.HasComponent<Drafted>()) continue;
+            ref var d = ref entity.GetComponent<Drafted>();
+            d.Active = cmd.Drafted;
+            // Drafting yanks colonists out of any auto-job in flight so
+            // they actually stand still on the spot. Undrafting just
+            // releases — the next tick of JobSystem/HaulSystem picks
+            // them back up.
+            if (cmd.Drafted)
+            {
+                if (entity.HasComponent<Job>())
+                {
+                    ref var j = ref entity.GetComponent<Job>();
+                    j.Active = false;
+                }
+                if (entity.HasComponent<WorkJob>())
+                {
+                    ref var w = ref entity.GetComponent<WorkJob>();
+                    if (w.Active && w.Kind == WorkKind.HaulItem)
+                        DrainUnlockedToTile(entity, w.CarryKind);
+                    w.Active = false;
+                    w.Kind = WorkKind.None;
+                    w.TargetEntityId = 0;
+                    w.Forced = false;
+                }
+                if (entity.HasComponent<PathFollower>())
+                {
+                    ref var pf = ref entity.GetComponent<PathFollower>();
+                    pf.Tiles = null;
+                    pf.Index = 0;
+                    pf.PlayerForced = false;
+                }
             }
         }
     }
@@ -758,6 +802,7 @@ public sealed class CommandSystem : ITickSystem
         if (!entity.HasComponent<PathFollower>()) return;
         if (!entity.HasComponent<TilePosition>()) return;
         if (!_grid.InBounds(move.Target)) return;
+        if (!entity.HasComponent<Drafted>() || !entity.GetComponent<Drafted>().Active) return;
 
         ref var pos = ref entity.GetComponent<TilePosition>();
         ref var pf = ref entity.GetComponent<PathFollower>();

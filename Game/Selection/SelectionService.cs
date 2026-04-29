@@ -311,6 +311,11 @@ public partial class SelectionService : Node
             if (SelectTreeNearRay(camera, mb.Position)) return;
             if (SelectBoulderNearRay(camera, mb.Position)) return;
             if (SelectItemNearRay(camera, mb.Position)) return;
+            // Try a 3D ray-vs-AABB pick on blueprints first so clicks anywhere
+            // on a tall ghost mesh hit it, not just on its ground footprint.
+            // The ground-derived tx/ty fallback below stays as a backup for
+            // flat/zero-height blueprints + structures + zones.
+            if (SelectBlueprintNearRay(camera, mb.Position)) return;
             var tx = (int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile);
             var ty = (int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile);
             if (SelectStructureAtTile(tx, ty)) return;
@@ -401,6 +406,96 @@ public partial class SelectionService : Node
         SelectedItemId = null;
         SelectionChanged?.Invoke();
         return true;
+    }
+
+    private bool SelectBlueprintNearRay(Camera3D camera, Vector2 mousePos)
+    {
+        var id = PickBlueprintId(camera, mousePos);
+        if (id is null) return false;
+        if (SelectedBlueprintId == id) return true;
+        SelectedBlueprintId = id;
+        SelectedStructureId = null;
+        SelectedEntityId = null;
+        SelectedZoneId = null;
+        SelectedTreeId = null;
+        SelectedBoulderId = null;
+        SelectedItemId = null;
+        SelectionChanged?.Invoke();
+        return true;
+    }
+
+    // Ray-vs-blueprint-AABB pick. Each ghost's box spans its full footprint
+    // in X/Z and its def HeightMeters in Y, with the floor sampled from the
+    // heightfield at the footprint center. Pick the closest hit, tie-break
+    // by higher BaseLayer so an upper ghost wins over a lower one stacked
+    // under it.
+    private int? PickBlueprintId(Camera3D camera, Vector2 mousePos)
+    {
+        var origin = camera.ProjectRayOrigin(mousePos);
+        var dir = camera.ProjectRayNormal(mousePos).Normalized();
+
+        var snap = _publisher.Current;
+        var bestId = -1;
+        var bestT = float.PositiveInfinity;
+        var bestLayer = int.MinValue;
+
+        for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+        {
+            var g = snap.BlueprintGhosts[i];
+            if (!Sim.Blueprints.BlueprintCatalog.TryGet(g.DefId, out var def) || def is null) continue;
+            var (w, h) = (g.Rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+            var xMin = g.OriginTileX * SimConstants.GodotUnitsPerTile;
+            var xMax = (g.OriginTileX + w) * SimConstants.GodotUnitsPerTile;
+            var zMin = g.OriginTileY * SimConstants.GodotUnitsPerTile;
+            var zMax = (g.OriginTileY + h) * SimConstants.GodotUnitsPerTile;
+            var centerMetersX = (g.OriginTileX + w * 0.5f) * SimConstants.MetersPerTile;
+            var centerMetersY = (g.OriginTileY + h * 0.5f) * SimConstants.MetersPerTile;
+            var groundY = SampleGroundUnits(centerMetersX, centerMetersY);
+            // BaseLayer steps in 0.75 m vertical quanta — match the build
+            // layer step so a half-stacked ghost picks against the right Y
+            // band, not always the ground.
+            var baseY = groundY + g.BaseLayer * 0.75f * _unitsPerMeter;
+            var heightUnits = MathF.Max(0.25f, def.HeightMeters) * _unitsPerMeter;
+            var yMin = baseY;
+            var yMax = baseY + heightUnits;
+            if (!RayAabbHit(origin, dir, xMin, yMin, zMin, xMax, yMax, zMax, out var tHit)) continue;
+            if (tHit < bestT || (Mathf.IsEqualApprox(tHit, bestT) && g.BaseLayer > bestLayer))
+            {
+                bestT = tHit;
+                bestLayer = g.BaseLayer;
+                bestId = g.EntityId;
+            }
+        }
+        return bestId == -1 ? null : bestId;
+    }
+
+    private static bool RayAabbHit(
+        Vector3 origin, Vector3 dir,
+        float xMin, float yMin, float zMin,
+        float xMax, float yMax, float zMax,
+        out float tHit)
+    {
+        tHit = 0f;
+        var tEnter = float.NegativeInfinity;
+        var tExit = float.PositiveInfinity;
+        if (!SlabClip(origin.X, dir.X, xMin, xMax, ref tEnter, ref tExit)) return false;
+        if (!SlabClip(origin.Y, dir.Y, yMin, yMax, ref tEnter, ref tExit)) return false;
+        if (!SlabClip(origin.Z, dir.Z, zMin, zMax, ref tEnter, ref tExit)) return false;
+        if (tExit < 0f || tEnter > tExit) return false;
+        tHit = tEnter > 0f ? tEnter : 0f;
+        return true;
+    }
+
+    private static bool SlabClip(float ro, float rd, float lo, float hi, ref float tEnter, ref float tExit)
+    {
+        if (MathF.Abs(rd) < 1e-6f) return ro >= lo && ro <= hi;
+        var inv = 1f / rd;
+        var t0 = (lo - ro) * inv;
+        var t1 = (hi - ro) * inv;
+        if (t0 > t1) (t0, t1) = (t1, t0);
+        if (t0 > tEnter) tEnter = t0;
+        if (t1 < tExit) tExit = t1;
+        return tEnter <= tExit;
     }
 
     private bool SelectBlueprintAtTile(int tx, int ty)

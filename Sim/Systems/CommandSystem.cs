@@ -674,16 +674,25 @@ public sealed class CommandSystem : ITickSystem
             ref var p = ref entity.GetComponent<TilePosition>();
             if (rect.Contains(p.TileX, p.TileY)) toDelete.Add(entity.Id);
         }
+        // Blueprints inside the erase rect go through CancelBlueprintCommand
+        // so deposited materials drop, in-flight haulers drain their carry,
+        // and any colonist in Construct/HaulToBlueprint state is cleared.
+        // Plain DeleteEntity stranded carries and orphaned WorkJobs.
+        var blueprintsToCancel = new List<int>();
         foreach (var entity in _world.Store.Query<BlueprintGhost>().Entities)
         {
             ref var g = ref entity.GetComponent<BlueprintGhost>();
-            if (rect.Contains(g.OriginTileX, g.OriginTileY)) toDelete.Add(entity.Id);
+            if (rect.Contains(g.OriginTileX, g.OriginTileY)) blueprintsToCancel.Add(entity.Id);
         }
 
         foreach (var id in toDelete)
         {
             var e = _world.Store.GetEntityById(id);
             if (e != default) e.DeleteEntity();
+        }
+        for (var i = 0; i < blueprintsToCancel.Count; i++)
+        {
+            Apply(new CancelBlueprintCommand(blueprintsToCancel[i]));
         }
         if (stockpileTopologyChanged) _world.BumpStockpileVersion();
     }

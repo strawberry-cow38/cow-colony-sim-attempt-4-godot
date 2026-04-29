@@ -103,6 +103,7 @@ public partial class Bootstrap : Node3D
         AddPerfHud(_runtime);
         AddTimeHud(_runtime);
         AddBuildBar(selection);
+        AddRain();
 
         SimLog.Logger.Information(
             "Bootstrap ready. SimThread at {Hz} Hz. World has {Count} entities. " +
@@ -434,6 +435,13 @@ public partial class Bootstrap : Node3D
         var ring = new SelectionRing { Name = "SelectionRing" };
         ring.Configure(selection, runtime.Publisher, field);
         AddChild(ring);
+    }
+
+    private void AddRain()
+    {
+        var rain = new RainEffect { Name = "Rain" };
+        AddChild(rain);
+        rain.SetEnabled(true);
     }
 
     private void AddReservationOverlay(SelectionService selection, SimRuntime runtime, Heightfield field)

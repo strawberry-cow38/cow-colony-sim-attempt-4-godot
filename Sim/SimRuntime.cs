@@ -43,6 +43,9 @@ public sealed class SimRuntime : IDisposable
     // WeatherView falls back to Empty when null.
     public WeatherSystem? Weather { get; set; }
 
+    // Owns the cable edge list. Null until Bootstrap registers a PowerSystem.
+    public PowerSystem? Power { get; set; }
+
     // 0 = paused, otherwise tick-rate multiplier. Loop reads this each tick
     // so it can change live from the main thread.
     public int Speed
@@ -105,7 +108,10 @@ public sealed class SimRuntime : IDisposable
                     Structures: BuildStructureViews(),
                     TreeFalls: _world.DrainTreeFalls(),
                     Lighting: BuildLightingView(),
-                    Weather: BuildWeatherView()));
+                    Weather: BuildWeatherView(),
+                    PowerNodes: BuildPowerNodeViews(),
+                    PowerEdges: BuildPowerEdgeViews(),
+                    PowerGrids: BuildPowerGridViews()));
             }
             catch (Exception ex)
             {
@@ -413,6 +419,60 @@ public sealed class SimRuntime : IDisposable
             ref var s = ref entity.GetComponent<Structure>();
             ref var p = ref entity.GetComponent<TilePosition>();
             views[i++] = new StructureView(entity.Id, s.DefId, p.TileX, p.TileY, s.Rotation, s.BaseLayer);
+        }
+        return views;
+    }
+
+    private PowerNodeView[] BuildPowerNodeViews()
+    {
+        var query = _world.Store.Query<PowerNode, TilePosition>();
+        var views = new PowerNodeView[query.Count];
+        var i = 0;
+        foreach (var entity in query.Entities)
+        {
+            ref var n = ref entity.GetComponent<PowerNode>();
+            ref var p = ref entity.GetComponent<TilePosition>();
+            views[i++] = new PowerNodeView(
+                entity.Id, n.Kind, n.GridId,
+                p.MetersX, p.MetersY, p.TileX, p.TileY,
+                n.SupplyW, n.DemandW, n.IsActive, n.IsPowered, n.ServedByPylonId);
+        }
+        return views;
+    }
+
+    private PowerEdgeView[] BuildPowerEdgeViews()
+    {
+        if (Power is null) return Array.Empty<PowerEdgeView>();
+        var edges = Power.Edges;
+        if (edges.Count == 0) return Array.Empty<PowerEdgeView>();
+        var views = new PowerEdgeView[edges.Count];
+        for (var i = 0; i < edges.Count; i++)
+        {
+            var e = edges[i];
+            var from = _world.Store.GetEntityById(e.FromEntityId);
+            var to = _world.Store.GetEntityById(e.ToEntityId);
+            if (from == default || to == default) continue;
+            ref var fp = ref from.GetComponent<TilePosition>();
+            ref var tp = ref to.GetComponent<TilePosition>();
+            views[i] = new PowerEdgeView(
+                e.FromEntityId, e.ToEntityId,
+                fp.MetersX, fp.MetersY, tp.MetersX, tp.MetersY,
+                e.IsHop, e.GridId);
+        }
+        return views;
+    }
+
+    private PowerGridView[] BuildPowerGridViews()
+    {
+        var grids = _world.Power.Grids;
+        if (grids.Count == 0) return Array.Empty<PowerGridView>();
+        var views = new PowerGridView[grids.Count];
+        var i = 0;
+        foreach (var g in grids.Values)
+        {
+            views[i++] = new PowerGridView(
+                g.Id, g.TotalSupplyW, g.TotalDemandW, g.Status,
+                g.PylonCount, g.SourceCount, g.SinkCount);
         }
         return views;
     }

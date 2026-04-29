@@ -57,6 +57,11 @@ public partial class Bootstrap : Node3D
         _runtime.Scheduler.Register(new ConstructionJobSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new HaulSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new StructureWorkSystem(_runtime.World, planner, grid));
+        // Power topology depends on built structures, so it runs after
+        // ConstructionJobSystem completes blueprints into structures.
+        var power = new PowerSystem(_runtime.World);
+        _runtime.Scheduler.Register(power);
+        _runtime.Power = power;
         _runtime.Scheduler.Register(new WanderSystem(_runtime.World, planner, grid));
         var lighting = new LightingSystem(_runtime.World, grid.Width, grid.Height);
         _runtime.Scheduler.Register(lighting);
@@ -106,6 +111,8 @@ public partial class Bootstrap : Node3D
         AddRain(_runtime);
         AddWeatherGimbal(_runtime);
         AddWorkPriorityPanel(_runtime);
+        AddPowerVisuals(_runtime);
+        AddGeneratorPanel(selection, _runtime);
 
         SimLog.Logger.Information(
             "Bootstrap ready. SimThread at {Hz} Hz. World has {Count} entities. " +
@@ -451,6 +458,20 @@ public partial class Bootstrap : Node3D
         var gimbal = new WeatherGimbal { Name = "WeatherGimbal" };
         gimbal.Configure(_cameraRig!, runtime.Publisher);
         AddChild(gimbal);
+    }
+
+    private void AddPowerVisuals(SimRuntime runtime)
+    {
+        var node = new PowerVisualsRenderer { Name = "PowerVisuals" };
+        node.Configure(runtime.Publisher, _heightfield!);
+        AddChild(node);
+    }
+
+    private void AddGeneratorPanel(SelectionService selection, SimRuntime runtime)
+    {
+        var panel = new GeneratorPanel { Name = "GeneratorPanel" };
+        panel.Configure(selection, runtime.Publisher, runtime.Commands);
+        AddChild(panel);
     }
 
     private void AddWorkPriorityPanel(SimRuntime runtime)

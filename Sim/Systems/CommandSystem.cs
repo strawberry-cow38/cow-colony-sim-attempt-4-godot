@@ -98,6 +98,9 @@ public sealed class CommandSystem : ITickSystem
                 case SetWorkPriorityCommand swp:
                     Apply(swp);
                     break;
+                case SetGeneratorOutputCommand sgo:
+                    Apply(sgo);
+                    break;
             }
         }
     }
@@ -108,6 +111,19 @@ public sealed class CommandSystem : ITickSystem
         if (entity == default || !entity.HasComponent<WorkPriorities>()) return;
         ref var prios = ref entity.GetComponent<WorkPriorities>();
         prios.Set(cmd.WorkType, cmd.Priority);
+    }
+
+    private void Apply(SetGeneratorOutputCommand cmd)
+    {
+        var entity = _world.Store.GetEntityById(cmd.EntityId);
+        if (entity == default || !entity.HasComponent<PowerNode>() || !entity.HasComponent<Structure>()) return;
+        ref var node = ref entity.GetComponent<PowerNode>();
+        if (node.Kind != PowerNodeKind.Source) return;
+        ref var s = ref entity.GetComponent<Structure>();
+        var max = BlueprintCatalog.TryGet(s.DefId, out var def) && def is not null ? def.MaxSupplyW : float.MaxValue;
+        node.SupplyW = Math.Clamp(cmd.Watts, 0f, max > 0f ? max : cmd.Watts);
+        node.IsActive = cmd.IsOn;
+        _world.BumpPowerVersion();
     }
 
     private void Apply(SetDraftedCommand cmd)

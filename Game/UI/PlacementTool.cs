@@ -143,7 +143,7 @@ public partial class PlacementTool : Node
         {
             var defId = toolId.Substring("blueprint.".Length);
             return BlueprintCatalog.TryGet(defId, out var def) && def is not null
-                && def.Placement == PlacementMode.LineDrag;
+                && (def.Placement == PlacementMode.LineDrag || def.Placement == PlacementMode.SpacedDrag);
         }
         return false;
     }
@@ -161,7 +161,18 @@ public partial class PlacementTool : Node
         {
             var rect = TileRect.FromCorners(
                 _dragStart.Value.X, _dragStart.Value.Y, hovered.Value.X, hovered.Value.Y);
-            if (toolId.StartsWith("blueprint.")) rect = AxisAlignedLine(_dragStart.Value, hovered.Value);
+            if (toolId.StartsWith("blueprint."))
+            {
+                var defId = toolId.Substring("blueprint.".Length);
+                if (BlueprintCatalog.TryGet(defId, out var def) && def is not null
+                    && def.Placement == PlacementMode.LineDrag)
+                {
+                    rect = AxisAlignedLine(_dragStart.Value, hovered.Value);
+                }
+                // SpacedDrag leaves rect as the bbox of start→cursor — gives
+                // the player a hint the drag is live without faking ghosts
+                // along the whole span (per design call: no full ghost trail).
+            }
             _rectOverlay.PreviewRect = rect;
         }
         else if (hovered is not null)
@@ -227,19 +238,56 @@ public partial class PlacementTool : Node
         {
             var defId = toolId.Substring("blueprint.".Length);
             if (!BlueprintCatalog.TryGet(defId, out var def) || def is null) return;
-            if (def.Placement != PlacementMode.LineDrag) return;
-            var line = AxisAlignedLine(start, tile);
-            for (var y = line.MinY; y <= line.MaxY; y++)
+            if (def.Placement == PlacementMode.LineDrag)
             {
-                for (var x = line.MinX; x <= line.MaxX; x++)
+                var line = AxisAlignedLine(start, tile);
+                for (var y = line.MinY; y <= line.MaxY; y++)
                 {
-                    var lineOrigin = new Vector2I(x, y);
-                    if (!IsFootprintInBounds(def, 0, lineOrigin)) continue;
-                    var lineLayer = ResolveBaseLayer(def, 0, lineOrigin);
-                    _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, x, y, 0, lineLayer));
+                    for (var x = line.MinX; x <= line.MaxX; x++)
+                    {
+                        var lineOrigin = new Vector2I(x, y);
+                        if (!IsFootprintInBounds(def, 0, lineOrigin)) continue;
+                        var lineLayer = ResolveBaseLayer(def, 0, lineOrigin);
+                        _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, x, y, 0, lineLayer));
+                    }
+                }
+            }
+            else if (def.Placement == PlacementMode.SpacedDrag)
+            {
+                var spacing = Math.Max(1, def.DragSpacingTiles);
+                foreach (var pt in SpacedDragPoints(start, tile, spacing))
+                {
+                    if (!IsFootprintInBounds(def, 0, pt)) continue;
+                    var layer = ResolveBaseLayer(def, 0, pt);
+                    _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, pt.X, pt.Y, 0, layer));
                 }
             }
         }
+    }
+
+    // Returns the start tile, every Nth tile along the straight line from
+    // start to end, and the end tile itself. End always lands wherever the
+    // mouse was released — no spacing-grid snap on the final point.
+    private static IEnumerable<Vector2I> SpacedDragPoints(Vector2I start, Vector2I end, int spacing)
+    {
+        if (start == end) { yield return start; yield break; }
+        var dx = end.X - start.X;
+        var dy = end.Y - start.Y;
+        var dist = MathF.Sqrt(dx * dx + dy * dy);
+        var steps = Math.Max(1, (int)MathF.Floor(dist / spacing));
+        var nx = dx / dist;
+        var ny = dy / dist;
+        var seen = new HashSet<Vector2I> { start };
+        yield return start;
+        for (var i = 1; i <= steps; i++)
+        {
+            var px = start.X + nx * (spacing * i);
+            var py = start.Y + ny * (spacing * i);
+            var pt = new Vector2I((int)MathF.Round(px), (int)MathF.Round(py));
+            if (pt == end) break; // final pylon emitted below
+            if (seen.Add(pt)) yield return pt;
+        }
+        if (seen.Add(end)) yield return end;
     }
 
     private void HandleBlueprintClick(Vector2I tile, string toolId)

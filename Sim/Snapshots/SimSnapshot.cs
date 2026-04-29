@@ -20,7 +20,10 @@ public sealed record SimSnapshot(
     IReadOnlyList<StructureView> Structures,
     IReadOnlyList<TileCoord> TreeFalls,
     LightingView Lighting,
-    WeatherView Weather)
+    WeatherView Weather,
+    IReadOnlyList<PowerNodeView> PowerNodes,
+    IReadOnlyList<PowerEdgeView> PowerEdges,
+    IReadOnlyList<PowerGridView> PowerGrids)
 {
     public static SimSnapshot Empty { get; } =
         new(0, 0.0, 0,
@@ -36,5 +39,8 @@ public sealed record SimSnapshot(
             Array.Empty<StructureView>(),
             Array.Empty<TileCoord>(),
             LightingView.Empty,
-            WeatherView.Empty);
+            WeatherView.Empty,
+            Array.Empty<PowerNodeView>(),
+            Array.Empty<PowerEdgeView>(),
+            Array.Empty<PowerGridView>());
 }

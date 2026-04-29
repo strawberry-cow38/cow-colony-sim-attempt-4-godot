@@ -59,6 +59,7 @@ public partial class BuildBar : CanvasLayer
             {
                 PlacementMode.Single => "click",
                 PlacementMode.LineDrag => "line drag",
+                PlacementMode.SpacedDrag => "spaced drag",
                 PlacementMode.Footprint => def.Rotatable ? "click, R rotate" : "click",
                 _ => "",
             };

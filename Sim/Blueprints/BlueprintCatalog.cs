@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CowColonySim.Sim.Items;
+using CowColonySim.Sim.World.Components;
 
 namespace CowColonySim.Sim.Blueprints;
 
@@ -103,6 +104,46 @@ public static class BlueprintCatalog
                     new FootprintRequirement(FootprintRequirementKind.InteractionSpot, 1, 1),
                 },
                 Materials: new[] { new MaterialCost(ItemKind.Wood, 14) }),
+
+            new BlueprintDef(
+                Id: "power.pylon",
+                DisplayName: "Power Pylon",
+                Category: BlueprintCategory.Utility,
+                Placement: PlacementMode.SpacedDrag,
+                FootprintW: 1, FootprintH: 1,
+                Rotatable: false,
+                Requirements: System.Array.Empty<FootprintRequirement>(),
+                HeightMeters: 4.5f,
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 4) },
+                Power: PowerNodeKind.Pylon,
+                DragSpacingTiles: 8),
+
+            new BlueprintDef(
+                Id: "power.generator",
+                DisplayName: "Test Generator",
+                Category: BlueprintCategory.Utility,
+                Placement: PlacementMode.Footprint,
+                FootprintW: 2, FootprintH: 2,
+                Rotatable: true,
+                Requirements: System.Array.Empty<FootprintRequirement>(),
+                HeightMeters: 1.5f,
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 10) },
+                Power: PowerNodeKind.Source,
+                DefaultSupplyW: 200f,
+                MaxSupplyW: 1000f),
+
+            new BlueprintDef(
+                Id: "power.lamp",
+                DisplayName: "Electric Lamp",
+                Category: BlueprintCategory.Utility,
+                Placement: PlacementMode.Footprint,
+                FootprintW: 1, FootprintH: 1,
+                Rotatable: false,
+                Requirements: System.Array.Empty<FootprintRequirement>(),
+                HeightMeters: 2.25f,
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 2) },
+                Power: PowerNodeKind.Sink,
+                DefaultDemandW: 50f),
 
             new BlueprintDef(
                 Id: "furniture.table",

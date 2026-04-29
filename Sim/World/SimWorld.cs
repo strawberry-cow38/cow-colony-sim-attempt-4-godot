@@ -27,6 +27,15 @@ public sealed class SimWorld
     public int StockpileVersion { get; private set; }
     public void BumpStockpileVersion() => StockpileVersion++;
 
+    // Bumped whenever a PowerNode entity is added, removed, moved, or its
+    // SupplyW/DemandW changes meaningfully. PowerSystem rebuilds the grid
+    // topology on version change (and once per tick if any node has IsActive
+    // toggled — that flag also bumps via the command handler).
+    public int PowerVersion { get; private set; }
+    public void BumpPowerVersion() => PowerVersion++;
+
+    public PowerGridRegistry Power { get; } = new();
+
     private readonly List<TileCoord> _pendingTreeFalls = new();
 
     // ChopJobSystem appends here when a tree is felled; SimRuntime drains the
@@ -179,6 +188,18 @@ public sealed class SimWorld
         var e = Store.CreateEntity();
         e.AddComponent(new TilePosition(tileX, tileY, 0));
         e.AddComponent(new Structure { DefId = def.Id, Rotation = rotation, BaseLayer = baseLayer });
+        if (def.Power.HasValue)
+        {
+            e.AddComponent(new PowerNode
+            {
+                Kind = def.Power.Value,
+                SupplyW = def.DefaultSupplyW,
+                DemandW = def.DefaultDemandW,
+                IsActive = def.Power.Value != PowerNodeKind.Source, // sources start off until player flips slider
+                GridId = -1,
+            });
+            BumpPowerVersion();
+        }
         return e;
     }
 

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CowColonySim.Sim.World.Components;
 
 namespace CowColonySim.Sim.Blueprints;
 
@@ -18,7 +19,15 @@ public sealed record BlueprintDef(
     bool Rotatable,
     IReadOnlyList<FootprintRequirement> Requirements,
     float HeightMeters = 1.5f,
-    IReadOnlyList<MaterialCost>? Materials = null)
+    IReadOnlyList<MaterialCost>? Materials = null,
+    // Power-graph role attached when SpawnStructure materializes this def.
+    // null = not a power node. Pylons leave watts at 0 (relays only).
+    PowerNodeKind? Power = null,
+    float DefaultSupplyW = 0f,
+    float DefaultDemandW = 0f,
+    float MaxSupplyW = 0f,
+    // SpacedDrag spacing in tiles (only meaningful when Placement=SpacedDrag).
+    int DragSpacingTiles = 0)
 {
     // Height converted to 0.75 m vertical quanta — matches the terrain
     // quantum + the build-layer step. Quarter wall = 1, half wall = 2,

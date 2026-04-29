@@ -100,6 +100,11 @@ public readonly record struct UnequipInventoryCommand(int ColonistId, int StackI
 // Out-of-range values clamp at MaxPriority.
 public readonly record struct SetWorkPriorityCommand(int ColonistId, WorkType WorkType, byte Priority) : ISimCommand;
 
+// Tweak a generator's output watts and on/off state. Watts clamps to the
+// def's MaxSupplyW. Bumps SimWorld.PowerVersion so PowerSystem refreshes
+// totals on the next tick.
+public readonly record struct SetGeneratorOutputCommand(int EntityId, float Watts, bool IsOn) : ISimCommand;
+
 public readonly record struct SetZoneSettingsCommand(
     int ZoneId,
     string Name,

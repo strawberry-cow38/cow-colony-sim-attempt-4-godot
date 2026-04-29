@@ -83,15 +83,20 @@ public partial class PowerVisualsRenderer : Node3D
         if (sig == _lastEdgeSig) return;
         _lastEdgeSig = sig;
 
-        var totalInstances = edges.Count * SegmentsPerEdge * CablesPerEdge;
+        var hopCount = 0;
+        for (var ei = 0; ei < edges.Count; ei++)
+            if (edges[ei].IsHop) hopCount++;
+        var totalInstances = hopCount * SegmentsPerEdge * CablesPerEdge;
         _multiMesh.InstanceCount = totalInstances;
         if (totalInstances == 0) return;
 
         var unitsPerTile = SimConstants.GodotUnitsPerTile;
         var metersPerTile = SimConstants.MetersPerTile;
+        var hopIndex = 0;
         for (var ei = 0; ei < edges.Count; ei++)
         {
             var e = edges[ei];
+            if (!e.IsHop) continue;
             var fromTopOffset = TopOffsetForNode(snap, e.FromEntityId);
             var toTopOffset = TopOffsetForNode(snap, e.ToEntityId);
             var fromX = (e.FromMetersX / metersPerTile) * unitsPerTile;
@@ -136,9 +141,10 @@ public partial class PowerVisualsRenderer : Node3D
                     var p0 = SamplePoint(aX, fromY, aZ, bX, toY, bZ, sagUnits, t0);
                     var p1 = SamplePoint(aX, fromY, aZ, bX, toY, bZ, sagUnits, t1);
                     var xform = SegmentTransform(p0, p1);
-                    _multiMesh.SetInstanceTransform((ei * CablesPerEdge + c) * SegmentsPerEdge + s, xform);
+                    _multiMesh.SetInstanceTransform((hopIndex * CablesPerEdge + c) * SegmentsPerEdge + s, xform);
                 }
             }
+            hopIndex++;
         }
     }
 

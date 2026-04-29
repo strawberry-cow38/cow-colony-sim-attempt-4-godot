@@ -16,15 +16,24 @@ public partial class RainEffect : Node3D
     // RainCurve outputs a 0..1 intensity that rarely saturates in normal
     // climate cycles — boost so even moderate rainfall looks like rain.
     private const float IntensityGain = 1.5f;
+    // Horizontal accel applied to rain per m/s of wind speed. The base
+    // gravity is -120 along Y, so at 14 m/s the rain tilts ~35deg toward
+    // the wind heading — visible slant without going horizontal.
+    private const float WindAccelPerMs = 6f;
+    // Smooth the gust input so the rain doesn't snap angle each frame.
+    private const float WindLerpRate = 2.5f;
 
     private GpuParticles3D _particles = null!;
+    private ParticleProcessMaterial _process = null!;
+    private float _windX;
+    private float _windZ;
     private SnapshotPublisher? _publisher;
     private bool _manualOverride;
     private bool _enabled = true;
 
     public override void _Ready()
     {
-        var process = new ParticleProcessMaterial
+        _process = new ParticleProcessMaterial
         {
             EmissionShape = ParticleProcessMaterial.EmissionShapeEnum.Box,
             EmissionBoxExtents = new Vector3(SpawnHalfExtent, 0.1f, SpawnHalfExtent),
@@ -63,7 +72,7 @@ public partial class RainEffect : Node3D
             Preprocess = 1.0f,
             VisibilityAabb = new Aabb(new Vector3(-SpawnHalfExtent, -SpawnHeight, -SpawnHalfExtent),
                                       new Vector3(SpawnHalfExtent * 2f, SpawnHeight * 2f, SpawnHalfExtent * 2f)),
-            ProcessMaterial = process,
+            ProcessMaterial = _process,
             DrawPass1 = mesh,
             Emitting = false,
             AmountRatio = 0f,
@@ -102,9 +111,22 @@ public partial class RainEffect : Node3D
             GlobalPosition = new Vector3(p.X, p.Y, p.Z);
         }
 
-        if (_manualOverride) return;
         if (_publisher is null) return;
         var snap = _publisher.Current;
+
+        // Wind heading is the world yaw the wind blows TOWARD; convert to
+        // a horizontal vector and lerp into the live process mat so gust
+        // changes drift in instead of teleporting.
+        var rad = snap.Weather.CurrentWindRad;
+        var speed = snap.Weather.CurrentWindSpeed;
+        var targetX = MathF.Sin(rad) * speed;
+        var targetZ = MathF.Cos(rad) * speed;
+        var k = 1f - MathF.Exp(-WindLerpRate * (float)delta);
+        _windX = Mathf.Lerp(_windX, targetX, k);
+        _windZ = Mathf.Lerp(_windZ, targetZ, k);
+        _process.Gravity = new Vector3(_windX * WindAccelPerMs, -120f, _windZ * WindAccelPerMs);
+
+        if (_manualOverride) return;
         var t = Mathf.Clamp(snap.Weather.CurrentRainfall * IntensityGain, 0f, 1f);
         ApplyIntensity(t);
     }

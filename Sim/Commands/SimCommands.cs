@@ -35,6 +35,12 @@ public readonly record struct StampDesignationsCommand(DesignationKind Kind, Til
 // model. Cleared automatically when the tree is felled or destroyed.
 public readonly record struct PrioritizeChopCommand(int ColonistId, int TreeEntityId) : ISimCommand;
 
+// Same shape as PrioritizeChopCommand but for boulders + the Mine work
+// kind. Stamps a Mine designation at the boulder tile if one isn't there
+// yet, pre-empts any other colonist already targeting the boulder, and
+// pins WorkJob.Forced so the colonist won't drop it for needs.
+public readonly record struct PrioritizeMineCommand(int ColonistId, int BoulderEntityId) : ISimCommand;
+
 // Pin a colonist to haul a specific item stack to the best stockpile.
 // Same model as PrioritizeChopCommand — clears any other colonist
 // already targeting the stack, picks a drop tile, sets WorkJob.Forced.

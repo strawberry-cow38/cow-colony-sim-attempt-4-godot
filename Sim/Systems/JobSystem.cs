@@ -47,12 +47,14 @@ public sealed class JobSystem : ITickSystem
             ref var pf = ref entity.GetComponent<PathFollower>();
             ref var work = ref entity.GetComponent<WorkJob>();
 
-            // Player-forced work overrides everything — they'll work until
-            // they die before we let needs hijack the colonist. Hauls are
-            // also non-preemptable: dropping a stack mid-trip leaves the
-            // item stranded between source and dest, so we ride out the
-            // haul before letting needs grab the colonist.
-            if (work.Active && (work.Forced || work.Kind == WorkKind.HaulItem))
+            // Any active work blocks need preemption: master doesn't want
+            // colonists abandoning a chop they've already walked halfway to
+            // just because their hunger ticked under threshold. Drops + path
+            // teardowns are sticky bugs (stranded carries, wasted A* work)
+            // so we ride the work out. The escape valve is WorkJob.LongTask
+            // — set on hypothetical research/surgery/art jobs that *should*
+            // pause for needs. Today every WorkKind is short-task by default.
+            if (work.Active && !work.LongTask)
             {
                 if (job.Active)
                 {

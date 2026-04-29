@@ -23,6 +23,12 @@ public struct WorkJob : IComponent
     // a closer tree on the next tick — only target invalid clears it.
     public bool Forced;
 
+    // Reserved for future "long task" semantics — needs WILL be allowed
+    // to preempt these (think research, art, surgery) since starving in
+    // a 6-day surgery isn't the desired ergonomic. Unused for now;
+    // every active work today is treated as a short, must-finish task.
+    public bool LongTask;
+
     // Haul-only state. Two phases: walk to the source item, then walk to
     // the drop tile. Carrying flips true once the colonist reaches the
     // pickup tile and the item entity is consumed. CarryKind/Count buffer

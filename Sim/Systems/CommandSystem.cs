@@ -59,6 +59,9 @@ public sealed class CommandSystem : ITickSystem
                 case PrioritizeChopCommand pc:
                     Apply(pc);
                     break;
+                case PrioritizeMineCommand pm:
+                    Apply(pm);
+                    break;
                 case PrioritizeHaulCommand ph:
                     Apply(ph);
                     break;
@@ -580,6 +583,60 @@ public sealed class CommandSystem : ITickSystem
         work.Active = true;
         work.Kind = WorkKind.ChopTree;
         work.TargetEntityId = cmd.TreeEntityId;
+        work.TargetTileX = tx;
+        work.TargetTileY = ty;
+        work.Progress = 0f;
+        work.Forced = true;
+        pf.Tiles = null;
+        pf.Index = 0;
+    }
+
+    private void Apply(PrioritizeMineCommand cmd)
+    {
+        var colonist = _world.Store.GetEntityById(cmd.ColonistId);
+        if (colonist == default) return;
+        if (!colonist.HasComponent<WorkJob>() || !colonist.HasComponent<PathFollower>()) return;
+
+        var boulder = _world.Store.GetEntityById(cmd.BoulderEntityId);
+        if (boulder == default || !boulder.HasComponent<Boulder>() || !boulder.HasComponent<TilePosition>()) return;
+
+        ref var bPos = ref boulder.GetComponent<TilePosition>();
+        var tx = bPos.TileX;
+        var ty = bPos.TileY;
+
+        // Single-assignment per boulder — same anti-double-finish reason
+        // PrioritizeChop uses. Two miners on one rock both reach Health<=0
+        // on the same tick and the second yield-spawn crashes.
+        foreach (var other in _world.Store.Query<Colonist, WorkJob, PathFollower>().Entities)
+        {
+            if (other.Id == cmd.ColonistId) continue;
+            ref var ow = ref other.GetComponent<WorkJob>();
+            if (!ow.Active || ow.TargetEntityId != cmd.BoulderEntityId) continue;
+            ref var opf = ref other.GetComponent<PathFollower>();
+            ow.Active = false;
+            ow.Kind = WorkKind.None;
+            ow.TargetEntityId = 0;
+            ow.Progress = 0f;
+            ow.Forced = false;
+            opf.Tiles = null;
+            opf.Index = 0;
+        }
+
+        var hasDesignation = false;
+        foreach (var entity in _world.Store.Query<Designation, TilePosition>().Entities)
+        {
+            ref var d = ref entity.GetComponent<Designation>();
+            if (d.Kind != DesignationKind.Mine) continue;
+            ref var p = ref entity.GetComponent<TilePosition>();
+            if (p.TileX == tx && p.TileY == ty) { hasDesignation = true; break; }
+        }
+        if (!hasDesignation) _world.SpawnDesignation(tx, ty, DesignationKind.Mine);
+
+        ref var work = ref colonist.GetComponent<WorkJob>();
+        ref var pf = ref colonist.GetComponent<PathFollower>();
+        work.Active = true;
+        work.Kind = WorkKind.Mine;
+        work.TargetEntityId = cmd.BoulderEntityId;
         work.TargetTileX = tx;
         work.TargetTileY = ty;
         work.Progress = 0f;

@@ -118,6 +118,11 @@ public partial class ContextMenu : CanvasLayer
         var colonistId = _selection.SelectedEntityId ?? 0;
 
         ClearItems();
+        if (colonistId != 0)
+        {
+            AddOption($"prioritize mine (colonist #{colonistId})",
+                () => _commands.Submit(new PrioritizeMineCommand(colonistId, boulderId)));
+        }
         if (HasMineDesignation(snap, tx, ty))
         {
             AddOption("cancel mine",

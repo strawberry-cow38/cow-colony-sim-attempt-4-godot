@@ -120,7 +120,7 @@ public partial class BuildBar : CanvasLayer
             AnchorBottom = 1f,
             OffsetLeft = -240f,
             OffsetRight = 240f,
-            OffsetTop = -260f,
+            OffsetTop = -460f,
             OffsetBottom = -48f,
             Visible = false,
         };
@@ -141,8 +141,16 @@ public partial class BuildBar : CanvasLayer
         rightPanel.AddChild(rightBox);
         _toolHeader = new Label { Text = "select a category" };
         rightBox.AddChild(_toolHeader);
-        _toolList = new VBoxContainer();
-        rightBox.AddChild(_toolList);
+        var toolScroll = new ScrollContainer
+        {
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
+        rightBox.AddChild(toolScroll);
+        _toolList = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        toolScroll.AddChild(_toolList);
+        rightBox.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
 
         BuildCategoryButtons();
     }

@@ -432,9 +432,10 @@ public sealed class SimRuntime : IDisposable
         {
             ref var n = ref entity.GetComponent<PowerNode>();
             ref var p = ref entity.GetComponent<TilePosition>();
+            var (cx, cy) = NodeCenterMeters(entity, p);
             views[i++] = new PowerNodeView(
                 entity.Id, n.Kind, n.GridId,
-                p.MetersX, p.MetersY, p.TileX, p.TileY,
+                cx, cy, p.TileX, p.TileY,
                 n.SupplyW, n.DemandW, n.IsActive, n.IsPowered, n.ServedByPylonId);
         }
         return views;
@@ -454,12 +455,39 @@ public sealed class SimRuntime : IDisposable
             if (from == default || to == default) continue;
             ref var fp = ref from.GetComponent<TilePosition>();
             ref var tp = ref to.GetComponent<TilePosition>();
+            var (fx, fy) = NodeCenterMeters(from, fp);
+            var (tx, ty) = NodeCenterMeters(to, tp);
             views[i] = new PowerEdgeView(
                 e.FromEntityId, e.ToEntityId,
-                fp.MetersX, fp.MetersY, tp.MetersX, tp.MetersY,
+                fx, fy, tx, ty,
                 e.IsHop, e.GridId);
         }
         return views;
+    }
+
+    // World-XY meters at the centre of the structure footprint that owns this
+    // power node. Pylons + lamps sit on a single tile so this collapses to
+    // (TileX+0.5, TileY+0.5); 2x2 generators centre on (TileX+1, TileY+1).
+    // Cable endpoints + lamp lights sample the heightfield here so they line
+    // up with where StructuresRenderer puts the box (which uses footprint
+    // centre too).
+    private static (float x, float y) NodeCenterMeters(Friflo.Engine.ECS.Entity entity, in TilePosition p)
+    {
+        var footW = 1;
+        var footH = 1;
+        if (entity.HasComponent<Structure>())
+        {
+            ref var s = ref entity.GetComponent<Structure>();
+            if (Blueprints.BlueprintCatalog.TryGet(s.DefId, out var def) && def is not null)
+            {
+                footW = def.FootprintW;
+                footH = def.FootprintH;
+                if ((s.Rotation & 1) != 0) (footW, footH) = (footH, footW);
+            }
+        }
+        var cx = (p.TileX + p.SubX + footW * 0.5f) * SimConstants.MetersPerTile;
+        var cy = (p.TileY + p.SubY + footH * 0.5f) * SimConstants.MetersPerTile;
+        return (cx, cy);
     }
 
     private PowerGridView[] BuildPowerGridViews()

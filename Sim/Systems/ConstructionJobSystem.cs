@@ -235,9 +235,31 @@ public sealed class ConstructionJobSystem : ITickSystem
             return;
         }
 
-        // At pickup tile — pull as much of the stack as fits into inventory.
+        // At pickup tile — cap the request at the blueprint's remaining
+        // need minus what we're already carrying, so a 50-wood stack
+        // hauled toward a 5-wood wall doesn't strand 45 wood at the
+        // build site. Minified is atomic — never cap.
         var defId = ResolveDefId(item);
-        var added = InventoryOps.Add(ref inv, in caps, defId, item.Count);
+        var requested = item.Count;
+        if (item.Kind != ItemKind.Minified)
+        {
+            var bp = FindBlueprintAt(blueprints, work.DropTileX, work.DropTileY);
+            if (bp.HasValue)
+            {
+                var def = BlueprintCatalog.Get(bp.Value.DefId);
+                var required = TotalMaterialOf(def, item.Kind);
+                var gap = required - bp.Value.MaterialDeposited;
+                var carried = CountInventoryOf(in inv, item.Kind);
+                var remaining = Math.Max(0, gap - carried);
+                requested = Math.Min(requested, remaining);
+            }
+        }
+        if (requested <= 0)
+        {
+            SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
+            return;
+        }
+        var added = InventoryOps.Add(ref inv, in caps, defId, requested);
         if (added <= 0)
         {
             SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);

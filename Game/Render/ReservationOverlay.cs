@@ -74,7 +74,7 @@ public partial class ReservationOverlay : Node3D
         for (var i = 0; i < reqs.Count; i++)
         {
             var r = reqs[i];
-            var (offX, offY) = RotateOffset(r.OffsetX, r.OffsetY, rot);
+            var (offX, offY) = def.RotateOffset(r.OffsetX, r.OffsetY, rot);
             var tx = originX + offX;
             var ty = originY + offY;
             var unitsPerTile = SimConstants.GodotUnitsPerTile;
@@ -119,13 +119,6 @@ public partial class ReservationOverlay : Node3D
         }
     }
 
-    private static (int x, int y) RotateOffset(int x, int y, int rot) => (rot & 3) switch
-    {
-        1 => (-y, x),
-        2 => (-x, -y),
-        3 => (y, -x),
-        _ => (x, y),
-    };
 
     private static Color ColorFor(FootprintRequirementKind kind) => kind switch
     {

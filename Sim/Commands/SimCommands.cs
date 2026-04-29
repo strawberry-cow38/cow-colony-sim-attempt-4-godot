@@ -46,6 +46,12 @@ public readonly record struct PrioritizeMineCommand(int ColonistId, int BoulderE
 // already targeting the stack, picks a drop tile, sets WorkJob.Forced.
 public readonly record struct PrioritizeHaulCommand(int ColonistId, int ItemEntityId) : ISimCommand;
 
+// Pin a colonist to a blueprint. If the blueprint still needs material,
+// the colonist is sent to haul wood (or a matching minified) toward it;
+// once material is in, they switch to constructing. Pre-empts any other
+// colonist mid-haul/mid-construct on the same blueprint.
+public readonly record struct PrioritizeBuildCommand(int ColonistId, int BlueprintEntityId) : ISimCommand;
+
 // Flip Item.Forbidden. When set to true, also clears every WorkJob
 // that's hauling this item. If a carrier had already picked the stack
 // up, the payload is dropped at the carrier's tile so we don't leak.

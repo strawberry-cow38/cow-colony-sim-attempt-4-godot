@@ -27,4 +27,18 @@ public sealed record BlueprintDef(
 
     public IReadOnlyList<MaterialCost> MaterialsOrEmpty =>
         Materials ?? System.Array.Empty<MaterialCost>();
+
+    // Rotates a footprint-relative offset so it tracks the rotated
+    // footprint correctly. Footprint placement only swaps W↔H on rot&1
+    // and keeps origin in the +x/+y quadrant — a naive (-x, -y) on rot=2
+    // would put the interaction tile on the opposite corner. This helper
+    // mirrors the W↔H-swap convention so InteractionSpot / VentSide
+    // offsets stay glued to the actual rotated footprint cells.
+    public (int x, int y) RotateOffset(int x, int y, int rot) => (rot & 3) switch
+    {
+        1 => (y, FootprintW - 1 - x),
+        2 => (FootprintW - 1 - x, FootprintH - 1 - y),
+        3 => (FootprintH - 1 - y, x),
+        _ => (x, y),
+    };
 }

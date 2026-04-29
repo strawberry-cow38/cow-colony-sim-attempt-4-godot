@@ -137,6 +137,31 @@ public partial class ContextMenu : CanvasLayer
         Show(screenPos);
     }
 
+    public void OpenForBlueprint(int blueprintId, Vector2 screenPos)
+    {
+        var snap = _publisher.Current;
+        BlueprintGhostView? bp = null;
+        for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+        {
+            if (snap.BlueprintGhosts[i].EntityId != blueprintId) continue;
+            bp = snap.BlueprintGhosts[i];
+            break;
+        }
+        if (bp is null) return;
+        var view = bp.Value;
+        var colonistId = _selection.SelectedEntityId ?? 0;
+
+        ClearItems();
+        if (colonistId != 0)
+        {
+            AddOption($"prioritize build (colonist #{colonistId})",
+                () => _commands.Submit(new PrioritizeBuildCommand(colonistId, blueprintId)));
+        }
+        AddOption("cancel blueprint",
+            () => _commands.Submit(new CancelBlueprintCommand(blueprintId)));
+        Show(screenPos);
+    }
+
     public void OpenForItem(int itemId, Vector2 screenPos)
     {
         var snap = _publisher.Current;

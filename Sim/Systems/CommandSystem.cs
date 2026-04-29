@@ -62,6 +62,9 @@ public sealed class CommandSystem : ITickSystem
                 case PrioritizeMineCommand pm:
                     Apply(pm);
                     break;
+                case PrioritizeBuildCommand pb:
+                    Apply(pb);
+                    break;
                 case PrioritizeHaulCommand ph:
                     Apply(ph);
                     break;
@@ -643,6 +646,124 @@ public sealed class CommandSystem : ITickSystem
         work.Forced = true;
         pf.Tiles = null;
         pf.Index = 0;
+    }
+
+    private void Apply(PrioritizeBuildCommand cmd)
+    {
+        var colonist = _world.Store.GetEntityById(cmd.ColonistId);
+        if (colonist == default) return;
+        if (!colonist.HasComponent<WorkJob>() || !colonist.HasComponent<PathFollower>()
+            || !colonist.HasComponent<TilePosition>()) return;
+
+        var bp = _world.Store.GetEntityById(cmd.BlueprintEntityId);
+        if (bp == default || !bp.HasComponent<BlueprintGhost>() || !bp.HasComponent<TilePosition>()) return;
+
+        ref var ghost = ref bp.GetComponent<BlueprintGhost>();
+        ref var bpPos = ref bp.GetComponent<TilePosition>();
+        var bx = bpPos.TileX;
+        var by = bpPos.TileY;
+
+        if (!BlueprintCatalog.TryGet(ghost.DefId, out var def) || def is null) return;
+        var requiredWood = 0;
+        var mats = def.MaterialsOrEmpty;
+        for (var i = 0; i < mats.Count; i++)
+            if (mats[i].Kind == ItemKind.Wood) requiredWood += mats[i].Count;
+
+        // Boot any other colonist mid-haul/mid-construct on this same
+        // blueprint so two colonists don't race the same tile.
+        foreach (var other in _world.Store.Query<Colonist, WorkJob, PathFollower, TilePosition>().Entities)
+        {
+            if (other.Id == cmd.ColonistId) continue;
+            ref var ow = ref other.GetComponent<WorkJob>();
+            if (!ow.Active) continue;
+            var matches = false;
+            if (ow.Kind == WorkKind.Construct && ow.TargetEntityId == cmd.BlueprintEntityId) matches = true;
+            else if (ow.Kind == WorkKind.HaulToBlueprint && ow.DropTileX == bx && ow.DropTileY == by) matches = true;
+            if (!matches) continue;
+            ref var opf = ref other.GetComponent<PathFollower>();
+            if (ow.Kind == WorkKind.HaulToBlueprint) DrainUnlockedToTile(other, ow.CarryKind);
+            ResetWorkJob(ref ow, ref opf);
+        }
+
+        ref var work = ref colonist.GetComponent<WorkJob>();
+        ref var pf = ref colonist.GetComponent<PathFollower>();
+
+        // Already-deposited blueprint → just go construct.
+        if (ghost.MinifiedDelivered || ghost.MaterialDeposited >= requiredWood)
+        {
+            work.Active = true;
+            work.Kind = WorkKind.Construct;
+            work.TargetEntityId = cmd.BlueprintEntityId;
+            work.TargetTileX = bx;
+            work.TargetTileY = by;
+            work.DropTileX = 0;
+            work.DropTileY = 0;
+            work.Progress = 0f;
+            work.Forced = true;
+            work.Carrying = false;
+            work.CarryKind = ItemKind.None;
+            work.CarryCount = 0;
+            work.CarryMinifiedDefId = null;
+            pf.Tiles = null;
+            pf.Index = 0;
+            return;
+        }
+
+        // Needs material. Find the nearest viable wood (or matching
+        // minified) item to grab as the first pickup.
+        ref var cPos = ref colonist.GetComponent<TilePosition>();
+        var bestId = 0;
+        var bestX = 0;
+        var bestY = 0;
+        var bestDist = float.PositiveInfinity;
+        var bestIsMini = false;
+        if (ghost.MaterialDeposited == 0)
+        {
+            foreach (var entity in _world.Store.Query<Item, TilePosition>().Entities)
+            {
+                ref var it = ref entity.GetComponent<Item>();
+                if (it.Kind != ItemKind.Minified || it.Forbidden) continue;
+                if (!entity.HasComponent<MinifiedThing>()) continue;
+                ref var m = ref entity.GetComponent<MinifiedThing>();
+                if (m.DefId != ghost.DefId) continue;
+                ref var ipos = ref entity.GetComponent<TilePosition>();
+                var dx = ipos.TileX - cPos.TileX;
+                var dy = ipos.TileY - cPos.TileY;
+                var d = dx * dx + dy * dy;
+                if (d < bestDist) { bestDist = d; bestId = entity.Id; bestX = ipos.TileX; bestY = ipos.TileY; bestIsMini = true; }
+            }
+        }
+        if (bestId == 0)
+        {
+            foreach (var entity in _world.Store.Query<Item, TilePosition>().Entities)
+            {
+                ref var it = ref entity.GetComponent<Item>();
+                if (it.Kind != ItemKind.Wood || it.Forbidden) continue;
+                ref var ipos = ref entity.GetComponent<TilePosition>();
+                var dx = ipos.TileX - cPos.TileX;
+                var dy = ipos.TileY - cPos.TileY;
+                var d = dx * dx + dy * dy;
+                if (d < bestDist) { bestDist = d; bestId = entity.Id; bestX = ipos.TileX; bestY = ipos.TileY; bestIsMini = false; }
+            }
+        }
+        if (bestId == 0) return;
+
+        work.Active = true;
+        work.Kind = WorkKind.HaulToBlueprint;
+        work.TargetEntityId = bestId;
+        work.TargetTileX = bestX;
+        work.TargetTileY = bestY;
+        work.DropTileX = bx;
+        work.DropTileY = by;
+        work.Progress = 0f;
+        work.Forced = true;
+        work.Carrying = false;
+        work.CarryKind = ItemKind.None;
+        work.CarryCount = 0;
+        work.CarryMinifiedDefId = null;
+        pf.Tiles = null;
+        pf.Index = 0;
+        _ = bestIsMini;
     }
 
     private void Apply(EraseInRectCommand cmd)

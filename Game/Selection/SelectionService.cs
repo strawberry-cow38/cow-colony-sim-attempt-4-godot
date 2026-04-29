@@ -327,6 +327,7 @@ public partial class SelectionService : Node
             if (TryOpenTreeContextMenu(camera, mb.Position)) return;
             if (TryOpenBoulderContextMenu(camera, mb.Position)) return;
             if (TryOpenItemContextMenu(camera, mb.Position)) return;
+            if (TryOpenBlueprintContextMenu(camera, mb.Position)) return;
             if (SelectedEntityId is int id)
             {
                 var tx = (int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile);
@@ -614,6 +615,15 @@ public partial class SelectionService : Node
             }
         }
         return best == -1 ? null : best;
+    }
+
+    private bool TryOpenBlueprintContextMenu(Camera3D camera, Vector2 mousePos)
+    {
+        if (_contextMenu is null) return false;
+        var id = PickBlueprintId(camera, mousePos);
+        if (id is null) return false;
+        _contextMenu.OpenForBlueprint(id.Value, mousePos);
+        return true;
     }
 
     private bool TryOpenItemContextMenu(Camera3D camera, Vector2 mousePos)

@@ -254,40 +254,70 @@ public partial class PlacementTool : Node
             }
             else if (def.Placement == PlacementMode.SpacedDrag)
             {
-                var spacing = Math.Max(1, def.DragSpacingTiles);
-                foreach (var pt in SpacedDragPoints(start, tile, spacing))
-                {
-                    if (!IsFootprintInBounds(def, 0, pt)) continue;
-                    var layer = ResolveBaseLayer(def, 0, pt);
-                    _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, pt.X, pt.Y, 0, layer));
-                }
+                CommitSpacedDrag(def, start, tile);
             }
         }
     }
 
-    // Returns the start tile, every Nth tile along the straight line from
-    // start to end, and the end tile itself. End always lands wherever the
-    // mouse was released — no spacing-grid snap on the final point.
-    private static IEnumerable<Vector2I> SpacedDragPoints(Vector2I start, Vector2I end, int spacing)
+    // Walks the straight line from drag start → mouse-up tile, dropping a
+    // ghost at each spacing-step (and at the end). When a candidate tile
+    // would land somewhere unplaceable (out of bounds, on a slope while
+    // baseLayer=0, overlapping a prior ghost), nudge the candidate backward
+    // along the line one tile at a time until a free tile is found — never
+    // past the previous placed pylon. Start tile has no "previous", so it's
+    // skipped if invalid.
+    private void CommitSpacedDrag(BlueprintDef def, Vector2I start, Vector2I end)
     {
-        if (start == end) { yield return start; yield break; }
+        var spacing = Math.Max(1, def.DragSpacingTiles);
         var dx = end.X - start.X;
         var dy = end.Y - start.Y;
         var dist = MathF.Sqrt(dx * dx + dy * dy);
-        var steps = Math.Max(1, (int)MathF.Floor(dist / spacing));
+
+        Vector2I? lastPlaced = null;
+        var emitted = new HashSet<Vector2I>();
+
+        bool TryEmit(Vector2I pt)
+        {
+            if (!emitted.Add(pt)) return false;
+            if (!IsFootprintInBounds(def, 0, pt)) return false;
+            var layer = ResolveBaseLayer(def, 0, pt);
+            if (!IsFootprintPlaceable(def, 0, pt, layer)) return false;
+            _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, pt.X, pt.Y, 0, layer));
+            lastPlaced = pt;
+            return true;
+        }
+
+        TryEmit(start);
+
+        if (dist <= 0.0001f) return;
         var nx = dx / dist;
         var ny = dy / dist;
-        var seen = new HashSet<Vector2I> { start };
-        yield return start;
+        var maxPullback = spacing; // never overshoot into the previous pylon
+
+        bool TryEmitWithPullback(Vector2I ideal)
+        {
+            for (var back = 0; back <= maxPullback; back++)
+            {
+                var bx = ideal.X - nx * back;
+                var by = ideal.Y - ny * back;
+                var pt = new Vector2I((int)MathF.Round(bx), (int)MathF.Round(by));
+                if (lastPlaced.HasValue && pt == lastPlaced.Value) return false;
+                if (TryEmit(pt)) return true;
+            }
+            return false;
+        }
+
+        var steps = Math.Max(1, (int)MathF.Floor(dist / spacing));
+        var endHandledByStep = false;
         for (var i = 1; i <= steps; i++)
         {
             var px = start.X + nx * (spacing * i);
             var py = start.Y + ny * (spacing * i);
-            var pt = new Vector2I((int)MathF.Round(px), (int)MathF.Round(py));
-            if (pt == end) break; // final pylon emitted below
-            if (seen.Add(pt)) yield return pt;
+            var ideal = new Vector2I((int)MathF.Round(px), (int)MathF.Round(py));
+            if (ideal == end) { endHandledByStep = true; break; }
+            TryEmitWithPullback(ideal);
         }
-        if (seen.Add(end)) yield return end;
+        if (!endHandledByStep) TryEmitWithPullback(end);
     }
 
     private void HandleBlueprintClick(Vector2I tile, string toolId)

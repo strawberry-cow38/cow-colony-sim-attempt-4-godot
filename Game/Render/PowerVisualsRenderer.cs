@@ -18,11 +18,15 @@ namespace CowColonySim.Game.Render;
 public partial class PowerVisualsRenderer : Node3D
 {
     private const int SegmentsPerEdge = 12;
+    private const int CablesPerEdge = 2;
     private const float SagPerMeter = 0.08f; // mid-span dip per metre of run
     private const float CableThicknessMeters = 0.08f;
     private const float PylonTopOffsetMeters = 4.0f; // where cable hangs off pylon
     private const float ConsumerTopOffsetMeters = 1.6f;
     private const float LayerStepMeters = 0.75f; // matches StructuresRenderer / build stack quantum
+    // Insulator X-offset on the pylon model (±0.678 m from pole centre). Pylon
+    // facing rotates the crossarm so this offset is perpendicular to the line.
+    private const float CableLateralOffsetMeters = 0.678f;
 
     private SnapshotPublisher _publisher = null!;
     private Heightfield _heightfield = null!;
@@ -79,7 +83,7 @@ public partial class PowerVisualsRenderer : Node3D
         if (sig == _lastEdgeSig) return;
         _lastEdgeSig = sig;
 
-        var totalInstances = edges.Count * SegmentsPerEdge;
+        var totalInstances = edges.Count * SegmentsPerEdge * CablesPerEdge;
         _multiMesh.InstanceCount = totalInstances;
         if (totalInstances == 0) return;
 
@@ -106,14 +110,34 @@ public partial class PowerVisualsRenderer : Node3D
             var horizMeters = MathF.Sqrt((dx * dx + dz * dz) / (_unitsPerMeter * _unitsPerMeter));
             var sagUnits = horizMeters * SagPerMeter * _unitsPerMeter;
 
-            for (var s = 0; s < SegmentsPerEdge; s++)
+            // Perpendicular offset in the horizontal plane so the two cables run
+            // parallel through the left/right insulator positions on each pylon.
+            var horizLen = MathF.Sqrt(dx * dx + dz * dz);
+            var perpX = 0f;
+            var perpZ = 0f;
+            if (horizLen > 0.0001f)
             {
-                var t0 = s / (float)SegmentsPerEdge;
-                var t1 = (s + 1) / (float)SegmentsPerEdge;
-                var p0 = SamplePoint(fromX, fromY, fromZ, toX, toY, toZ, sagUnits, t0);
-                var p1 = SamplePoint(fromX, fromY, fromZ, toX, toY, toZ, sagUnits, t1);
-                var xform = SegmentTransform(p0, p1);
-                _multiMesh.SetInstanceTransform(ei * SegmentsPerEdge + s, xform);
+                var offsetUnits = CableLateralOffsetMeters * _unitsPerMeter;
+                perpX = -dz / horizLen * offsetUnits;
+                perpZ = dx / horizLen * offsetUnits;
+            }
+
+            for (var c = 0; c < CablesPerEdge; c++)
+            {
+                var sign = c == 0 ? -1f : 1f;
+                var ox = perpX * sign;
+                var oz = perpZ * sign;
+                var aX = fromX + ox; var aZ = fromZ + oz;
+                var bX = toX + ox; var bZ = toZ + oz;
+                for (var s = 0; s < SegmentsPerEdge; s++)
+                {
+                    var t0 = s / (float)SegmentsPerEdge;
+                    var t1 = (s + 1) / (float)SegmentsPerEdge;
+                    var p0 = SamplePoint(aX, fromY, aZ, bX, toY, bZ, sagUnits, t0);
+                    var p1 = SamplePoint(aX, fromY, aZ, bX, toY, bZ, sagUnits, t1);
+                    var xform = SegmentTransform(p0, p1);
+                    _multiMesh.SetInstanceTransform((ei * CablesPerEdge + c) * SegmentsPerEdge + s, xform);
+                }
             }
         }
     }

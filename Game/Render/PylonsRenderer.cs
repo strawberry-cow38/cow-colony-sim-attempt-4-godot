@@ -134,6 +134,7 @@ public partial class PylonsRenderer : Node3D
 
         var snap = _publisher.Current;
         var structures = snap.Structures;
+        var facings = BuildPylonFacings(snap);
 
         var defaultXforms = new System.Collections.Generic.List<Transform3D>();
         var boxXforms = new System.Collections.Generic.List<Transform3D>();
@@ -154,7 +155,8 @@ public partial class PylonsRenderer : Node3D
             var baseY = ground + layerOffset;
 
             var scale = _unitsPerMeter;
-            var basis = Basis.Identity.Scaled(new Vector3(scale, scale, scale));
+            var yaw = facings.TryGetValue(s.EntityId, out var dir) ? Mathf.Atan2(dir.X, dir.Y) : 0f;
+            var basis = new Basis(Vector3.Up, yaw).Scaled(new Vector3(scale, scale, scale));
             var poleXform = new Transform3D(basis, new Vector3(x, baseY, z));
 
             var isLamp = def.DefaultDemandW > 0f;
@@ -178,6 +180,42 @@ public partial class PylonsRenderer : Node3D
         WriteBucket(_defaultBucket, defaultXforms);
         WriteBucket(_boxBucket, boxXforms);
         WriteBucket(_lampBucket, lampXforms);
+    }
+
+    private static Dictionary<int, Vector2> BuildPylonFacings(SimSnapshot snap)
+    {
+        var sums = new Dictionary<int, Vector2>();
+        var edges = snap.PowerEdges;
+        for (var i = 0; i < edges.Count; i++)
+        {
+            var e = edges[i];
+            var dx = e.ToMetersX - e.FromMetersX;
+            var dz = e.ToMetersY - e.FromMetersY;
+            var len = Mathf.Sqrt(dx * dx + dz * dz);
+            if (len < 0.001f) continue;
+            var ux = dx / len;
+            var uz = dz / len;
+            // Line direction is bidirectional — fold to upper half-plane so opposite
+            // edges don't cancel when summing for junctions.
+            if (uz < 0f || (uz == 0f && ux < 0f)) { ux = -ux; uz = -uz; }
+            Accumulate(sums, e.FromEntityId, ux, uz);
+            Accumulate(sums, e.ToEntityId, ux, uz);
+        }
+        var result = new Dictionary<int, Vector2>();
+        foreach (var kv in sums)
+        {
+            var v = kv.Value;
+            var len = v.Length();
+            if (len < 0.001f) continue;
+            result[kv.Key] = v / len;
+        }
+        return result;
+    }
+
+    private static void Accumulate(Dictionary<int, Vector2> sums, int id, float ux, float uz)
+    {
+        if (sums.TryGetValue(id, out var v)) sums[id] = v + new Vector2(ux, uz);
+        else sums[id] = new Vector2(ux, uz);
     }
 
     private static bool IsBoxVariant(int entityId)

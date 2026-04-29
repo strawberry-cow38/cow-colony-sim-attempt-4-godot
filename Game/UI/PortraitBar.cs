@@ -179,11 +179,17 @@ public partial class PortraitBar : CanvasLayer
             AnchorLeft = 0f, AnchorRight = 1f, AnchorTop = 0f, AnchorBottom = 1f,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
+        // Portrait body is static — rendering every frame just burns GPU
+        // and tanks framerate once the colony grows. UpdateOnce paints the
+        // viewport one time, then it sits as a cached texture. Anywhere
+        // we change visual state (mood color, body swap, future
+        // animations) call viewport.RenderTargetUpdateMode = UpdateOnce
+        // to repaint a single frame.
         var viewport = new SubViewport
         {
             Size = new Vector2I(PortraitWidth, PortraitHeight),
             TransparentBg = true,
-            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Once,
             OwnWorld3D = true,
             World3D = new World3D(),
         };
@@ -228,10 +234,14 @@ public partial class PortraitBar : CanvasLayer
         };
         viewport.AddChild(camera);
 
+        // No shadows on portraits — single-light + capsule body doesn't
+        // benefit, and shadow maps per portrait viewport were a real
+        // GPU cost as the roster grew.
         var light = new DirectionalLight3D
         {
             RotationDegrees = new Vector3(-30f, 30f, 0f),
             LightEnergy = 1.4f,
+            ShadowEnabled = false,
         };
         viewport.AddChild(light);
 

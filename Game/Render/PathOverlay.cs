@@ -55,6 +55,12 @@ public partial class PathOverlay : Node3D
             Mesh = _linesMesh,
             MaterialOverride = lineMat,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            // ImmediateMesh recomputes its AABB from vertices each frame,
+            // which made the path overlay get frustum-culled as soon as
+            // the rig was anywhere outside the tight strip's bounds. A
+            // huge cull margin keeps it drawn no matter where the camera
+            // is — the geometry itself is tiny so cheap.
+            ExtraCullMargin = 16384f,
         };
         AddChild(_lines);
 
@@ -82,6 +88,7 @@ public partial class PathOverlay : Node3D
                 InstanceCount = 0,
             },
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            ExtraCullMargin = 16384f,
         };
         AddChild(_rings);
     }

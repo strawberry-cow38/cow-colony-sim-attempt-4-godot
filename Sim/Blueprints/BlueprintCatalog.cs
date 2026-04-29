@@ -92,6 +92,19 @@ public static class BlueprintCatalog
                 Materials: new[] { new MaterialCost(ItemKind.Wood, 6) }),
 
             new BlueprintDef(
+                Id: "workstation.stove",
+                DisplayName: "Stove",
+                Category: BlueprintCategory.Workstation,
+                Placement: PlacementMode.Footprint,
+                FootprintW: 3, FootprintH: 1,
+                Rotatable: true,
+                Requirements: new[]
+                {
+                    new FootprintRequirement(FootprintRequirementKind.InteractionSpot, 1, 1),
+                },
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 14) }),
+
+            new BlueprintDef(
                 Id: "furniture.table",
                 DisplayName: "Table",
                 Category: BlueprintCategory.Furniture,

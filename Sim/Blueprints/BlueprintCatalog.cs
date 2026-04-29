@@ -119,6 +119,20 @@ public static class BlueprintCatalog
                 DragSpacingTiles: 8),
 
             new BlueprintDef(
+                Id: "power.lamp_pylon",
+                DisplayName: "Lamp Pylon",
+                Category: BlueprintCategory.Utility,
+                Placement: PlacementMode.SpacedDrag,
+                FootprintW: 1, FootprintH: 1,
+                Rotatable: false,
+                Requirements: System.Array.Empty<FootprintRequirement>(),
+                HeightMeters: 4.5f,
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 6) },
+                Power: PowerNodeKind.Pylon,
+                DefaultDemandW: 50f,
+                DragSpacingTiles: 8),
+
+            new BlueprintDef(
                 Id: "power.generator",
                 DisplayName: "Test Generator",
                 Category: BlueprintCategory.Utility,

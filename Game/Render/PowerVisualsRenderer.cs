@@ -181,7 +181,13 @@ public partial class PowerVisualsRenderer : Node3D
         for (var i = 0; i < snap.PowerNodes.Count; i++)
         {
             var n = snap.PowerNodes[i];
-            if (n.Kind != PowerNodeKind.Sink) continue;
+            // Any node with built-in load gets a lamp emitter — covers the
+            // dedicated power.lamp Sink and the lamp pylon (Kind=Pylon
+            // carrying DemandW > 0). Pylons hang the bulb at top of the
+            // tower, sinks at consumer height.
+            var isLamp = (n.Kind == PowerNodeKind.Sink) || (n.Kind == PowerNodeKind.Pylon && n.DemandW > 0f);
+            if (!isLamp) continue;
+            var topOffset = n.Kind == PowerNodeKind.Pylon ? PylonTopOffsetMeters : ConsumerTopOffsetMeters;
             seen.Add(n.EntityId);
             if (!_sinkLights.TryGetValue(n.EntityId, out var light))
             {
@@ -201,7 +207,7 @@ public partial class PowerVisualsRenderer : Node3D
             var z = (n.MetersY / metersPerTile) * unitsPerTile;
             var ground = _heightfield.SurfaceMetresAt(n.MetersX / metersPerTile, n.MetersY / metersPerTile) * _unitsPerMeter;
             var stack = n.BaseLayer * LayerStepMeters * _unitsPerMeter;
-            light.Position = new Vector3(x, ground + stack + ConsumerTopOffsetMeters * _unitsPerMeter, z);
+            light.Position = new Vector3(x, ground + stack + topOffset * _unitsPerMeter, z);
             light.Visible = n.IsPowered;
         }
         if (_sinkLights.Count == seen.Count) return;

@@ -176,7 +176,11 @@ public sealed class PowerSystem : ITickSystem
             if (node.GridId < 0 || !grids.ContainsKey(node.GridId)) { node.IsPowered = false; continue; }
             var g = grids[node.GridId];
             if (node.Kind == PowerNodeKind.Source && node.IsActive) g.TotalSupplyW += node.SupplyW;
-            else if (node.Kind == PowerNodeKind.Sink) g.TotalDemandW += node.DemandW;
+            // Sinks count as demand. Pylons with built-in load (lamp pylon)
+            // also draw their DemandW from the grid even though their Kind
+            // stays Pylon for topology purposes.
+            if (node.Kind == PowerNodeKind.Sink) g.TotalDemandW += node.DemandW;
+            else if (node.Kind == PowerNodeKind.Pylon && node.DemandW > 0f) g.TotalDemandW += node.DemandW;
             grids[node.GridId] = g;
         }
 

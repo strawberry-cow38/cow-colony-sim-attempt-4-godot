@@ -130,6 +130,22 @@ public static class InventoryOps
         return 1;
     }
 
+    // Clothing pickup. Always non-stackable, count 1, with per-instance
+    // material/quality/durability%. Returns the new stack index, or -1 if
+    // the def isn't clothing or the colonist is over caps. durabilityPct
+    // clamps to [0, 100].
+    public static int AddClothing(ref Inventory inv, in CarryCaps caps, string defId,
+        ClothingMaterial material, ClothingQuality quality, float durabilityPct)
+    {
+        var def = ItemCatalog.Get(defId);
+        if (!def.IsClothing) return -1;
+        inv.Stacks ??= new List<InventoryStack>();
+        if (RoomFor(defId, caps, inv) <= 0) return -1;
+        var pct = Math.Clamp(durabilityPct, 0f, 100f);
+        inv.Stacks.Add(new InventoryStack(defId, 1, material: material, quality: quality, durability: pct));
+        return inv.Stacks.Count - 1;
+    }
+
     // Force-pickup variant: merges into an existing locked stack of the
     // same DefId, or appends a new locked stack. Keeps the locked pile
     // separate from any auto-haul stack the colonist might already

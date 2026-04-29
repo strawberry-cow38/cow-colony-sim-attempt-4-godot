@@ -25,4 +25,11 @@ public sealed class ItemDef
     public float EquippedBulkBonus { get; init; }
     // Bonus carry-weight (power armor / exo). Phase-3 gear hooks here.
     public float EquippedWeightBonus { get; init; }
+
+    // Clothing-only stats. BaseDurability is the def-baseline pre-multiplier
+    // ceiling (HP, not %). Insulation values are unitless contribution to
+    // colonist warmth/cool — material + quality scale on top.
+    public float BaseDurability { get; init; }
+    public float InsulationCold { get; init; }
+    public float InsulationHeat { get; init; }
 }

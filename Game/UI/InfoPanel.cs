@@ -420,7 +420,14 @@ public partial class InfoPanel : CanvasLayer
             var tag = stack.Equipped ? " [E]" : stack.Locked ? " [L]" : string.Empty;
             var displayName = !string.IsNullOrEmpty(stack.WrappedDefId)
                 ? MinifiedLabel(stack.WrappedDefId) : stack.DisplayName;
-            var nameLabel = MakeLabel($"{displayName} ×{stack.Count}{tag}");
+            if (stack.IsClothing && stack.Material != Sim.Items.ClothingMaterial.None)
+            {
+                displayName = $"{Sim.Items.ClothingMaterials.DisplayName(stack.Material)} {displayName}";
+            }
+            var clothingSuffix = stack.IsClothing && stack.Durability >= 0f
+                ? $" {stack.Durability:F0}%"
+                : string.Empty;
+            var nameLabel = MakeLabel($"{displayName}{clothingSuffix} ×{stack.Count}{tag}");
             nameLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
             row.AddChild(nameLabel);
 
@@ -464,6 +471,9 @@ public partial class InfoPanel : CanvasLayer
                 h = (h ^ (uint)s.Count) * 1099511628211UL;
                 h = (h ^ (s.Equipped ? 1UL : 0UL)) * 1099511628211UL;
                 h = (h ^ (s.Locked ? 2UL : 0UL)) * 1099511628211UL;
+                h = (h ^ (uint)s.Material) * 1099511628211UL;
+                h = (h ^ (uint)s.Quality) * 1099511628211UL;
+                h = (h ^ (uint)(int)(s.Durability * 10f)) * 1099511628211UL;
             }
             return h == 0 ? 1UL : h;
         }
@@ -495,6 +505,19 @@ public partial class InfoPanel : CanvasLayer
         lines.AppendLine($"bulk: {stack.Bulk:F1} L ea");
         lines.AppendLine($"sell value: {stack.SellValue} silver ea");
         lines.AppendLine($"count: {stack.Count}");
+        if (stack.IsClothing && stack.Material != Sim.Items.ClothingMaterial.None)
+        {
+            lines.AppendLine($"material: {Sim.Items.ClothingMaterials.DisplayName(stack.Material)}");
+        }
+        if (stack.IsClothing)
+        {
+            lines.AppendLine($"quality: {Sim.Items.ClothingQualities.DisplayName(stack.Quality)}");
+        }
+        if (stack.IsClothing && stack.Durability >= 0f)
+        {
+            var band = Sim.Items.DurabilityBands.BandFor(stack.Durability);
+            lines.AppendLine($"durability: {stack.Durability:F0}% — {Sim.Items.DurabilityBands.DisplayName(band)}");
+        }
         if (stack.Locked) lines.AppendLine("LOCKED — auto-systems will not touch this stack");
         if (stack.Equipped) lines.AppendLine("EQUIPPED");
         _itemInfoDialog.DialogText = lines.ToString();

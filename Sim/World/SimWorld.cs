@@ -57,11 +57,22 @@ public sealed class SimWorld
         e.AddComponent(Needs.Full());
         e.AddComponent(new Job());
         e.AddComponent(new WorkJob());
-        e.AddComponent(Inventory.New());
-        e.AddComponent(CarryCaps.Default());
+        var inv = Inventory.New();
+        var caps = CarryCaps.Default();
+        EquipStarterClothing(ref inv, in caps, "apparel.shirt");
+        EquipStarterClothing(ref inv, in caps, "apparel.pants");
+        EquipStarterClothing(ref inv, in caps, "apparel.backpack");
+        e.AddComponent(inv);
+        e.AddComponent(caps);
         e.AddComponent(new Drafted { Active = false });
         e.AddComponent(WorkPriorities.Default());
         return e;
+    }
+
+    private static void EquipStarterClothing(ref Inventory inv, in CarryCaps caps, string defId)
+    {
+        var idx = InventoryOps.AddClothing(ref inv, in caps, defId, ClothingMaterial.Cotton, ClothingQuality.Normal, 100f);
+        if (idx >= 0) InventoryOps.Equip(ref inv, idx);
     }
 
     public Entity SpawnNeedSpot(NeedKind kind, int tileX, int tileY, float satisfyPerSec = 25f)

@@ -180,7 +180,8 @@ public sealed class SimRuntime : IDisposable
                             s, stack.DefId, def.DisplayName, def.Description,
                             stack.Count, def.Weight, def.Bulk, def.SellValue,
                             stack.Equipped, stack.Locked, def.IsWeapon, def.IsClothing,
-                            stack.WrappedDefId ?? string.Empty);
+                            stack.WrappedDefId ?? string.Empty,
+                            stack.Material, stack.Quality, stack.Durability);
                     }
                 }
             }

@@ -23,14 +23,25 @@ public struct InventoryStack
     // SpawnMinifiedThing on drop/drain can recreate the right structure.
     // Empty string for non-minified stacks.
     public string WrappedDefId;
+    // Per-instance clothing fields. Material + Quality default to None /
+    // Normal so non-clothing stacks don't carry meaningful values. Durability
+    // is a percentage 0-100; -1 sentinel means "not tracked" so old serialized
+    // saves and non-clothing stacks read sensibly.
+    public ClothingMaterial Material;
+    public ClothingQuality Quality;
+    public float Durability;
 
-    public InventoryStack(string defId, int count, bool equipped = false, bool locked = false, string wrappedDefId = "")
+    public InventoryStack(string defId, int count, bool equipped = false, bool locked = false, string wrappedDefId = "",
+        ClothingMaterial material = ClothingMaterial.None, ClothingQuality quality = ClothingQuality.Normal, float durability = -1f)
     {
         DefId = defId;
         Count = count;
         Equipped = equipped;
         Locked = locked;
         WrappedDefId = wrappedDefId ?? string.Empty;
+        Material = material;
+        Quality = quality;
+        Durability = durability;
     }
 }
 

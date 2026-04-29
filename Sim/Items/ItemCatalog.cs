@@ -53,6 +53,7 @@ public static class ItemCatalog
             Stackable = false, StackCapacity = 1,
             IsClothing = true, ClothingLayer = ClothingLayer.OnBack,
             EquippedBulkBonus = 30f,
+            BaseDurability = 120f, InsulationCold = 0f, InsulationHeat = 0f,
         });
         Register(new ItemDef
         {
@@ -61,6 +62,16 @@ public static class ItemCatalog
             Weight = 0.4f, Bulk = 0.3f, SellValue = 8,
             Stackable = false, StackCapacity = 1,
             IsClothing = true, ClothingLayer = ClothingLayer.TorsoMid,
+            BaseDurability = 100f, InsulationCold = 8f, InsulationHeat = 2f,
+        });
+        Register(new ItemDef
+        {
+            Id = "apparel.pants", Kind = ItemKind.Apparel,
+            DisplayName = "Pants", Description = "Basic leg layer.",
+            Weight = 0.5f, Bulk = 0.35f, SellValue = 10,
+            Stackable = false, StackCapacity = 1,
+            IsClothing = true, ClothingLayer = ClothingLayer.Legs,
+            BaseDurability = 100f, InsulationCold = 10f, InsulationHeat = 2f,
         });
         Register(new ItemDef
         {

@@ -22,6 +22,7 @@ public partial class PowerVisualsRenderer : Node3D
     private const float CableThicknessMeters = 0.08f;
     private const float PylonTopOffsetMeters = 4.0f; // where cable hangs off pylon
     private const float ConsumerTopOffsetMeters = 1.6f;
+    private const float LayerStepMeters = 0.75f; // matches StructuresRenderer / build stack quantum
 
     private SnapshotPublisher _publisher = null!;
     private Heightfield _heightfield = null!;
@@ -95,8 +96,10 @@ public partial class PowerVisualsRenderer : Node3D
             var toZ = (e.ToMetersY / metersPerTile) * unitsPerTile;
             var fromGround = _heightfield.SurfaceMetresAt(e.FromMetersX / metersPerTile, e.FromMetersY / metersPerTile) * _unitsPerMeter;
             var toGround = _heightfield.SurfaceMetresAt(e.ToMetersX / metersPerTile, e.ToMetersY / metersPerTile) * _unitsPerMeter;
-            var fromY = fromGround + fromTopOffset * _unitsPerMeter;
-            var toY = toGround + toTopOffset * _unitsPerMeter;
+            var fromStack = e.FromBaseLayer * LayerStepMeters * _unitsPerMeter;
+            var toStack = e.ToBaseLayer * LayerStepMeters * _unitsPerMeter;
+            var fromY = fromGround + fromStack + fromTopOffset * _unitsPerMeter;
+            var toY = toGround + toStack + toTopOffset * _unitsPerMeter;
 
             var dx = toX - fromX;
             var dz = toZ - fromZ;
@@ -197,7 +200,8 @@ public partial class PowerVisualsRenderer : Node3D
             var x = (n.MetersX / metersPerTile) * unitsPerTile;
             var z = (n.MetersY / metersPerTile) * unitsPerTile;
             var ground = _heightfield.SurfaceMetresAt(n.MetersX / metersPerTile, n.MetersY / metersPerTile) * _unitsPerMeter;
-            light.Position = new Vector3(x, ground + ConsumerTopOffsetMeters * _unitsPerMeter, z);
+            var stack = n.BaseLayer * LayerStepMeters * _unitsPerMeter;
+            light.Position = new Vector3(x, ground + stack + ConsumerTopOffsetMeters * _unitsPerMeter, z);
             light.Visible = n.IsPowered;
         }
         if (_sinkLights.Count == seen.Count) return;

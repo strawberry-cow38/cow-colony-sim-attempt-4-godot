@@ -113,6 +113,7 @@ public partial class Bootstrap : Node3D
         AddWorkPriorityPanel(_runtime);
         AddPowerVisuals(_runtime);
         AddGeneratorPanel(selection, _runtime);
+        AddPylonInfoPanel(selection, _runtime);
 
         SimLog.Logger.Information(
             "Bootstrap ready. SimThread at {Hz} Hz. World has {Count} entities. " +
@@ -471,6 +472,13 @@ public partial class Bootstrap : Node3D
     {
         var panel = new GeneratorPanel { Name = "GeneratorPanel" };
         panel.Configure(selection, runtime.Publisher, runtime.Commands);
+        AddChild(panel);
+    }
+
+    private void AddPylonInfoPanel(SelectionService selection, SimRuntime runtime)
+    {
+        var panel = new PylonInfoPanel { Name = "PylonInfoPanel" };
+        panel.Configure(selection, runtime.Publisher);
         AddChild(panel);
     }
 

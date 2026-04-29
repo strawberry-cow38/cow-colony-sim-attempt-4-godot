@@ -433,9 +433,10 @@ public sealed class SimRuntime : IDisposable
             ref var n = ref entity.GetComponent<PowerNode>();
             ref var p = ref entity.GetComponent<TilePosition>();
             var (cx, cy) = NodeCenterMeters(entity, p);
+            var baseLayer = entity.HasComponent<Structure>() ? entity.GetComponent<Structure>().BaseLayer : 0;
             views[i++] = new PowerNodeView(
                 entity.Id, n.Kind, n.GridId,
-                cx, cy, p.TileX, p.TileY,
+                cx, cy, p.TileX, p.TileY, baseLayer,
                 n.SupplyW, n.DemandW, n.IsActive, n.IsPowered, n.ServedByPylonId);
         }
         return views;
@@ -457,9 +458,12 @@ public sealed class SimRuntime : IDisposable
             ref var tp = ref to.GetComponent<TilePosition>();
             var (fx, fy) = NodeCenterMeters(from, fp);
             var (tx, ty) = NodeCenterMeters(to, tp);
+            var fbl = from.HasComponent<Structure>() ? from.GetComponent<Structure>().BaseLayer : 0;
+            var tbl = to.HasComponent<Structure>() ? to.GetComponent<Structure>().BaseLayer : 0;
             views[i] = new PowerEdgeView(
                 e.FromEntityId, e.ToEntityId,
                 fx, fy, tx, ty,
+                fbl, tbl,
                 e.IsHop, e.GridId);
         }
         return views;

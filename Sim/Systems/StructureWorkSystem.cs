@@ -111,6 +111,10 @@ public sealed class StructureWorkSystem : ITickSystem
             var def = BlueprintCatalog.Get(defId);
             UnblockFootprint(def, rotation, tx, ty);
 
+            // Power-bearing structure leaves stale grid edges + cached grid
+            // membership behind if topology rebuild isn't kicked.
+            if (ent.HasComponent<PowerNode>()) _world.BumpPowerVersion();
+
             ent.DeleteEntity();
             if (c.Kind == DesignationKind.Uninstall)
             {

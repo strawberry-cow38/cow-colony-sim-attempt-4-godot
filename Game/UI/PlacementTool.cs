@@ -430,6 +430,17 @@ public partial class PlacementTool : Node
             var omy = g.OriginTileY + oh - 1;
             if (minX <= omx && maxX >= g.OriginTileX && minY <= omy && maxY >= g.OriginTileY) return true;
         }
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            var s = snap.Structures[i];
+            if (!BlueprintCatalog.TryGet(s.DefId, out var sd) || sd is null) continue;
+            var existingTop = s.BaseLayer + sd.HeightQuanta;
+            if (baseLayer >= existingTop || topLayer <= s.BaseLayer) continue;
+            var (sw, sh) = (s.Rotation & 1) == 0 ? (sd.FootprintW, sd.FootprintH) : (sd.FootprintH, sd.FootprintW);
+            var smx = s.TileX + sw - 1;
+            var smy = s.TileY + sh - 1;
+            if (minX <= smx && maxX >= s.TileX && minY <= smy && maxY >= s.TileY) return true;
+        }
         return false;
     }
 

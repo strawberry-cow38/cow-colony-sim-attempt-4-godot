@@ -83,6 +83,15 @@ public sealed class HaulSystem : ITickSystem
 
         var stockpileTiles = CollectStockpileTiles();
         var (itemsByTile, itemsByEntity) = CollectItems();
+        // Per-tick cache: kind → drop-tile or null when no stockpile fits.
+        // TryFindDropTile was being called once per colonist per tick on
+        // unstockpileable items, scanning every Zone every call — and on
+        // miss it logged a line. With N colonists + a kind with no
+        // stockpile, that's N redundant zone scans + N spam log lines per
+        // tick. Build the lookup once, reuse it for assign + chain, and
+        // log the miss exactly once per kind per tick.
+        var dropTileCache = new Dictionary<ItemKind, (int X, int Y)?>();
+        var loggedMisses = new HashSet<ItemKind>();
 
         var claimedItems = new HashSet<int>();
         var occupiedDropTiles = new HashSet<(int, int)>();
@@ -107,11 +116,11 @@ public sealed class HaulSystem : ITickSystem
 
             if (work.Active && work.Kind == WorkKind.HaulItem)
             {
-                ProgressHaul(entity, ref work, ref pf, ref pos, itemsByTile, itemsByEntity, stockpileTiles, claimedItems, occupiedDropTiles);
+                ProgressHaul(entity, ref work, ref pf, ref pos, itemsByTile, itemsByEntity, stockpileTiles, claimedItems, occupiedDropTiles, dropTileCache, loggedMisses);
             }
             else if (!work.Active)
             {
-                TryAssignHaul(entity, ref work, ref pf, ref pos, itemsByTile, stockpileTiles, claimedItems, occupiedDropTiles);
+                TryAssignHaul(entity, ref work, ref pf, ref pos, itemsByTile, stockpileTiles, claimedItems, occupiedDropTiles, dropTileCache, loggedMisses);
             }
         }
 
@@ -149,7 +158,9 @@ public sealed class HaulSystem : ITickSystem
         Dictionary<int, ItemSnapshot> itemsByEntity,
         Dictionary<(int, int), ulong> stockpileTiles,
         HashSet<int> claimedItems,
-        HashSet<(int, int)> occupiedDropTiles)
+        HashSet<(int, int)> occupiedDropTiles,
+        Dictionary<ItemKind, (int X, int Y)?> dropTileCache,
+        HashSet<ItemKind> loggedMisses)
     {
         ref var inv = ref entity.GetComponent<Inventory>();
         ref var caps = ref entity.GetComponent<CarryCaps>();
@@ -190,7 +201,7 @@ public sealed class HaulSystem : ITickSystem
         if (!itemsByEntity.TryGetValue(work.TargetEntityId, out var item) || item.Forbidden)
         {
             // Source gone or forbidden — chain or finish.
-            if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, itemsByTile, stockpileTiles, claimedItems, in inv, in caps))
+            if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, itemsByTile, stockpileTiles, claimedItems, dropTileCache, loggedMisses, in inv, in caps))
                 SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
             return;
         }
@@ -198,7 +209,7 @@ public sealed class HaulSystem : ITickSystem
         {
             if (pf.LastPathFailed)
             {
-                if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, itemsByTile, stockpileTiles, claimedItems, in inv, in caps))
+                if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, itemsByTile, stockpileTiles, claimedItems, dropTileCache, loggedMisses, in inv, in caps))
                     SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
                 return;
             }
@@ -265,7 +276,7 @@ public sealed class HaulSystem : ITickSystem
         _pickupsToDelete.Add(work.TargetEntityId);
         claimedItems.Add(work.TargetEntityId);
 
-        if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, itemsByTile, stockpileTiles, claimedItems, in inv, in caps))
+        if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, itemsByTile, stockpileTiles, claimedItems, dropTileCache, loggedMisses, in inv, in caps))
             SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
     }
 
@@ -277,6 +288,8 @@ public sealed class HaulSystem : ITickSystem
         Dictionary<(int, int), List<ItemSnapshot>> itemsByTile,
         Dictionary<(int, int), ulong> stockpileTiles,
         HashSet<int> claimedItems,
+        Dictionary<ItemKind, (int X, int Y)?> dropTileCache,
+        HashSet<ItemKind> loggedMisses,
         in Inventory inv, in CarryCaps caps)
     {
         var bestId = 0;
@@ -292,6 +305,7 @@ public sealed class HaulSystem : ITickSystem
                 if (it.Forbidden) continue;
                 if (claimedItems.Contains(it.EntityId)) continue;
                 if (StockpileAccepts(stockpileTiles, it.TileX, it.TileY, it.Kind)) continue;
+                if (!HasDropTileForKind(it.Kind, it.Count, itemsByTile, dropTileCache, loggedMisses)) continue;
                 var defId = ResolveDefId(it);
                 if (InventoryOps.RoomFor(defId, in caps, in inv) <= 0) continue;
                 var dx = it.TileX - pos.TileX;
@@ -429,7 +443,9 @@ public sealed class HaulSystem : ITickSystem
     private void TryAssignHaul(
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
         Dictionary<(int, int), List<ItemSnapshot>> itemsByTile, Dictionary<(int, int), ulong> stockpileTiles,
-        HashSet<int> claimedItems, HashSet<(int, int)> occupiedDropTiles)
+        HashSet<int> claimedItems, HashSet<(int, int)> occupiedDropTiles,
+        Dictionary<ItemKind, (int X, int Y)?> dropTileCache,
+        HashSet<ItemKind> loggedMisses)
     {
         var bestItem = -1;
         var bestKind = ItemKind.None;
@@ -446,6 +462,10 @@ public sealed class HaulSystem : ITickSystem
                 if (item.Forbidden) continue;
                 if (claimedItems.Contains(item.EntityId)) continue;
                 if (StockpileAccepts(stockpileTiles, item.TileX, item.TileY, item.Kind)) continue;
+                // Skip items whose kind has no stockpile fit — keeps a 100-
+                // log pile from spamming N×per-tick zone scans + log lines.
+                // The cache lookup itself is the de-spam.
+                if (!HasDropTileForKind(item.Kind, item.Count, itemsByTile, dropTileCache, loggedMisses)) continue;
                 var dx = item.TileX - pos.TileX;
                 var dy = item.TileY - pos.TileY;
                 var d = dx * dx + dy * dy;
@@ -462,13 +482,13 @@ public sealed class HaulSystem : ITickSystem
         }
         if (bestItem == -1) return;
 
+        // dropTileCache hit guarantees a tile exists for this kind, but
+        // run the per-call lookup anyway to honour occupiedDropTiles
+        // (tiles claimed by other colonists this tick aren't reflected in
+        // the cache). On the rare miss, just skip — cache covered the
+        // common case.
         if (!TryFindDropTile(bestKind, bestCount, itemsByTile, occupiedDropTiles, out var dropX, out var dropY))
-        {
-            SimLog.Logger.Information(
-                "HAUL no-drop-tile colonist={Cid} kind={K} bestItem={B}",
-                entity.Id, bestKind, bestItem);
             return;
-        }
         SimLog.Logger.Information(
             "HAUL assign colonist={Cid} pos=({X},{Y}) item={I} src=({SX},{SY}) drop=({DX},{DY})",
             entity.Id, pos.TileX, pos.TileY, bestItem, bestItemTileX, bestItemTileY, dropX, dropY);
@@ -490,6 +510,32 @@ public sealed class HaulSystem : ITickSystem
         occupiedDropTiles.Add((dropX, dropY));
 
         EnsurePath(entity, ref pf, pos.TileX, pos.TileY, bestItemTileX, bestItemTileY);
+    }
+
+    // Per-tick "is there ANY stockpile that accepts this kind" check,
+    // memoized by kind. Independent of `occupiedDropTiles`: this is just
+    // the existence question. Logs the miss exactly once per kind per
+    // tick the first time anything asks.
+    private bool HasDropTileForKind(
+        ItemKind kind, int count,
+        Dictionary<(int, int), List<ItemSnapshot>> itemsByTile,
+        Dictionary<ItemKind, (int X, int Y)?> dropTileCache,
+        HashSet<ItemKind> loggedMisses)
+    {
+        if (dropTileCache.TryGetValue(kind, out var cached)) return cached.HasValue;
+        var probe = new HashSet<(int, int)>();
+        if (TryFindDropTile(kind, count, itemsByTile, probe, out var dx, out var dy))
+        {
+            dropTileCache[kind] = (dx, dy);
+            return true;
+        }
+        dropTileCache[kind] = null;
+        if (loggedMisses.Add(kind))
+        {
+            SimLog.Logger.Information(
+                "HAUL no-stockpile-for-kind kind={K} (logged once per tick)", kind);
+        }
+        return false;
     }
 
     private bool TryFindDropTile(

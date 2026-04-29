@@ -154,8 +154,15 @@ public partial class ContextMenu : CanvasLayer
         ClearItems();
         if (colonistId != 0 && !view.Forbidden)
         {
-            AddOption($"prioritize haul (colonist #{colonistId})",
-                () => _commands.Submit(new PrioritizeHaulCommand(colonistId, itemId)));
+            if (HasStockpileForKind(snap, view.Kind))
+            {
+                AddOption($"prioritize haul (colonist #{colonistId})",
+                    () => _commands.Submit(new PrioritizeHaulCommand(colonistId, itemId)));
+            }
+            else
+            {
+                AddDisabled("no available stockpile to haul to");
+            }
             AddOption($"force pickup (colonist #{colonistId})",
                 () => _commands.Submit(new ForcePickupCommand(colonistId, itemId)));
         }
@@ -192,6 +199,29 @@ public partial class ContextMenu : CanvasLayer
         {
             child.QueueFree();
         }
+    }
+
+    private static bool HasStockpileForKind(SimSnapshot snap, ItemKind kind)
+    {
+        for (var i = 0; i < snap.Zones.Count; i++)
+        {
+            var z = snap.Zones[i];
+            if (z.Type != ZoneType.Stockpile) continue;
+            if (StockpileFilter.MaskAccepts(z.AllowedKindsMask, kind)) return true;
+        }
+        return false;
+    }
+
+    private void AddDisabled(string label)
+    {
+        var btn = new Button
+        {
+            Text = label,
+            CustomMinimumSize = new Vector2(220f, 24f),
+            Disabled = true,
+            FocusMode = Control.FocusModeEnum.None,
+        };
+        _items.AddChild(btn);
     }
 
     private void AddOption(string label, System.Action action)

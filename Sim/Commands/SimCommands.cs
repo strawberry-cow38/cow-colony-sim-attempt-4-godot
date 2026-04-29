@@ -95,6 +95,11 @@ public readonly record struct UnequipInventoryCommand(int ColonistId, int StackI
 // Update a zone's editable fields. Sim re-reads the zone by id and
 // rewrites Name + the relevant per-type settings struct. Fields that
 // don't apply for the zone's type are ignored.
+// Set a colonist's priority for a single WorkType row in the priority
+// panel. value 0 = "won't do this work", 1-8 = priority (1 highest).
+// Out-of-range values clamp at MaxPriority.
+public readonly record struct SetWorkPriorityCommand(int ColonistId, WorkType WorkType, byte Priority) : ISimCommand;
+
 public readonly record struct SetZoneSettingsCommand(
     int ZoneId,
     string Name,

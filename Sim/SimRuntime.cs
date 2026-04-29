@@ -186,12 +186,21 @@ public sealed class SimRuntime : IDisposable
             }
 
             var drafted = entity.HasComponent<Drafted>() && entity.GetComponent<Drafted>().Active;
+            var prios = new byte[WorkTypes.Count];
+            if (entity.HasComponent<WorkPriorities>())
+            {
+                ref var wp = ref entity.GetComponent<WorkPriorities>();
+                for (var ti = 0; ti < WorkTypes.Count; ti++)
+                {
+                    prios[ti] = wp.Get((WorkType)ti);
+                }
+            }
             views[i++] = new ColonistView(
                 entity.Id, p.MetersX, p.MetersY,
                 n.Hunger, n.Thirst, n.Energy,
                 j.Active, j.NeedKind,
                 w.Active, w.Kind, w.Carrying, w.CarryKind, w.CarryCount,
-                carryWeight, maxWeight, carryBulk, maxBulk, invView, drafted);
+                carryWeight, maxWeight, carryBulk, maxBulk, invView, drafted, prios);
         }
         return views;
     }

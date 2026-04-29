@@ -26,4 +26,7 @@ public readonly record struct ColonistView(
     float CarryBulk,
     float MaxBulk,
     IReadOnlyList<InventoryStackView> Inventory,
-    bool Drafted);
+    bool Drafted,
+    // Length = WorkTypes.Count, indexed by (int)WorkType. Same byte
+    // contract as the WorkPriorities component: 0 = won't do, 1-8 = priority.
+    byte[] WorkPriorities);

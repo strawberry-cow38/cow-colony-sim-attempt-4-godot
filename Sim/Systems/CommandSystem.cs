@@ -95,8 +95,19 @@ public sealed class CommandSystem : ITickSystem
                 case SetDraftedCommand sdr:
                     Apply(sdr);
                     break;
+                case SetWorkPriorityCommand swp:
+                    Apply(swp);
+                    break;
             }
         }
+    }
+
+    private void Apply(SetWorkPriorityCommand cmd)
+    {
+        var entity = _world.Store.GetEntityById(cmd.ColonistId);
+        if (entity == default || !entity.HasComponent<WorkPriorities>()) return;
+        ref var prios = ref entity.GetComponent<WorkPriorities>();
+        prios.Set(cmd.WorkType, cmd.Priority);
     }
 
     private void Apply(SetDraftedCommand cmd)

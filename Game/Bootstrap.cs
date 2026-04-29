@@ -105,6 +105,7 @@ public partial class Bootstrap : Node3D
         AddBuildBar(selection);
         AddRain(_runtime);
         AddWeatherGimbal(_runtime);
+        AddWorkPriorityPanel(_runtime);
 
         SimLog.Logger.Information(
             "Bootstrap ready. SimThread at {Hz} Hz. World has {Count} entities. " +
@@ -450,6 +451,13 @@ public partial class Bootstrap : Node3D
         var gimbal = new WeatherGimbal { Name = "WeatherGimbal" };
         gimbal.Configure(_cameraRig!, runtime.Publisher);
         AddChild(gimbal);
+    }
+
+    private void AddWorkPriorityPanel(SimRuntime runtime)
+    {
+        var panel = new WorkPriorityPanel { Name = "WorkPriorityPanel" };
+        panel.Configure(runtime.Publisher, runtime.Commands);
+        AddChild(panel);
     }
 
     private void AddReservationOverlay(SelectionService selection, SimRuntime runtime, Heightfield field)

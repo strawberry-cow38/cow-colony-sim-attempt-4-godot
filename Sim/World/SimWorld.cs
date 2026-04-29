@@ -60,6 +60,7 @@ public sealed class SimWorld
         e.AddComponent(Inventory.New());
         e.AddComponent(CarryCaps.Default());
         e.AddComponent(new Drafted { Active = false });
+        e.AddComponent(WorkPriorities.Default());
         return e;
     }
 

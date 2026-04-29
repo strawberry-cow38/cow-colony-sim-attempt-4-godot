@@ -79,6 +79,8 @@ public sealed class ChopJobSystem : ITickSystem
             }
             else if (!work.Active)
             {
+                if (entity.HasComponent<WorkPriorities>() &&
+                    entity.GetComponent<WorkPriorities>().Get(WorkType.WoodCutting) == 0) continue;
                 TryAssignChop(entity, ref work, ref pf, ref pos, trees, chopDesignations, claimedTrees);
             }
         }

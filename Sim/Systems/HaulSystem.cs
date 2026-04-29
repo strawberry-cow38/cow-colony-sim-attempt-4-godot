@@ -142,6 +142,8 @@ public sealed class HaulSystem : ITickSystem
             }
             else if (!work.Active)
             {
+                if (entity.HasComponent<WorkPriorities>() &&
+                    entity.GetComponent<WorkPriorities>().Get(WorkType.Hauling) == 0) continue;
                 TryAssignHaul(entity, ref work, ref pf, ref pos, itemsByTile, stockpileTiles, acceptedKindsUnion, claimedItems, occupiedDropTiles, dropTileCache, loggedMisses);
             }
         }

@@ -79,6 +79,8 @@ public sealed class SowJobSystem : ITickSystem
             }
             else if (!work.Active)
             {
+                if (entity.HasComponent<WorkPriorities>() &&
+                    entity.GetComponent<WorkPriorities>().Get(WorkType.Plants) == 0) continue;
                 TryAssign(entity, ref work, ref pf, ref pos, sowDes, farms, claimed);
             }
         }

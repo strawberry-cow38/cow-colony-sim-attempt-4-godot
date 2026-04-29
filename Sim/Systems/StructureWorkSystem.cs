@@ -78,6 +78,8 @@ public sealed class StructureWorkSystem : ITickSystem
             }
             else if (!work.Active)
             {
+                if (entity.HasComponent<WorkPriorities>() &&
+                    entity.GetComponent<WorkPriorities>().Get(WorkType.StructureWork) == 0) continue;
                 TryAssign(entity, ref work, ref pf, ref pos, jobs, claimed);
             }
         }

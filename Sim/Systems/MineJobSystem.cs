@@ -79,6 +79,8 @@ public sealed class MineJobSystem : ITickSystem
             }
             else if (!work.Active)
             {
+                if (entity.HasComponent<WorkPriorities>() &&
+                    entity.GetComponent<WorkPriorities>().Get(WorkType.Mining) == 0) continue;
                 TryAssignMine(entity, ref work, ref pf, ref pos, boulders, mineDesignations, claimed);
             }
         }

@@ -160,6 +160,8 @@ public sealed class ConstructionJobSystem : ITickSystem
             else if (!work.Active)
             {
                 if (!entity.HasComponent<Inventory>() || !entity.HasComponent<CarryCaps>()) continue;
+                if (entity.HasComponent<WorkPriorities>() &&
+                    entity.GetComponent<WorkPriorities>().Get(WorkType.Construction) == 0) continue;
                 TryAssign(entity, ref work, ref pf, ref pos, blueprints, itemsList, itemsByEntity,
                     claimedItems, constructClaimed, perBpReserved, haulerWoodQuota, minifiedCovered);
             }

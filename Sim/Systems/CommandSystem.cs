@@ -651,11 +651,13 @@ public sealed class CommandSystem : ITickSystem
         var toDelete = new List<int>();
 
         var zoneEdits = new List<(int Id, TileRect Rect, bool[] Mask)>();
+        var stockpileTopologyChanged = false;
         foreach (var entity in _world.Store.Query<Zone>().Entities)
         {
             ref var z = ref entity.GetComponent<Zone>();
             if (!RectsOverlap(z.Rect, rect)) continue;
             var result = TileMask.SubtractRect(z.Rect, z.Mask, rect);
+            if (z.Type == ZoneType.Stockpile) stockpileTopologyChanged = true;
             if (result is null) toDelete.Add(entity.Id);
             else zoneEdits.Add((entity.Id, result.Value.Item1, result.Value.Item2));
         }
@@ -683,6 +685,7 @@ public sealed class CommandSystem : ITickSystem
             var e = _world.Store.GetEntityById(id);
             if (e != default) e.DeleteEntity();
         }
+        if (stockpileTopologyChanged) _world.BumpStockpileVersion();
     }
 
     private static bool RectsOverlap(TileRect a, TileRect b)
@@ -729,6 +732,7 @@ public sealed class CommandSystem : ITickSystem
                 var e = _world.Store.GetEntityById(overlapping[i]);
                 if (e != default) e.DeleteEntity();
             }
+            if (cmd.Type == ZoneType.Stockpile) _world.BumpStockpileVersion();
             return;
         }
 
@@ -810,6 +814,7 @@ public sealed class CommandSystem : ITickSystem
             ref var s = ref entity.GetComponent<StockpileSettings>();
             s.Priority = cmd.Priority;
             s.AllowedKindsMask = cmd.AllowedKindsMask;
+            _world.BumpStockpileVersion();
         }
         if (entity.HasComponent<FarmSettings>())
         {

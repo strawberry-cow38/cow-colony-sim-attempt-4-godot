@@ -17,6 +17,16 @@ public sealed class SimWorld
 
     public int EntityCount => Store.Count;
 
+    // Dirty-versioned counter for stockpile topology — bumped when a
+    // stockpile zone is created, deleted, resized, or has its settings
+    // changed. HaulSystem reads it to decide whether to rebuild its
+    // per-tick stockpileTiles + acceptedKindsUnion caches. Bump from
+    // anywhere stockpile zones materially change; HaulSystem detects the
+    // version delta and refreshes once. Avoids re-scanning every Zone +
+    // every tile, every tick, when nothing about stockpiles moved.
+    public int StockpileVersion { get; private set; }
+    public void BumpStockpileVersion() => StockpileVersion++;
+
     private readonly List<TileCoord> _pendingTreeFalls = new();
 
     // ChopJobSystem appends here when a tree is felled; SimRuntime drains the
@@ -67,7 +77,10 @@ public sealed class SimWorld
         e.AddComponent(new Zone { ZoneId = zoneId, Type = type, Rect = rect, Mask = mask, Name = name });
         switch (type)
         {
-            case ZoneType.Stockpile: e.AddComponent(new StockpileSettings()); break;
+            case ZoneType.Stockpile:
+                e.AddComponent(new StockpileSettings());
+                BumpStockpileVersion();
+                break;
             case ZoneType.Farm:      e.AddComponent(new FarmSettings()); break;
         }
         return e;

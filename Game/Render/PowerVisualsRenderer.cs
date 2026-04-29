@@ -162,19 +162,18 @@ public partial class PowerVisualsRenderer : Node3D
         var len = diff.Length();
         if (len <= 0.0001f) return new Transform3D(Basis.Identity, a);
         var dir = diff / len;
-        // Cylinder default axis is +Y. Rotate +Y to dir.
-        var up = Vector3.Up;
-        var dot = Mathf.Clamp(up.Dot(dir), -1f, 1f);
-        Basis basis;
-        if (dot > 0.9999f) basis = Basis.Identity;
-        else if (dot < -0.9999f) basis = new Basis(new Vector3(1, 0, 0), Mathf.Pi);
-        else
-        {
-            var axis = up.Cross(dir).Normalized();
-            var angle = Mathf.Acos(dot);
-            basis = new Basis(axis, angle);
-        }
-        basis = basis.Scaled(new Vector3(1f, len, 1f));
+        // Cylinder mesh axis is +Y. Build the basis columns directly so the
+        // length scales along the cable direction, not along world Y.
+        // Basis.Scaled() scales matrix rows (world axes), which silently turns
+        // every horizontal cable segment into a fat vertical spike.
+        var ortho = MathF.Abs(dir.Y) < 0.99f ? Vector3.Up : Vector3.Right;
+        var xAxis = dir.Cross(ortho).Normalized();
+        var zAxis = xAxis.Cross(dir).Normalized();
+        var yAxis = dir * len;
+        var basis = Basis.Identity;
+        basis.X = xAxis;
+        basis.Y = yAxis;
+        basis.Z = zAxis;
         var center = (a + b) * 0.5f;
         return new Transform3D(basis, center);
     }

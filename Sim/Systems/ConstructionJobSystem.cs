@@ -53,8 +53,25 @@ public sealed class ConstructionJobSystem : ITickSystem
         var (itemsList, itemsByEntity) = CollectItems();
 
         var claimedItems = new HashSet<int>();
-        var claimedBps = new HashSet<int>();
+        // Construct is single-builder, so still single-claim per bp.
+        var constructClaimed = new HashSet<int>();
+        // Per-blueprint running tally of wood already accounted for —
+        // existing haulers' carried + planned pickup, plus new haulers
+        // assigned this tick. Lets multiple haulers cooperate on the
+        // same bp without over-delivering: each one's quota is bounded
+        // by `required - deposited - sum_of_others`.
+        var perBpReserved = new Dictionary<int, int>();
+        for (var i = 0; i < blueprints.Count; i++) perBpReserved[blueprints[i].EntityId] = 0;
+        // Per-hauler max wood they're allowed to carry to the bp this
+        // tick. ProgressHaul honors this when capping pickup.
+        var haulerWoodQuota = new Dictionary<int, int>();
+        // Blueprints already covered by an in-flight matching minified —
+        // a single minified completes atomically, so further haulers
+        // should never target the same bp.
+        var minifiedCovered = new HashSet<int>();
+
         var query = _world.Store.Query<Colonist, Job, WorkJob, TilePosition, PathFollower>();
+        var existingHaulers = new List<Entity>();
         foreach (var entity in query.Entities)
         {
             ref var w = ref entity.GetComponent<WorkJob>();
@@ -62,13 +79,60 @@ public sealed class ConstructionJobSystem : ITickSystem
             if (w.Kind == WorkKind.HaulToBlueprint)
             {
                 if (w.TargetEntityId != 0) claimedItems.Add(w.TargetEntityId);
-                var bp = FindBlueprintAt(blueprints, w.DropTileX, w.DropTileY);
-                if (bp.HasValue) claimedBps.Add(bp.Value.EntityId);
+                existingHaulers.Add(entity);
             }
             else if (w.Kind == WorkKind.Construct)
             {
-                claimedBps.Add(w.TargetEntityId);
+                constructClaimed.Add(w.TargetEntityId);
             }
+        }
+        // Deterministic ordering: lower entity id allocates from the
+        // budget first. Two haulers same-tick on a 50-wood blueprint
+        // split it predictably instead of double-counting their pickups.
+        existingHaulers.Sort((a, b) => a.Id.CompareTo(b.Id));
+        for (var i = 0; i < existingHaulers.Count; i++)
+        {
+            var entity = existingHaulers[i];
+            ref var w = ref entity.GetComponent<WorkJob>();
+            var bpFound = FindBlueprintAt(blueprints, w.DropTileX, w.DropTileY);
+            if (!bpFound.HasValue) continue;
+            var bpView = bpFound.Value;
+            if (!entity.HasComponent<Inventory>() || !entity.HasComponent<CarryCaps>()) continue;
+            ref var inv = ref entity.GetComponent<Inventory>();
+            ref var caps = ref entity.GetComponent<CarryCaps>();
+
+            // Minified delivery covers the full blueprint atomically.
+            if (w.CarryKind == ItemKind.Minified
+                || (w.TargetEntityId != 0
+                    && itemsByEntity.TryGetValue(w.TargetEntityId, out var miniProbe)
+                    && miniProbe.Kind == ItemKind.Minified
+                    && miniProbe.MinifiedDefId == bpView.DefId))
+            {
+                minifiedCovered.Add(bpView.EntityId);
+                haulerWoodQuota[entity.Id] = 0;
+                continue;
+            }
+
+            var def = BlueprintCatalog.Get(bpView.DefId);
+            var required = TotalMaterialOf(def, ItemKind.Wood);
+            var taken = perBpReserved[bpView.EntityId];
+            var leftover = Math.Max(0, required - bpView.MaterialDeposited - taken);
+            var carried = CountInventoryOf(in inv, ItemKind.Wood);
+            // Hauler is committed to deliver what they've already
+            // picked up — even if leftover < carried, they still walk
+            // it over and ApplyDeposit handles the spillover. Their
+            // quota is what they're allowed to PICK UP MORE OF.
+            var carriedShare = Math.Min(carried, leftover);
+            var room = InventoryOps.RoomFor(ItemCatalog.DefaultIdFor(ItemKind.Wood), in caps, in inv);
+            var pickup = 0;
+            if (w.TargetEntityId != 0 && itemsByEntity.TryGetValue(w.TargetEntityId, out var src) && src.Kind == ItemKind.Wood)
+            {
+                pickup = Math.Max(0, Math.Min(Math.Min(src.Count, room), leftover - carriedShare));
+            }
+            // Quota is the absolute cap on the hauler's wood headcount —
+            // ProgressHaul allows pickup up to (quota - currentCarried).
+            haulerWoodQuota[entity.Id] = carried + pickup;
+            perBpReserved[bpView.EntityId] = taken + carriedShare + pickup;
         }
 
         foreach (var entity in query.Entities)
@@ -87,7 +151,7 @@ public sealed class ConstructionJobSystem : ITickSystem
                     ClearWork(ref work, ref pf);
                     continue;
                 }
-                ProgressHaul(entity, ref work, ref pf, ref pos, itemsList, itemsByEntity, blueprints, claimedItems);
+                ProgressHaul(entity, ref work, ref pf, ref pos, itemsList, itemsByEntity, blueprints, claimedItems, haulerWoodQuota);
             }
             else if (work.Active && work.Kind == WorkKind.Construct)
             {
@@ -96,7 +160,8 @@ public sealed class ConstructionJobSystem : ITickSystem
             else if (!work.Active)
             {
                 if (!entity.HasComponent<Inventory>() || !entity.HasComponent<CarryCaps>()) continue;
-                TryAssign(entity, ref work, ref pf, ref pos, blueprints, itemsList, claimedItems, claimedBps);
+                TryAssign(entity, ref work, ref pf, ref pos, blueprints, itemsList, itemsByEntity,
+                    claimedItems, constructClaimed, perBpReserved, haulerWoodQuota, minifiedCovered);
             }
         }
 
@@ -192,7 +257,8 @@ public sealed class ConstructionJobSystem : ITickSystem
     private void ProgressHaul(
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
         List<ItemSnapshot> items, Dictionary<int, ItemSnapshot> itemsByEntity,
-        List<BlueprintSnapshot> blueprints, HashSet<int> claimedItems)
+        List<BlueprintSnapshot> blueprints, HashSet<int> claimedItems,
+        Dictionary<int, int> haulerWoodQuota)
     {
         ref var inv = ref entity.GetComponent<Inventory>();
         ref var caps = ref entity.GetComponent<CarryCaps>();
@@ -219,7 +285,7 @@ public sealed class ConstructionJobSystem : ITickSystem
         // Pickup phase
         if (!itemsByEntity.TryGetValue(work.TargetEntityId, out var item) || item.Forbidden)
         {
-            if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, items, blueprints, claimedItems, in inv, in caps))
+            if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, items, blueprints, claimedItems, haulerWoodQuota, in inv, in caps))
                 SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
             return;
         }
@@ -227,7 +293,7 @@ public sealed class ConstructionJobSystem : ITickSystem
         {
             if (pf.LastPathFailed)
             {
-                if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, items, blueprints, claimedItems, in inv, in caps))
+                if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, items, blueprints, claimedItems, haulerWoodQuota, in inv, in caps))
                     SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
                 return;
             }
@@ -235,23 +301,30 @@ public sealed class ConstructionJobSystem : ITickSystem
             return;
         }
 
-        // At pickup tile — cap the request at the blueprint's remaining
-        // need minus what we're already carrying, so a 50-wood stack
-        // hauled toward a 5-wood wall doesn't strand 45 wood at the
-        // build site. Minified is atomic — never cap.
+        // At pickup tile — cap pickup at this hauler's per-tick quota.
+        // Quota was set in pre-pass / TryAssign so multiple haulers
+        // cooperate on a bp without over-delivering. Fallback to gap
+        // math if no quota entry exists. Minified is atomic — never cap.
         var defId = ResolveDefId(item);
         var requested = item.Count;
         if (item.Kind != ItemKind.Minified)
         {
-            var bp = FindBlueprintAt(blueprints, work.DropTileX, work.DropTileY);
-            if (bp.HasValue)
+            if (haulerWoodQuota.TryGetValue(entity.Id, out var quota))
             {
-                var def = BlueprintCatalog.Get(bp.Value.DefId);
-                var required = TotalMaterialOf(def, item.Kind);
-                var gap = required - bp.Value.MaterialDeposited;
                 var carried = CountInventoryOf(in inv, item.Kind);
-                var remaining = Math.Max(0, gap - carried);
-                requested = Math.Min(requested, remaining);
+                requested = Math.Min(requested, Math.Max(0, quota - carried));
+            }
+            else
+            {
+                var bp = FindBlueprintAt(blueprints, work.DropTileX, work.DropTileY);
+                if (bp.HasValue)
+                {
+                    var def = BlueprintCatalog.Get(bp.Value.DefId);
+                    var required = TotalMaterialOf(def, item.Kind);
+                    var gap = required - bp.Value.MaterialDeposited;
+                    var carried = CountInventoryOf(in inv, item.Kind);
+                    requested = Math.Min(requested, Math.Max(0, gap - carried));
+                }
             }
         }
         if (requested <= 0)
@@ -291,18 +364,18 @@ public sealed class ConstructionJobSystem : ITickSystem
             return;
         }
 
-        if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, items, blueprints, claimedItems, in inv, in caps))
+        if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, items, blueprints, claimedItems, haulerWoodQuota, in inv, in caps))
             SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
     }
 
     // Chain: another nearby item of the same CarryKind, but only while
     // the target blueprint still has a deposit gap that our current carry
-    // doesn't already cover. Stops a hauler from over-filling a 5-wood
-    // wall when they could service a different blueprint.
+    // doesn't already cover, AND only while this hauler's per-tick quota
+    // has headroom (so multiple haulers cooperating on a bp don't pile on).
     private bool TryChainNextPickup(
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
         List<ItemSnapshot> items, List<BlueprintSnapshot> blueprints,
-        HashSet<int> claimedItems,
+        HashSet<int> claimedItems, Dictionary<int, int> haulerWoodQuota,
         in Inventory inv, in CarryCaps caps)
     {
         if (work.CarryKind == ItemKind.None || work.CarryKind == ItemKind.Minified) return false;
@@ -314,6 +387,7 @@ public sealed class ConstructionJobSystem : ITickSystem
         if (gap <= 0) return false;
         var carried = CountInventoryOf(in inv, work.CarryKind);
         if (carried >= gap) return false;
+        if (haulerWoodQuota.TryGetValue(entity.Id, out var quota) && carried >= quota) return false;
 
         var room = InventoryOps.RoomFor(ItemCatalog.DefaultIdFor(work.CarryKind), in caps, in inv);
         if (room <= 0) return false;
@@ -472,32 +546,48 @@ public sealed class ConstructionJobSystem : ITickSystem
     private void TryAssign(
         Entity entity, ref WorkJob work, ref PathFollower pf, ref TilePosition pos,
         List<BlueprintSnapshot> blueprints, List<ItemSnapshot> items,
-        HashSet<int> claimedItems, HashSet<int> claimedBps)
+        Dictionary<int, ItemSnapshot> itemsByEntity,
+        HashSet<int> claimedItems, HashSet<int> constructClaimed,
+        Dictionary<int, int> perBpReserved, Dictionary<int, int> haulerWoodQuota,
+        HashSet<int> minifiedCovered)
     {
+        ref var inv = ref entity.GetComponent<Inventory>();
+        ref var caps = ref entity.GetComponent<CarryCaps>();
+        var carryRoom = InventoryOps.RoomFor(ItemCatalog.DefaultIdFor(ItemKind.Wood), in caps, in inv);
+
         var bestDist = float.PositiveInfinity;
         var bestBpId = 0;
         var bestBpX = 0;
         var bestBpY = 0;
+        var bestRequired = 0;
         var bestNeedsMaterial = false;
         var bestItemId = 0;
         var bestItemX = 0;
         var bestItemY = 0;
+        var bestItemKind = ItemKind.None;
+        var bestProjectedPickup = 0;
 
         for (var bi = 0; bi < blueprints.Count; bi++)
         {
             var bp = blueprints[bi];
-            if (claimedBps.Contains(bp.EntityId)) continue;
             var def = BlueprintCatalog.Get(bp.DefId);
             if (!IsBuildable(def)) continue;
             var required = TotalMaterialOf(def, ItemKind.Wood);
             if (bp.MaterialDeposited < required)
             {
+                if (minifiedCovered.Contains(bp.EntityId)) continue;
+                var taken = perBpReserved.TryGetValue(bp.EntityId, out var t) ? t : 0;
+                var leftover = required - bp.MaterialDeposited - taken;
+                if (leftover <= 0) continue;
+
                 var chosenItem = 0;
                 var chosenX = 0;
                 var chosenY = 0;
-                // Pass 1: matching minified package wins outright — drops one
-                // payload and the blueprint completes, no wood needed.
-                if (bp.MaterialDeposited == 0)
+                var chosenKind = ItemKind.None;
+                var chosenPickup = 0;
+                // Pass 1: matching minified — atomic, only when no other
+                // hauler has reserved any material to this bp yet.
+                if (bp.MaterialDeposited == 0 && taken == 0)
                 {
                     var bestMiniDist = float.PositiveInfinity;
                     for (var i = 0; i < items.Count; i++)
@@ -515,11 +605,14 @@ public sealed class ConstructionJobSystem : ITickSystem
                             chosenItem = it.EntityId;
                             chosenX = it.TileX;
                             chosenY = it.TileY;
+                            chosenKind = ItemKind.Minified;
+                            chosenPickup = it.Count;
                         }
                     }
                 }
                 if (chosenItem == 0)
                 {
+                    if (carryRoom <= 0) continue;
                     var bestItemDist = float.PositiveInfinity;
                     for (var i = 0; i < items.Count; i++)
                     {
@@ -535,6 +628,8 @@ public sealed class ConstructionJobSystem : ITickSystem
                             chosenItem = it.EntityId;
                             chosenX = it.TileX;
                             chosenY = it.TileY;
+                            chosenKind = ItemKind.Wood;
+                            chosenPickup = Math.Min(Math.Min(it.Count, leftover), carryRoom);
                         }
                     }
                 }
@@ -548,14 +643,18 @@ public sealed class ConstructionJobSystem : ITickSystem
                     bestBpId = bp.EntityId;
                     bestBpX = bp.TileX;
                     bestBpY = bp.TileY;
+                    bestRequired = required;
                     bestNeedsMaterial = true;
                     bestItemId = chosenItem;
                     bestItemX = chosenX;
                     bestItemY = chosenY;
+                    bestItemKind = chosenKind;
+                    bestProjectedPickup = chosenPickup;
                 }
             }
             else if (bp.BuildProgress < 1f)
             {
+                if (constructClaimed.Contains(bp.EntityId)) continue;
                 var bpDx = bp.TileX - pos.TileX;
                 var bpDy = bp.TileY - pos.TileY;
                 var bpDist = bpDx * bpDx + bpDy * bpDy;
@@ -588,7 +687,21 @@ public sealed class ConstructionJobSystem : ITickSystem
             work.CarryCount = 0;
             work.CarryMinifiedDefId = null;
             claimedItems.Add(bestItemId);
-            claimedBps.Add(bestBpId);
+            if (bestItemKind == ItemKind.Minified)
+            {
+                // Minified completes the bp atomically — reserve full
+                // requirement so other haulers skip this bp entirely.
+                minifiedCovered.Add(bestBpId);
+                var prev = perBpReserved.TryGetValue(bestBpId, out var p) ? p : 0;
+                perBpReserved[bestBpId] = prev + bestRequired;
+                haulerWoodQuota[entity.Id] = 0;
+            }
+            else
+            {
+                var prev = perBpReserved.TryGetValue(bestBpId, out var p) ? p : 0;
+                perBpReserved[bestBpId] = prev + bestProjectedPickup;
+                haulerWoodQuota[entity.Id] = bestProjectedPickup;
+            }
             EnsurePath(entity, ref pf, pos.TileX, pos.TileY, bestItemX, bestItemY);
         }
         else
@@ -605,7 +718,7 @@ public sealed class ConstructionJobSystem : ITickSystem
             work.Carrying = false;
             work.CarryKind = ItemKind.None;
             work.CarryCount = 0;
-            claimedBps.Add(bestBpId);
+            constructClaimed.Add(bestBpId);
             EnsurePath(entity, ref pf, pos.TileX, pos.TileY, bestBpX, bestBpY);
         }
     }

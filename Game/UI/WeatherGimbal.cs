@@ -15,11 +15,25 @@ public partial class WeatherGimbal : CanvasLayer
     private const int Size = 168;
     private const int Margin = 18;
 
+    // Spring constants tuned so a 90deg Q/E flick overshoots a few
+    // degrees then settles in ~0.6s. Compass body is heavier (slower,
+    // less wobble) than the needle so the cardinals don't slosh around
+    // distractingly when the camera snaps.
+    private const float CompassStiffness = 70f;
+    private const float CompassDamping = 11f;
+    private const float ArrowStiffness = 95f;
+    private const float ArrowDamping = 7f;
+
     private SubViewport _viewport = null!;
     private Node3D _compass = null!;
     private Node3D _arrow = null!;
     private CameraRig? _rig;
     private SnapshotPublisher? _publisher;
+    private float _compassYaw;
+    private float _compassVel;
+    private float _arrowYaw;
+    private float _arrowVel;
+    private bool _initialized;
 
     public void Configure(CameraRig rig, SnapshotPublisher publisher)
     {
@@ -75,17 +89,18 @@ public partial class WeatherGimbal : CanvasLayer
         };
         _viewport.AddChild(env);
 
-        // Top-down ortho camera. With X-rotation -90deg the camera looks
-        // straight down -Y; camera-up maps to world +Z, camera-right maps
-        // to world +X. So world (+X = east, +Z = north) is screen
-        // (right = east, up = north) before any compass rotation.
+        // 45-degree isometric ortho cam. Camera sits up + back along
+        // (+Y, +Z), tilted -45deg X so it looks down-forward at the
+        // compass. World +Z still projects toward screen-up (slightly
+        // foreshortened), world +X = screen-right, so the compass yaw
+        // logic below carries through unchanged.
         var cam = new Camera3D
         {
             Projection = Camera3D.ProjectionType.Orthogonal,
-            Size = 1.6f,
+            Size = 1.9f,
             Current = true,
-            Position = new Vector3(0f, 4f, 0f),
-            RotationDegrees = new Vector3(-90f, 0f, 0f),
+            Position = new Vector3(0f, 3f, 3f),
+            RotationDegrees = new Vector3(-45f, 0f, 0f),
             Far = 50f,
             Near = 0.1f,
         };
@@ -93,6 +108,20 @@ public partial class WeatherGimbal : CanvasLayer
 
         _compass = new Node3D { Name = "Compass" };
         _viewport.AddChild(_compass);
+
+        // Fixed "you face this way" chevron pinned to the top of the
+        // gimbal (world +Z in compass scene). Lives outside _compass so
+        // it never rotates — whichever cardinal lines up under it is the
+        // camera's forward heading.
+        var heading = new MeshInstance3D
+        {
+            Name = "HeadingMarker",
+            Mesh = new BoxMesh { Size = new Vector3(0.18f, 0.05f, 0.18f) },
+            MaterialOverride = MakeMat(new Color(0.95f, 0.95f, 1f)),
+            RotationDegrees = new Vector3(0f, 45f, 0f),
+            Position = new Vector3(0f, 0.18f, 1.0f),
+        };
+        _viewport.AddChild(heading);
 
         // Decorative ring sitting just below the arrow so it never z-fights.
         var ring = new MeshInstance3D
@@ -181,10 +210,39 @@ public partial class WeatherGimbal : CanvasLayer
     {
         if (_rig is null || _publisher is null) return;
         var snap = _publisher.Current;
-        // Compass yaw cancels camera yaw: world +Z always renders toward
-        // screen-up direction implied by the camera framing.
-        _compass.Rotation = new Vector3(0f, -_rig.Yaw, 0f);
-        // Arrow points TOWARD the wind heading in world space.
-        _arrow.Rotation = new Vector3(0f, snap.Weather.CurrentWindRad, 0f);
+        var dt = (float)delta;
+
+        var compassTarget = -_rig.Yaw;
+        var arrowTarget = snap.Weather.CurrentWindRad;
+
+        if (!_initialized)
+        {
+            _compassYaw = compassTarget;
+            _arrowYaw = arrowTarget;
+            _initialized = true;
+        }
+
+        SpringStep(ref _compassYaw, ref _compassVel, compassTarget, CompassStiffness, CompassDamping, dt);
+        SpringStep(ref _arrowYaw, ref _arrowVel, arrowTarget, ArrowStiffness, ArrowDamping, dt);
+
+        _compass.Rotation = new Vector3(0f, _compassYaw, 0f);
+        _arrow.Rotation = new Vector3(0f, _arrowYaw, 0f);
+    }
+
+    // Critically-undamped angular spring: chases target along the shortest
+    // arc so a 90deg flick overshoots a touch then settles instead of
+    // unwrapping the long way around. Sub-stepping at >=120 Hz keeps the
+    // integrator stable when the frame dt drifts.
+    private static void SpringStep(ref float angle, ref float vel, float target, float k, float d, float dt)
+    {
+        var steps = Mathf.Max(1, (int)MathF.Ceiling(dt * 120f));
+        var sub = dt / steps;
+        for (var i = 0; i < steps; i++)
+        {
+            var diff = Mathf.Wrap(target - angle, -Mathf.Pi, Mathf.Pi);
+            var accel = k * diff - d * vel;
+            vel += accel * sub;
+            angle += vel * sub;
+        }
     }
 }

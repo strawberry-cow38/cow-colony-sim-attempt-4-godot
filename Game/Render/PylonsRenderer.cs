@@ -214,13 +214,13 @@ public partial class PylonsRenderer : Node3D
         var hopMeters = Sim.Systems.PowerSystem.CableHopTiles * SimConstants.MetersPerTile;
         var hopSqr = hopMeters * hopMeters;
         var sums = new Dictionary<int, Vector2>();
-        for (var i = 0; i < ids.Count; i++)
-        for (var j = i + 1; j < ids.Count; j++)
+        var pairs = Sim.Systems.PowerSystem.ComputeNeighborPairs(mx, my, hopSqr);
+        for (var k = 0; k < pairs.Count; k++)
         {
+            var (i, j) = pairs[k];
             var dx = mx[j] - mx[i];
             var dz = my[j] - my[i];
             var sqr = dx * dx + dz * dz;
-            if (sqr > hopSqr) continue;
             var len = Mathf.Sqrt(sqr);
             if (len < 0.001f) continue;
             var ux = dx / len;

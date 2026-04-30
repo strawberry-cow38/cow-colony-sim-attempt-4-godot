@@ -17,6 +17,46 @@ public sealed class PowerSystem : ITickSystem
 {
     public const float CableHopTiles = 8f;
     public const float ServiceRadiusTiles = 6f;
+    // Each pylon connects to at most this many nearest neighbors (within
+    // CableHopTiles). Edge is symmetric: a pair (i, j) is connected if
+    // either side ranks the other in its top-K — keeps cables from
+    // becoming an asymmetric rats' nest.
+    public const int MaxPylonNeighbors = 5;
+
+    // Returns unordered (i < j) pylon index pairs that should be connected.
+    // Coords are arbitrary units; hopSqr must match those units squared.
+    public static List<(int i, int j)> ComputeNeighborPairs(
+        IReadOnlyList<float> px, IReadOnlyList<float> py, float hopSqr, int maxNeighbors = MaxPylonNeighbors)
+    {
+        var n = px.Count;
+        var nearest = new HashSet<int>[n];
+        var buf = new List<(float sqr, int idx)>(n);
+        for (var i = 0; i < n; i++)
+        {
+            buf.Clear();
+            for (var j = 0; j < n; j++)
+            {
+                if (j == i) continue;
+                var dx = px[i] - px[j];
+                var dy = py[i] - py[j];
+                var sqr = dx * dx + dy * dy;
+                if (sqr > hopSqr) continue;
+                buf.Add((sqr, j));
+            }
+            buf.Sort((a, b) => a.sqr.CompareTo(b.sqr));
+            var take = System.Math.Min(maxNeighbors, buf.Count);
+            var set = new HashSet<int>(take);
+            for (var t = 0; t < take; t++) set.Add(buf[t].idx);
+            nearest[i] = set;
+        }
+        var pairs = new List<(int i, int j)>();
+        for (var i = 0; i < n; i++)
+        for (var j = i + 1; j < n; j++)
+        {
+            if (nearest[i].Contains(j) || nearest[j].Contains(i)) pairs.Add((i, j));
+        }
+        return pairs;
+    }
 
     // Edge between two power graph nodes. Either pylon-pylon (Hop) or
     // pylon-device (Service). Snapshot reads this list to draw cables.
@@ -70,14 +110,11 @@ public sealed class PowerSystem : ITickSystem
         void Union(int a, int b) { var ra = Find(a); var rb = Find(b); if (ra != rb) parent[ra] = rb; }
 
         var hopSqr = CableHopTiles * CableHopTiles;
-        for (var i = 0; i < n; i++)
-        for (var j = i + 1; j < n; j++)
-        {
-            var dx = pylonTx[i] - pylonTx[j];
-            var dy = pylonTy[i] - pylonTy[j];
-            if (dx * dx + dy * dy > hopSqr) continue;
-            Union(i, j);
-        }
+        var pxBuf = new List<float>(n);
+        var pyBuf = new List<float>(n);
+        for (var i = 0; i < n; i++) { pxBuf.Add(pylonTx[i]); pyBuf.Add(pylonTy[i]); }
+        var neighborPairs = ComputeNeighborPairs(pxBuf, pyBuf, hopSqr);
+        for (var k = 0; k < neighborPairs.Count; k++) Union(neighborPairs[k].i, neighborPairs[k].j);
 
         // Assign grid ids per union-find root.
         var rootToGrid = new Dictionary<int, int>();
@@ -113,12 +150,9 @@ public sealed class PowerSystem : ITickSystem
             node.IsPowered = false;
             var g = grids[gid]; g.PylonCount++; grids[gid] = g;
         }
-        for (var i = 0; i < n; i++)
-        for (var j = i + 1; j < n; j++)
+        for (var k = 0; k < neighborPairs.Count; k++)
         {
-            var dx = pylonTx[i] - pylonTx[j];
-            var dy = pylonTy[i] - pylonTy[j];
-            if (dx * dx + dy * dy > hopSqr) continue;
+            var (i, j) = neighborPairs[k];
             if (pylonGridId[i] != pylonGridId[j]) continue;
             _edges.Add(new PowerEdge(pylonIds[i], pylonIds[j], IsHop: true, pylonGridId[i]));
         }

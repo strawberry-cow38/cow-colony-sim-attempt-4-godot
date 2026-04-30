@@ -182,6 +182,64 @@ public partial class PylonsRenderer : Node3D
         WriteBucket(_lampBucket, lampXforms);
     }
 
+    // Synthetic facings for pylons that don't have PowerEdges yet — i.e.
+    // unbuilt blueprint ghosts. Walks all pylon-bearing entities (structures
+    // + blueprints), pairs any two within CableHopTiles, and accumulates
+    // fold-direction onto both endpoints. Used by BlueprintGhostsRenderer
+    // and the drag preview so unbuilt pylons line up with their soon-to-be
+    // neighbors instead of all defaulting to the same yaw.
+    public static Dictionary<int, Vector2> BuildSyntheticPylonFacings(SimSnapshot snap)
+    {
+        var ids = new List<int>();
+        var mx = new List<float>();
+        var my = new List<float>();
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            var s = snap.Structures[i];
+            if (!BlueprintCatalog.TryGet(s.DefId, out var def) || def is null) continue;
+            if (def.Power != PowerNodeKind.Pylon) continue;
+            ids.Add(s.EntityId);
+            mx.Add((s.TileX + def.FootprintW * 0.5f) * SimConstants.MetersPerTile);
+            my.Add((s.TileY + def.FootprintH * 0.5f) * SimConstants.MetersPerTile);
+        }
+        for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+        {
+            var g = snap.BlueprintGhosts[i];
+            if (!BlueprintCatalog.TryGet(g.DefId, out var def) || def is null) continue;
+            if (def.Power != PowerNodeKind.Pylon) continue;
+            ids.Add(g.EntityId);
+            mx.Add((g.OriginTileX + def.FootprintW * 0.5f) * SimConstants.MetersPerTile);
+            my.Add((g.OriginTileY + def.FootprintH * 0.5f) * SimConstants.MetersPerTile);
+        }
+        var hopMeters = Sim.Systems.PowerSystem.CableHopTiles * SimConstants.MetersPerTile;
+        var hopSqr = hopMeters * hopMeters;
+        var sums = new Dictionary<int, Vector2>();
+        for (var i = 0; i < ids.Count; i++)
+        for (var j = i + 1; j < ids.Count; j++)
+        {
+            var dx = mx[j] - mx[i];
+            var dz = my[j] - my[i];
+            var sqr = dx * dx + dz * dz;
+            if (sqr > hopSqr) continue;
+            var len = Mathf.Sqrt(sqr);
+            if (len < 0.001f) continue;
+            var ux = dx / len;
+            var uz = dz / len;
+            if (uz < 0f || (uz == 0f && ux < 0f)) { ux = -ux; uz = -uz; }
+            Accumulate(sums, ids[i], ux, uz);
+            Accumulate(sums, ids[j], ux, uz);
+        }
+        var result = new Dictionary<int, Vector2>();
+        foreach (var kv in sums)
+        {
+            var v = kv.Value;
+            var len = v.Length();
+            if (len < 0.001f) continue;
+            result[kv.Key] = v / len;
+        }
+        return result;
+    }
+
     public static Dictionary<int, Vector2> BuildPylonFacings(SimSnapshot snap)
     {
         var sums = new Dictionary<int, Vector2>();

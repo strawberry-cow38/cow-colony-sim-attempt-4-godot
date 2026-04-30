@@ -146,9 +146,78 @@ public partial class PowerPlacementPreview : Node3D
         if (positions.Count == 0) { Hide(); return; }
 
         Visible = true;
-        WritePylonGhosts(positions);
+        var facings = ComputeDragFacings(positions);
+        WritePylonGhosts(positions, facings);
         WriteCables(positions);
         WriteRanges(positions);
+    }
+
+    // Replays the synthetic-facing fold over (existing pylons ∪ drag positions),
+    // returning the unit facing for each drag-position index. Built/blueprint
+    // pylons within hop range pull their drag-position neighbour's facing
+    // toward them so the end ghost lines up with whatever it's snapping to.
+    private Vector2[] ComputeDragFacings(List<Vector2I> positions)
+    {
+        var snap = _publisher.Current;
+        var dragMx = new float[positions.Count];
+        var dragMy = new float[positions.Count];
+        for (var i = 0; i < positions.Count; i++)
+        {
+            dragMx[i] = (positions[i].X + 0.5f) * SimConstants.MetersPerTile;
+            dragMy[i] = (positions[i].Y + 0.5f) * SimConstants.MetersPerTile;
+        }
+
+        var sums = new Vector2[positions.Count];
+
+        void FoldPair(int i, float xJ, float yJ)
+        {
+            var dx = xJ - dragMx[i];
+            var dz = yJ - dragMy[i];
+            var sqr = dx * dx + dz * dz;
+            var hopMeters = PowerSystem.CableHopTiles * SimConstants.MetersPerTile;
+            if (sqr > hopMeters * hopMeters) return;
+            var len = MathF.Sqrt(sqr);
+            if (len < 0.001f) return;
+            var ux = dx / len;
+            var uz = dz / len;
+            if (uz < 0f || (uz == 0f && ux < 0f)) { ux = -ux; uz = -uz; }
+            sums[i] = new Vector2(sums[i].X + ux, sums[i].Y + uz);
+        }
+
+        // Drag-position to drag-position pairs (collect to both endpoints).
+        for (var i = 0; i < positions.Count; i++)
+        for (var j = i + 1; j < positions.Count; j++)
+        {
+            FoldPair(i, dragMx[j], dragMy[j]);
+            FoldPair(j, dragMx[i], dragMy[i]);
+        }
+        // Drag-position to existing pylon (structures + non-drag blueprint ghosts).
+        for (var s = 0; s < snap.Structures.Count; s++)
+        {
+            var st = snap.Structures[s];
+            if (!BlueprintCatalog.TryGet(st.DefId, out var def) || def is null) continue;
+            if (def.Power != PowerNodeKind.Pylon) continue;
+            var px = (st.TileX + def.FootprintW * 0.5f) * SimConstants.MetersPerTile;
+            var py = (st.TileY + def.FootprintH * 0.5f) * SimConstants.MetersPerTile;
+            for (var i = 0; i < positions.Count; i++) FoldPair(i, px, py);
+        }
+        for (var b = 0; b < snap.BlueprintGhosts.Count; b++)
+        {
+            var g = snap.BlueprintGhosts[b];
+            if (!BlueprintCatalog.TryGet(g.DefId, out var def) || def is null) continue;
+            if (def.Power != PowerNodeKind.Pylon) continue;
+            var px = (g.OriginTileX + def.FootprintW * 0.5f) * SimConstants.MetersPerTile;
+            var py = (g.OriginTileY + def.FootprintH * 0.5f) * SimConstants.MetersPerTile;
+            for (var i = 0; i < positions.Count; i++) FoldPair(i, px, py);
+        }
+
+        var result = new Vector2[positions.Count];
+        for (var i = 0; i < positions.Count; i++)
+        {
+            var len = sums[i].Length();
+            result[i] = len < 0.001f ? Vector2.Zero : sums[i] / len;
+        }
+        return result;
     }
 
     private List<Vector2I> ComputeSpacedPositions(BlueprintDef def, Vector2I start, Vector2I end)
@@ -175,17 +244,19 @@ public partial class PowerPlacementPreview : Node3D
         return positions;
     }
 
-    private void WritePylonGhosts(List<Vector2I> positions)
+    private void WritePylonGhosts(List<Vector2I> positions, Vector2[] facings)
     {
         if (_pylonGhosts is null) return;
         var mm = _pylonGhosts.Multimesh;
         mm.InstanceCount = positions.Count;
         var scale = _unitsPerMeter;
-        var basis = Basis.Identity.Scaled(new Vector3(scale, scale, scale));
         for (var i = 0; i < positions.Count; i++)
         {
             var pos = positions[i];
             var (x, baseY, z) = ResolveAnchor(pos);
+            var dir = facings[i];
+            var yaw = dir == Vector2.Zero ? 0f : Mathf.Atan2(dir.X, dir.Y);
+            var basis = new Basis(Vector3.Up, yaw).Scaled(new Vector3(scale, scale, scale));
             mm.SetInstanceTransform(i, new Transform3D(basis, new Vector3(x, baseY, z)));
         }
     }

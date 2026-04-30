@@ -153,9 +153,9 @@ public partial class PowerPlacementPreview : Node3D
 
     private List<Vector2I> ComputeSpacedPositions(BlueprintDef def, Vector2I start, Vector2I end)
     {
-        // Same algorithm as PlacementTool.CommitSpacedDrag, minus the
-        // command-bus emit. Validity isn't gated here: preview shows the
-        // ideal positions even on uneven ground so the player sees intent.
+        // Mirrors PlacementTool.CommitSpacedDrag: ghost at start + each
+        // spacing-step the drag actually reaches. End is NOT a ghost —
+        // 2nd pylon only appears once mouse crosses spacing distance.
         var spacing = Math.Max(1, def.DragSpacingTiles);
         var dx = end.X - start.X;
         var dy = end.Y - start.Y;
@@ -164,15 +164,14 @@ public partial class PowerPlacementPreview : Node3D
         if (dist <= 0.0001f) return positions;
         var nx = dx / dist;
         var ny = dy / dist;
-        var steps = Math.Max(1, (int)MathF.Floor(dist / spacing));
+        var steps = (int)MathF.Floor(dist / spacing);
         for (var i = 1; i <= steps; i++)
         {
             var px = start.X + nx * (spacing * i);
             var py = start.Y + ny * (spacing * i);
             var pt = new Vector2I((int)MathF.Round(px), (int)MathF.Round(py));
-            if (positions.Count == 0 || positions[^1] != pt) positions.Add(pt);
+            if (positions[^1] != pt) positions.Add(pt);
         }
-        if (positions[^1] != end) positions.Add(end);
         return positions;
     }
 

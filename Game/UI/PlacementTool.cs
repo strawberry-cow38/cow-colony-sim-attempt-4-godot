@@ -281,12 +281,13 @@ public partial class PlacementTool : Node
     }
 
     // Walks the straight line from drag start → mouse-up tile, dropping a
-    // ghost at each spacing-step (and at the end). When a candidate tile
-    // would land somewhere unplaceable (out of bounds, on a slope while
-    // baseLayer=0, overlapping a prior ghost), nudge the candidate backward
-    // along the line one tile at a time until a free tile is found — never
-    // past the previous placed pylon. Start tile has no "previous", so it's
-    // skipped if invalid.
+    // ghost at start + each spacing-step the drag actually reaches. End
+    // tile is NOT auto-placed — second pylon only lands once the mouse
+    // crosses a full spacing distance. When a candidate tile would land
+    // somewhere unplaceable (out of bounds, on a slope while baseLayer=0,
+    // overlapping a prior ghost), nudge it backward along the line one
+    // tile at a time until a free tile is found — never past the previous
+    // placed pylon.
     private void CommitSpacedDrag(BlueprintDef def, Vector2I start, Vector2I end)
     {
         var spacing = Math.Max(1, def.DragSpacingTiles);
@@ -313,7 +314,7 @@ public partial class PlacementTool : Node
         if (dist <= 0.0001f) return;
         var nx = dx / dist;
         var ny = dy / dist;
-        var maxPullback = spacing; // never overshoot into the previous pylon
+        var maxPullback = spacing;
 
         bool TryEmitWithPullback(Vector2I ideal)
         {
@@ -328,17 +329,14 @@ public partial class PlacementTool : Node
             return false;
         }
 
-        var steps = Math.Max(1, (int)MathF.Floor(dist / spacing));
-        var endHandledByStep = false;
+        var steps = (int)MathF.Floor(dist / spacing);
         for (var i = 1; i <= steps; i++)
         {
             var px = start.X + nx * (spacing * i);
             var py = start.Y + ny * (spacing * i);
             var ideal = new Vector2I((int)MathF.Round(px), (int)MathF.Round(py));
-            if (ideal == end) { endHandledByStep = true; break; }
             TryEmitWithPullback(ideal);
         }
-        if (!endHandledByStep) TryEmitWithPullback(end);
     }
 
     private void HandleBlueprintClick(Vector2I tile, string toolId)

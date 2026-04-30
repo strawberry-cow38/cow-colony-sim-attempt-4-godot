@@ -21,12 +21,23 @@ public partial class BuildToolService : Node
 
     public string ActiveToolId { get; private set; } = string.Empty;
     public int ActiveBuildLayer { get; private set; }
+    public bool GodMode { get; private set; }
 
     [Signal]
     public delegate void ToolChangedEventHandler(string toolId);
 
     [Signal]
     public delegate void BuildLayerChangedEventHandler(int layer);
+
+    [Signal]
+    public delegate void GodModeChangedEventHandler(bool enabled);
+
+    public void SetGodMode(bool enabled)
+    {
+        if (GodMode == enabled) return;
+        GodMode = enabled;
+        EmitSignal(SignalName.GodModeChanged, enabled);
+    }
 
     public void SetActive(string toolId)
     {

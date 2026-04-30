@@ -919,6 +919,21 @@ public sealed class CommandSystem : ITickSystem
         if (!FootprintInBounds(cmd.OriginTileX, cmd.OriginTileY, footW, footH)) return;
         if (cmd.BaseLayer == 0 && !FootprintLevel(cmd.OriginTileX, cmd.OriginTileY, footW, footH)) return;
         if (FootprintObstructed(cmd.OriginTileX, cmd.OriginTileY, footW, footH, cmd.BaseLayer, def.HeightQuanta)) return;
+        if (cmd.Instant)
+        {
+            _world.SpawnStructure(cmd.DefId, cmd.OriginTileX, cmd.OriginTileY, cmd.Rotation, cmd.BaseLayer);
+            if (def.Category == BlueprintCategory.Structure)
+            {
+                for (var dy = 0; dy < footH; dy++)
+                {
+                    for (var dx = 0; dx < footW; dx++)
+                    {
+                        _grid.MarkBlocked(cmd.OriginTileX + dx, cmd.OriginTileY + dy, true);
+                    }
+                }
+            }
+            return;
+        }
         _world.SpawnBlueprintGhost(cmd.DefId, cmd.OriginTileX, cmd.OriginTileY, cmd.Rotation, cmd.BaseLayer);
     }
 

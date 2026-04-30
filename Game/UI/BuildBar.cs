@@ -15,6 +15,7 @@ public partial class BuildBar : CanvasLayer
     private BuildToolService _tools = null!;
 
     private Button _buildButton = null!;
+    private Button _godModeButton = null!;
     private PanelContainer _popup = null!;
     private VBoxContainer _categoryList = null!;
     private VBoxContainer _toolList = null!;
@@ -95,6 +96,24 @@ public partial class BuildBar : CanvasLayer
         };
         _buildButton.Toggled += OnBuildToggled;
         AddChild(_buildButton);
+
+        _godModeButton = new Button
+        {
+            Text = "God Mode",
+            ToggleMode = true,
+            CustomMinimumSize = new Vector2(96f, 32f),
+            AnchorLeft = 1f,
+            AnchorRight = 1f,
+            AnchorTop = 1f,
+            AnchorBottom = 1f,
+            OffsetLeft = -112f,
+            OffsetRight = -16f,
+            OffsetTop = -40f,
+            OffsetBottom = -8f,
+        };
+        _godModeButton.ButtonPressed = _tools.GodMode;
+        _godModeButton.Toggled += _tools.SetGodMode;
+        AddChild(_godModeButton);
 
         _layerLabel = new Label
         {

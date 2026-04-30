@@ -57,7 +57,9 @@ public readonly record struct PrioritizeBuildCommand(int ColonistId, int Bluepri
 // up, the payload is dropped at the carrier's tile so we don't leak.
 public readonly record struct SetItemForbiddenCommand(int ItemEntityId, bool Forbidden) : ISimCommand;
 
-public readonly record struct PlaceBlueprintGhostCommand(string DefId, int OriginTileX, int OriginTileY, int Rotation, int BaseLayer) : ISimCommand;
+// Instant=true skips the ghost/haul/build pipeline and spawns the
+// finished structure immediately. Used by god-mode placement.
+public readonly record struct PlaceBlueprintGhostCommand(string DefId, int OriginTileX, int OriginTileY, int Rotation, int BaseLayer, bool Instant = false) : ISimCommand;
 
 // Cancel a placed blueprint. Drops any deposited material as item stacks
 // at the blueprint origin tile, then deletes the ghost.

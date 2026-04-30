@@ -269,7 +269,7 @@ public partial class PlacementTool : Node
                         var lineOrigin = new Vector2I(x, y);
                         if (!IsFootprintInBounds(def, 0, lineOrigin)) continue;
                         var lineLayer = ResolveBaseLayer(def, 0, lineOrigin);
-                        _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, x, y, 0, lineLayer));
+                        _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, x, y, 0, lineLayer, _tools.GodMode));
                     }
                 }
             }
@@ -304,7 +304,7 @@ public partial class PlacementTool : Node
             if (!IsFootprintInBounds(def, 0, pt)) return false;
             var layer = ResolveBaseLayer(def, 0, pt);
             if (!IsFootprintPlaceable(def, 0, pt, layer)) return false;
-            _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, pt.X, pt.Y, 0, layer));
+            _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, pt.X, pt.Y, 0, layer, _tools.GodMode));
             lastPlaced = pt;
             return true;
         }
@@ -349,7 +349,7 @@ public partial class PlacementTool : Node
         var baseLayer = ResolveBaseLayer(def, _blueprintRotation, origin);
         if (!IsFootprintPlaceable(def, _blueprintRotation, origin, baseLayer)) return;
 
-        _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, origin.X, origin.Y, _blueprintRotation, baseLayer));
+        _commands.Submit(new PlaceBlueprintGhostCommand(def.Id, origin.X, origin.Y, _blueprintRotation, baseLayer, _tools.GodMode));
     }
 
     // Reduces a (start, end) pair to a 1-tile-thick rect along the axis

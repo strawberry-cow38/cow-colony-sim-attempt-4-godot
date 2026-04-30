@@ -27,7 +27,12 @@ public sealed record BlueprintDef(
     float DefaultDemandW = 0f,
     float MaxSupplyW = 0f,
     // SpacedDrag spacing in tiles (only meaningful when Placement=SpacedDrag).
-    int DragSpacingTiles = 0)
+    int DragSpacingTiles = 0,
+    // When false (default), placing on top of an existing structure/blueprint
+    // is rejected — a 2nd pylon/furniture clicked on the same tile won't
+    // auto-stack above the first. Walls/doors flip this so multi-tier
+    // wall stacks still work via auto-resolved BaseLayer.
+    bool Stackable = false)
 {
     // Height converted to 0.75 m vertical quanta — matches the terrain
     // quantum + the build-layer step. Quarter wall = 1, half wall = 2,

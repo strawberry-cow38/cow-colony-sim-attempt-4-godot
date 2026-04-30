@@ -395,11 +395,15 @@ public partial class PlacementTool : Node
     }
 
     // Stack height at the cursor: top of the tallest existing ghost
-    // overlapping the footprint. Adds the player's manual offset
-    // (Q/E nudges via BuildToolService) so they can lift the ghost
-    // off the auto-detected stack base.
+    // overlapping the footprint, but ONLY when the new def is Stackable
+    // (walls, doors). Non-stackable defs (pylons, furniture) ignore the
+    // existing stack and place at the player's explicit Q/E build layer
+    // — same-tile placement then trips IsFootprintObstructed and is
+    // rejected unless the player has manually raised the layer past the
+    // existing item.
     private int ResolveBaseLayer(BlueprintDef def, int rotation, Vector2I origin)
     {
+        if (!def.Stackable) return _tools.ActiveBuildLayer;
         var (w, h) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
         var minX = origin.X; var minY = origin.Y;
         var maxX = origin.X + w - 1; var maxY = origin.Y + h - 1;

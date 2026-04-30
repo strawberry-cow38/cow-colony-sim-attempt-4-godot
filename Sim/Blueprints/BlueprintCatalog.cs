@@ -31,7 +31,8 @@ public static class BlueprintCatalog
                 Rotatable: false,
                 Requirements: System.Array.Empty<FootprintRequirement>(),
                 HeightMeters: 3.0f,
-                Materials: new[] { new MaterialCost(ItemKind.Wood, 5) }),
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 5) },
+                Stackable: true),
 
             new BlueprintDef(
                 Id: "structure.wall_half",
@@ -42,7 +43,8 @@ public static class BlueprintCatalog
                 Rotatable: false,
                 Requirements: System.Array.Empty<FootprintRequirement>(),
                 HeightMeters: 1.5f,
-                Materials: new[] { new MaterialCost(ItemKind.Wood, 2) }),
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 2) },
+                Stackable: true),
 
             new BlueprintDef(
                 Id: "structure.wall_quarter",
@@ -53,7 +55,8 @@ public static class BlueprintCatalog
                 Rotatable: false,
                 Requirements: System.Array.Empty<FootprintRequirement>(),
                 HeightMeters: 0.75f,
-                Materials: new[] { new MaterialCost(ItemKind.Wood, 1) }),
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 1) },
+                Stackable: true),
 
             new BlueprintDef(
                 Id: "structure.door",
@@ -63,7 +66,8 @@ public static class BlueprintCatalog
                 FootprintW: 1, FootprintH: 1,
                 Rotatable: true,
                 Requirements: System.Array.Empty<FootprintRequirement>(),
-                Materials: new[] { new MaterialCost(ItemKind.Wood, 2) }),
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 2) },
+                Stackable: true),
 
             new BlueprintDef(
                 Id: "workstation.crafting_table",

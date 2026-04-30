@@ -108,19 +108,54 @@ public sealed class WanderSystem : ITickSystem
         }
     }
 
+    private const int WanderRadius = 20;
+
     private void RequestRandomPath(Entity entity, TilePosition pos)
     {
         var start = _grid.At(
             Math.Clamp(pos.TileX, 0, _grid.Width - 1),
             Math.Clamp(pos.TileY, 0, _grid.Height - 1));
-        var goal = _grid.At(
-            (int)(NextU32() % (uint)_grid.Width),
-            (int)(NextU32() % (uint)_grid.Height));
-        if (goal.X == start.X && goal.Y == start.Y)
+
+        // Anchor on a built structure if any exist; otherwise the map centre.
+        // Cows then meander inside a 20-tile box around the anchor instead of
+        // wandering off into the wilderness with no buildings near them.
+        PickAnchor(out var anchorX, out var anchorY);
+        var gx = anchorX + (int)(NextU32() % (uint)(WanderRadius * 2 + 1)) - WanderRadius;
+        var gy = anchorY + (int)(NextU32() % (uint)(WanderRadius * 2 + 1)) - WanderRadius;
+        gx = Math.Clamp(gx, 0, _grid.Width - 1);
+        gy = Math.Clamp(gy, 0, _grid.Height - 1);
+        if (gx == start.X && gy == start.Y)
         {
-            goal = _grid.At((goal.X + 1) % _grid.Width, goal.Y);
+            gx = (gx + 1) % _grid.Width;
         }
-        _planner.Request(entity.Id, start, goal);
+        _planner.Request(entity.Id, start, _grid.At(gx, gy));
+    }
+
+    private void PickAnchor(out int tileX, out int tileY)
+    {
+        // Includes the map centre as one candidate alongside every built
+        // structure, so wander targets stay near the centre even when the
+        // colony has only a couple of structures placed.
+        var query = _world.Store.Query<Structure, TilePosition>();
+        var count = query.Count;
+        var pickIndex = (int)(NextU32() % (uint)(count + 1));
+        if (pickIndex < count)
+        {
+            var i = 0;
+            foreach (var e in query.Entities)
+            {
+                if (i == pickIndex)
+                {
+                    ref var p = ref e.GetComponent<TilePosition>();
+                    tileX = p.TileX;
+                    tileY = p.TileY;
+                    return;
+                }
+                i++;
+            }
+        }
+        tileX = _grid.Width / 2;
+        tileY = _grid.Height / 2;
     }
 
     private static void WriteMetersXY(ref TilePosition p, float metersX, float metersY)

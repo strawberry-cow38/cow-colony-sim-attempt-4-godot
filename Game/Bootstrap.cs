@@ -100,6 +100,7 @@ public partial class Bootstrap : Node3D
         AddPathOverlay(_runtime, _heightfield);
         var selection = AddSelectionService(_runtime, _heightfield);
         AddSelectionRing(selection, _runtime, _heightfield);
+        AddPylonRangeRing(selection, _runtime, _heightfield);
         AddReservationOverlay(selection, _runtime, _heightfield);
         AddInfoPanel(selection, _runtime);
         AddPortraitBar(selection, _runtime);
@@ -455,6 +456,13 @@ public partial class Bootstrap : Node3D
         AddChild(ring);
     }
 
+    private void AddPylonRangeRing(SelectionService selection, SimRuntime runtime, Heightfield field)
+    {
+        var ring = new PylonRangeRing { Name = "PylonRangeRing" };
+        ring.Configure(selection, runtime.Publisher, field);
+        AddChild(ring);
+    }
+
     private void AddRain(SimRuntime runtime)
     {
         var rain = new RainEffect { Name = "Rain" };
@@ -566,8 +574,13 @@ public partial class Bootstrap : Node3D
         ghostPreview.Configure(_heightfield!);
         AddChild(ghostPreview);
 
+        var powerPreview = new PowerPlacementPreview { Name = "PowerPlacementPreview" };
+        powerPreview.Configure(_runtime!.Publisher, _heightfield!);
+        AddChild(powerPreview);
+
         var placement = new PlacementTool { Name = "PlacementTool" };
         placement.Configure(tools, rectOverlay, ghostPreview, _heightfield!, _runtime!.Commands, _runtime!.Publisher);
+        placement.SetPowerPreview(powerPreview);
         AddChild(placement);
     }
 

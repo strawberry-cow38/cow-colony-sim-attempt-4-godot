@@ -68,7 +68,7 @@ public partial class PylonsRenderer : Node3D
         return bucket;
     }
 
-    private static ArrayMesh? LoadMergedMesh(string resPath)
+    public static ArrayMesh? LoadMergedMesh(string resPath)
     {
         var absolute = ProjectSettings.GlobalizePath(resPath);
         if (!System.IO.File.Exists(absolute))

@@ -26,6 +26,7 @@ public partial class PlacementTool : Node
     private BuildToolService _tools = null!;
     private RectDragOverlay _rectOverlay = null!;
     private BlueprintGhostPreview _ghostPreview = null!;
+    private PowerPlacementPreview? _powerPreview;
     private Heightfield _field = null!;
     private CommandBus _commands = null!;
     private SnapshotPublisher _publisher = null!;
@@ -49,6 +50,8 @@ public partial class PlacementTool : Node
         _publisher = publisher;
     }
 
+    public void SetPowerPreview(PowerPlacementPreview preview) => _powerPreview = preview;
+
     public override void _Ready()
     {
         _tools.ToolChanged += OnToolChanged;
@@ -59,6 +62,7 @@ public partial class PlacementTool : Node
         _dragStart = null;
         _rectOverlay.PreviewRect = null;
         _ghostPreview.DefId = null;
+        _powerPreview?.HidePreview();
         _blueprintRotation = 0;
     }
 
@@ -153,10 +157,12 @@ public partial class PlacementTool : Node
         if (hovered is null && _dragStart is null)
         {
             _rectOverlay.PreviewRect = null;
+            _powerPreview?.HidePreview();
             return;
         }
         _rectOverlay.QuadColor = ColorForRectTool(toolId);
 
+        BlueprintDef? spacedDef = null;
         if (_dragStart is not null && hovered is not null)
         {
             var rect = TileRect.FromCorners(
@@ -164,20 +170,35 @@ public partial class PlacementTool : Node
             if (toolId.StartsWith("blueprint."))
             {
                 var defId = toolId.Substring("blueprint.".Length);
-                if (BlueprintCatalog.TryGet(defId, out var def) && def is not null
-                    && def.Placement == PlacementMode.LineDrag)
+                if (BlueprintCatalog.TryGet(defId, out var def) && def is not null)
                 {
-                    rect = AxisAlignedLine(_dragStart.Value, hovered.Value);
+                    if (def.Placement == PlacementMode.LineDrag)
+                    {
+                        rect = AxisAlignedLine(_dragStart.Value, hovered.Value);
+                    }
+                    else if (def.Placement == PlacementMode.SpacedDrag)
+                    {
+                        spacedDef = def;
+                    }
                 }
-                // SpacedDrag leaves rect as the bbox of start→cursor — gives
-                // the player a hint the drag is live without faking ghosts
-                // along the whole span (per design call: no full ghost trail).
             }
             _rectOverlay.PreviewRect = rect;
         }
         else if (hovered is not null)
         {
             _rectOverlay.PreviewRect = new TileRect(hovered.Value.X, hovered.Value.Y, hovered.Value.X, hovered.Value.Y);
+        }
+
+        if (_powerPreview is not null)
+        {
+            if (spacedDef is not null && _dragStart is not null && hovered is not null)
+            {
+                _powerPreview.Show(spacedDef, _dragStart.Value, hovered.Value);
+            }
+            else
+            {
+                _powerPreview.HidePreview();
+            }
         }
     }
 

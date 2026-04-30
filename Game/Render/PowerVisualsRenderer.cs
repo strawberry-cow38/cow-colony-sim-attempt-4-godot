@@ -21,7 +21,7 @@ public partial class PowerVisualsRenderer : Node3D
     private const int CablesPerEdge = 2;
     private const float SagPerMeter = 0.08f; // mid-span dip per metre of run
     private const float CableThicknessMeters = 0.08f;
-    private const float PylonTopOffsetMeters = 4.0f; // where cable hangs off pylon
+    private const float PylonTopOffsetMeters = 3.5f; // where cable hangs off pylon (matches insulator height)
     private const float ConsumerTopOffsetMeters = 1.6f;
     private const float LayerStepMeters = 0.75f; // matches StructuresRenderer / build stack quantum
     // Insulator X-offset on the pylon model (±0.678 m from pole centre). Pylon
@@ -90,8 +90,15 @@ public partial class PowerVisualsRenderer : Node3D
         _multiMesh.InstanceCount = totalInstances;
         if (totalInstances == 0) return;
 
+        // Pylon facings — same fold logic PylonsRenderer uses, so each
+        // cable endpoint snaps onto the actual rotated insulator position
+        // of its pylon. Cables therefore meet seamlessly even when a
+        // junction pylon faces a compromise direction between neighbours.
+        var facings = PylonsRenderer.BuildPylonFacings(snap);
+
         var unitsPerTile = SimConstants.GodotUnitsPerTile;
         var metersPerTile = SimConstants.MetersPerTile;
+        var insulatorUnits = CableLateralOffsetMeters * _unitsPerMeter;
         var hopIndex = 0;
         for (var ei = 0; ei < edges.Count; ei++)
         {
@@ -110,30 +117,35 @@ public partial class PowerVisualsRenderer : Node3D
             var fromY = fromGround + fromStack + fromTopOffset * _unitsPerMeter;
             var toY = toGround + toStack + toTopOffset * _unitsPerMeter;
 
+            // Per-pylon insulator offsets. localX = (facing.uz, -facing.ux),
+            // matching the pylon rotation in PylonsRenderer (yaw = atan2(ux, uz)).
+            var fromOffX = 0f; var fromOffZ = 0f;
+            var toOffX = 0f; var toOffZ = 0f;
+            if (facings.TryGetValue(e.FromEntityId, out var fdir))
+            {
+                fromOffX = fdir.Y * insulatorUnits;
+                fromOffZ = -fdir.X * insulatorUnits;
+            }
+            if (facings.TryGetValue(e.ToEntityId, out var tdir))
+            {
+                toOffX = tdir.Y * insulatorUnits;
+                toOffZ = -tdir.X * insulatorUnits;
+            }
+            // Fallback for endpoints with no recorded facing (degenerate or
+            // single-edge): offset perpendicular to the cable direction.
+            if (fromOffX == 0f && fromOffZ == 0f) (fromOffX, fromOffZ) = PerpFromCable(fromX, fromZ, toX, toZ, insulatorUnits);
+            if (toOffX == 0f && toOffZ == 0f) (toOffX, toOffZ) = PerpFromCable(fromX, fromZ, toX, toZ, insulatorUnits);
+
             var dx = toX - fromX;
             var dz = toZ - fromZ;
             var horizMeters = MathF.Sqrt((dx * dx + dz * dz) / (_unitsPerMeter * _unitsPerMeter));
             var sagUnits = horizMeters * SagPerMeter * _unitsPerMeter;
 
-            // Perpendicular offset in the horizontal plane so the two cables run
-            // parallel through the left/right insulator positions on each pylon.
-            var horizLen = MathF.Sqrt(dx * dx + dz * dz);
-            var perpX = 0f;
-            var perpZ = 0f;
-            if (horizLen > 0.0001f)
-            {
-                var offsetUnits = CableLateralOffsetMeters * _unitsPerMeter;
-                perpX = -dz / horizLen * offsetUnits;
-                perpZ = dx / horizLen * offsetUnits;
-            }
-
             for (var c = 0; c < CablesPerEdge; c++)
             {
                 var sign = c == 0 ? -1f : 1f;
-                var ox = perpX * sign;
-                var oz = perpZ * sign;
-                var aX = fromX + ox; var aZ = fromZ + oz;
-                var bX = toX + ox; var bZ = toZ + oz;
+                var aX = fromX + fromOffX * sign; var aZ = fromZ + fromOffZ * sign;
+                var bX = toX + toOffX * sign; var bZ = toZ + toOffZ * sign;
                 for (var s = 0; s < SegmentsPerEdge; s++)
                 {
                     var t0 = s / (float)SegmentsPerEdge;
@@ -146,6 +158,15 @@ public partial class PowerVisualsRenderer : Node3D
             }
             hopIndex++;
         }
+    }
+
+    private static (float x, float z) PerpFromCable(float fromX, float fromZ, float toX, float toZ, float offsetUnits)
+    {
+        var dx = toX - fromX;
+        var dz = toZ - fromZ;
+        var len = MathF.Sqrt(dx * dx + dz * dz);
+        if (len < 0.0001f) return (0f, 0f);
+        return (-dz / len * offsetUnits, dx / len * offsetUnits);
     }
 
     private static Vector3 SamplePoint(float fromX, float fromY, float fromZ, float toX, float toY, float toZ, float sagUnits, float t)

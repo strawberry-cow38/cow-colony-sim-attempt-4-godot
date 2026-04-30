@@ -182,7 +182,7 @@ public partial class PylonsRenderer : Node3D
         WriteBucket(_lampBucket, lampXforms);
     }
 
-    private static Dictionary<int, Vector2> BuildPylonFacings(SimSnapshot snap)
+    public static Dictionary<int, Vector2> BuildPylonFacings(SimSnapshot snap)
     {
         var sums = new Dictionary<int, Vector2>();
         var edges = snap.PowerEdges;

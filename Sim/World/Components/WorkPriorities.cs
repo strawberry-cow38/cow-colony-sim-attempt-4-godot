@@ -17,6 +17,7 @@ public struct WorkPriorities : IComponent
     public byte P3;
     public byte P4;
     public byte P5;
+    public byte P6;
 
     public const byte DefaultPriority = 4;
     public const byte MaxPriority = 8;
@@ -31,6 +32,7 @@ public struct WorkPriorities : IComponent
             P3 = DefaultPriority,
             P4 = DefaultPriority,
             P5 = DefaultPriority,
+            P6 = DefaultPriority,
         };
     }
 
@@ -44,6 +46,7 @@ public struct WorkPriorities : IComponent
             3 => P3,
             4 => P4,
             5 => P5,
+            6 => P6,
             _ => 0,
         };
     }
@@ -59,6 +62,7 @@ public struct WorkPriorities : IComponent
             case 3: P3 = value; break;
             case 4: P4 = value; break;
             case 5: P5 = value; break;
+            case 6: P6 = value; break;
         }
     }
 }

@@ -32,6 +32,13 @@ public static class ItemCatalog
             Weight = 0.4f, Bulk = 0.3f, SellValue = 1,
             Stackable = true, StackCapacity = 75,
         });
+        Register(new ItemDef
+        {
+            Id = "bread", Kind = ItemKind.Bread,
+            DisplayName = "Bread", Description = "Baked loaf. Edible.",
+            Weight = 0.3f, Bulk = 0.25f, SellValue = 5,
+            Stackable = true, StackCapacity = 50,
+        });
         // Minified items wrap a structure — true weight comes from the
         // wrapped def, but we don't bake that lookup here. Conservative
         // default; per-instance overrides can layer on later.

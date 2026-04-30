@@ -26,4 +26,7 @@ public enum WorkKind
     // Walk adjacent to a Mine-designated boulder, tick progress, then
     // delete it and drop a stone stack on the tile.
     Mine = 11,
+    // Walk to a workstation's interaction tile and tick a recipe to
+    // completion. Active bill on the workstation drives the loop.
+    Cook = 12,
 }

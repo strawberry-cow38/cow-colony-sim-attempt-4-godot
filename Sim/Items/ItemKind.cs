@@ -17,4 +17,6 @@ public enum ItemKind
     Weapon = 5,
     // Mined boulder yield. Stacks like wood; recipes coming as masonry lands.
     Stone = 6,
+    // Cooked output of the stove's wheat→bread recipe. Edible later.
+    Bread = 7,
 }

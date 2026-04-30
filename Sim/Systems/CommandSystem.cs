@@ -1,5 +1,6 @@
 using CowColonySim.Sim.Blueprints;
 using CowColonySim.Sim.Commands;
+using CowColonySim.Sim.Crafting;
 using CowColonySim.Sim.Designations;
 using CowColonySim.Sim.Items;
 using CowColonySim.Sim.Pathfinding;
@@ -101,7 +102,112 @@ public sealed class CommandSystem : ITickSystem
                 case SetGeneratorOutputCommand sgo:
                     Apply(sgo);
                     break;
+                case AddBillCommand ab:
+                    Apply(ab);
+                    break;
+                case RemoveBillCommand rb:
+                    Apply(rb);
+                    break;
+                case ToggleBillSuspendCommand tb:
+                    Apply(tb);
+                    break;
+                case CycleBillRepeatModeCommand cb:
+                    Apply(cb);
+                    break;
+                case SetBillTargetCountCommand stc:
+                    Apply(stc);
+                    break;
             }
+        }
+    }
+
+    private void Apply(AddBillCommand cmd)
+    {
+        var ent = _world.Store.GetEntityById(cmd.StructureId);
+        if (ent == default || !ent.HasComponent<Structure>() || !ent.HasComponent<Bills>()) return;
+        if (!RecipeCatalog.TryGet(cmd.RecipeId, out var recipe) || recipe is null) return;
+        ref var s = ref ent.GetComponent<Structure>();
+        var allowed = false;
+        for (var i = 0; i < recipe.AllowedWorkstations.Count; i++)
+            if (recipe.AllowedWorkstations[i] == s.DefId) { allowed = true; break; }
+        if (!allowed) return;
+        ref var bills = ref ent.GetComponent<Bills>();
+        bills.Entries ??= new List<Bill>();
+        bills.Entries.Add(new Bill
+        {
+            RecipeId = recipe.Id,
+            RepeatMode = BillRepeatMode.Forever,
+            TargetCount = 10,
+            Suspended = false,
+            DoneCount = 0,
+            WorkProgress = 0f,
+        });
+        bills.Version++;
+    }
+
+    private void Apply(RemoveBillCommand cmd)
+    {
+        var ent = _world.Store.GetEntityById(cmd.StructureId);
+        if (ent == default || !ent.HasComponent<Bills>()) return;
+        ref var bills = ref ent.GetComponent<Bills>();
+        if (bills.Entries is null || (uint)cmd.BillIndex >= (uint)bills.Entries.Count) return;
+        bills.Entries.RemoveAt(cmd.BillIndex);
+        bills.Version++;
+        // Drop any cook job pinned to this bill index on this stove.
+        ClearCookersOnStructure(cmd.StructureId);
+    }
+
+    private void Apply(ToggleBillSuspendCommand cmd)
+    {
+        var ent = _world.Store.GetEntityById(cmd.StructureId);
+        if (ent == default || !ent.HasComponent<Bills>()) return;
+        ref var bills = ref ent.GetComponent<Bills>();
+        if (bills.Entries is null || (uint)cmd.BillIndex >= (uint)bills.Entries.Count) return;
+        var b = bills.Entries[cmd.BillIndex];
+        b.Suspended = !b.Suspended;
+        bills.Entries[cmd.BillIndex] = b;
+        bills.Version++;
+        if (b.Suspended) ClearCookersOnStructure(cmd.StructureId);
+    }
+
+    private void Apply(CycleBillRepeatModeCommand cmd)
+    {
+        var ent = _world.Store.GetEntityById(cmd.StructureId);
+        if (ent == default || !ent.HasComponent<Bills>()) return;
+        ref var bills = ref ent.GetComponent<Bills>();
+        if (bills.Entries is null || (uint)cmd.BillIndex >= (uint)bills.Entries.Count) return;
+        var b = bills.Entries[cmd.BillIndex];
+        b.RepeatMode = b.RepeatMode switch
+        {
+            BillRepeatMode.Forever => BillRepeatMode.DoX,
+            BillRepeatMode.DoX => BillRepeatMode.UntilCount,
+            _ => BillRepeatMode.Forever,
+        };
+        b.DoneCount = 0;
+        bills.Entries[cmd.BillIndex] = b;
+        bills.Version++;
+    }
+
+    private void Apply(SetBillTargetCountCommand cmd)
+    {
+        var ent = _world.Store.GetEntityById(cmd.StructureId);
+        if (ent == default || !ent.HasComponent<Bills>()) return;
+        ref var bills = ref ent.GetComponent<Bills>();
+        if (bills.Entries is null || (uint)cmd.BillIndex >= (uint)bills.Entries.Count) return;
+        var b = bills.Entries[cmd.BillIndex];
+        b.TargetCount = Math.Clamp(cmd.TargetCount, 1, 9999);
+        bills.Entries[cmd.BillIndex] = b;
+        bills.Version++;
+    }
+
+    private void ClearCookersOnStructure(int structureId)
+    {
+        foreach (var c in _world.Store.Query<Colonist, WorkJob, PathFollower>().Entities)
+        {
+            ref var w = ref c.GetComponent<WorkJob>();
+            if (!w.Active || w.Kind != WorkKind.Cook || w.TargetEntityId != structureId) continue;
+            ref var pf = ref c.GetComponent<PathFollower>();
+            ResetWorkJob(ref w, ref pf);
         }
     }
 

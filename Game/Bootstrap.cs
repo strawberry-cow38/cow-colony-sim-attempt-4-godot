@@ -58,6 +58,7 @@ public partial class Bootstrap : Node3D
         _runtime.Scheduler.Register(new ConstructionJobSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new HaulSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new StructureWorkSystem(_runtime.World, planner, grid));
+        _runtime.Scheduler.Register(new CookJobSystem(_runtime.World, planner, grid));
         // Power topology depends on built structures, so it runs after
         // ConstructionJobSystem completes blueprints into structures.
         var power = new PowerSystem(_runtime.World);

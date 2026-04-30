@@ -1,6 +1,7 @@
 using CowColonySim.Game.Selection;
 using CowColonySim.Sim.Blueprints;
 using CowColonySim.Sim.Commands;
+using CowColonySim.Sim.Crafting;
 using CowColonySim.Sim.Designations;
 using CowColonySim.Sim.Items;
 using CowColonySim.Sim.Zones;
@@ -63,6 +64,13 @@ public partial class InfoPanel : CanvasLayer
     private Label _structureHeader = null!;
     private Button _uninstallBtn = null!;
     private Button _deconstructBtn = null!;
+    private VBoxContainer _billsBox = null!;
+    private Label _billsHeader = null!;
+    private VBoxContainer _billsList = null!;
+    private MenuButton _addBillBtn = null!;
+    private int _lastBillsStructureId;
+    private string _lastBillsDefId = string.Empty;
+    private ulong _lastBillsSig;
 
     private Label _emptyLabel = null!;
     private bool _forbidSyncing;
@@ -198,6 +206,16 @@ public partial class InfoPanel : CanvasLayer
         _deconstructBtn = new Button { Text = "deconstruct (returns half)" };
         _deconstructBtn.Pressed += OnDeconstruct;
         _structureBox.AddChild(_deconstructBtn);
+
+        _billsBox = new VBoxContainer { Visible = false };
+        _structureBox.AddChild(_billsBox);
+        _billsHeader = MakeLabel("bills");
+        _billsBox.AddChild(_billsHeader);
+        _billsList = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _billsBox.AddChild(_billsList);
+        _addBillBtn = new MenuButton { Text = "+ add bill" };
+        _addBillBtn.GetPopup().IdPressed += OnAddBillRecipe;
+        _billsBox.AddChild(_addBillBtn);
     }
 
     private static Label MakeLabel(string text)
@@ -323,9 +341,127 @@ public partial class InfoPanel : CanvasLayer
             var deconstructDesignated = HasStructureDesignation(snap, s.TileX, s.TileY, DesignationKind.Deconstruct);
             _uninstallBtn.Text = uninstallDesignated ? "cancel uninstall" : "uninstall";
             _deconstructBtn.Text = deconstructDesignated ? "cancel deconstruct" : "deconstruct (returns half)";
+            UpdateBillsPanel(s);
             return;
         }
         _structureHeader.Text = $"structure #{id} (gone)";
+        _billsBox.Visible = false;
+    }
+
+    private static readonly List<string> _addBillRecipeIds = new();
+
+    private void UpdateBillsPanel(StructureView s)
+    {
+        var allowed = new List<RecipeDef>();
+        foreach (var r in RecipeCatalog.ForWorkstation(s.DefId)) allowed.Add(r);
+        var hasAny = allowed.Count > 0 || (s.Bills is { Count: > 0 });
+        _billsBox.Visible = hasAny;
+        if (!hasAny) return;
+
+        var sig = ComputeBillsSig(s.Bills);
+        if (s.EntityId != _lastBillsStructureId || s.DefId != _lastBillsDefId || sig != _lastBillsSig)
+        {
+            _lastBillsStructureId = s.EntityId;
+            _lastBillsDefId = s.DefId;
+            _lastBillsSig = sig;
+            RebuildBillsList(s, allowed);
+        }
+    }
+
+    private static ulong ComputeBillsSig(IReadOnlyList<BillView> bills)
+    {
+        if (bills is null || bills.Count == 0) return 0UL;
+        unchecked
+        {
+            var h = 14695981039346656037UL;
+            for (var i = 0; i < bills.Count; i++)
+            {
+                var b = bills[i];
+                h = (h ^ (uint)(b.RecipeId?.GetHashCode() ?? 0)) * 1099511628211UL;
+                h = (h ^ (uint)b.RepeatMode) * 1099511628211UL;
+                h = (h ^ (uint)b.TargetCount) * 1099511628211UL;
+                h = (h ^ (b.Suspended ? 1UL : 0UL)) * 1099511628211UL;
+                h = (h ^ (uint)b.DoneCount) * 1099511628211UL;
+            }
+            return h == 0 ? 1UL : h;
+        }
+    }
+
+    private void RebuildBillsList(StructureView s, List<RecipeDef> allowed)
+    {
+        foreach (var child in _billsList.GetChildren()) child.QueueFree();
+
+        var popup = _addBillBtn.GetPopup();
+        popup.Clear();
+        _addBillRecipeIds.Clear();
+        for (var i = 0; i < allowed.Count; i++)
+        {
+            popup.AddItem(allowed[i].DisplayName, i);
+            _addBillRecipeIds.Add(allowed[i].Id);
+        }
+        _addBillBtn.Visible = allowed.Count > 0;
+
+        if (s.Bills is null || s.Bills.Count == 0)
+        {
+            _billsList.AddChild(MakeLabel("(no bills)"));
+            return;
+        }
+        for (var i = 0; i < s.Bills.Count; i++)
+        {
+            var b = s.Bills[i];
+            var recipeName = RecipeCatalog.TryGet(b.RecipeId, out var r) && r is not null
+                ? r.DisplayName : b.RecipeId;
+            var row = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var head = MakeLabel($"{recipeName}{(b.Suspended ? " [paused]" : string.Empty)}");
+            row.AddChild(head);
+            var modeText = b.RepeatMode switch
+            {
+                BillRepeatMode.Forever => "forever",
+                BillRepeatMode.DoX => $"do {b.TargetCount} ({b.DoneCount})",
+                BillRepeatMode.UntilCount => $"until {b.TargetCount} on map",
+                _ => "?",
+            };
+            var ctrls = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var cycleBtn = new Button { Text = modeText, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            var idx = i;
+            var sid = s.EntityId;
+            cycleBtn.Pressed += () => _commands.Submit(new CycleBillRepeatModeCommand(sid, idx));
+            ctrls.AddChild(cycleBtn);
+
+            if (b.RepeatMode != BillRepeatMode.Forever)
+            {
+                var minus = new Button { Text = "-", CustomMinimumSize = new Vector2(28f, 0f) };
+                var target = b.TargetCount;
+                minus.Pressed += () => _commands.Submit(new SetBillTargetCountCommand(sid, idx, target - 1));
+                ctrls.AddChild(minus);
+                var plus = new Button { Text = "+", CustomMinimumSize = new Vector2(28f, 0f) };
+                plus.Pressed += () => _commands.Submit(new SetBillTargetCountCommand(sid, idx, target + 1));
+                ctrls.AddChild(plus);
+            }
+
+            var pauseBtn = new Button
+            {
+                Text = b.Suspended ? "resume" : "pause",
+                CustomMinimumSize = new Vector2(60f, 0f),
+            };
+            pauseBtn.Pressed += () => _commands.Submit(new ToggleBillSuspendCommand(sid, idx));
+            ctrls.AddChild(pauseBtn);
+
+            var delBtn = new Button { Text = "x", CustomMinimumSize = new Vector2(28f, 0f) };
+            delBtn.Pressed += () => _commands.Submit(new RemoveBillCommand(sid, idx));
+            ctrls.AddChild(delBtn);
+
+            row.AddChild(ctrls);
+            _billsList.AddChild(row);
+        }
+    }
+
+    private void OnAddBillRecipe(long id)
+    {
+        if (_selection.SelectedStructureId is not int sid) return;
+        var i = (int)id;
+        if ((uint)i >= (uint)_addBillRecipeIds.Count) return;
+        _commands.Submit(new AddBillCommand(sid, _addBillRecipeIds[i]));
     }
 
     private static bool HasStructureDesignation(SimSnapshot snap, int tx, int ty, DesignationKind kind)

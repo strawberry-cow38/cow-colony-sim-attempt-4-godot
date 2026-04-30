@@ -13,11 +13,12 @@ public enum WorkType
     WoodCutting = 3,
     Plants = 4,
     StructureWork = 5,
+    Cooking = 6,
 }
 
 public static class WorkTypes
 {
-    public const int Count = 6;
+    public const int Count = 7;
 
     public static readonly WorkType[] All =
     {
@@ -27,6 +28,7 @@ public static class WorkTypes
         WorkType.WoodCutting,
         WorkType.Plants,
         WorkType.StructureWork,
+        WorkType.Cooking,
     };
 
     public static readonly string[] DisplayNames =
@@ -37,6 +39,7 @@ public static class WorkTypes
         "Chop",
         "Plants",
         "Tear",
+        "Cook",
     };
 
     public static string DisplayName(WorkType t) => DisplayNames[(int)t];
@@ -70,6 +73,9 @@ public static class WorkTypes
             case WorkKind.Uninstall:
             case WorkKind.Deconstruct:
                 type = WorkType.StructureWork;
+                return true;
+            case WorkKind.Cook:
+                type = WorkType.Cooking;
                 return true;
             default:
                 type = default;

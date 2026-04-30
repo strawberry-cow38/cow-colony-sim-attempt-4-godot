@@ -200,6 +200,10 @@ public sealed class SimWorld
             });
             BumpPowerVersion();
         }
+        if (def.Category == BlueprintCategory.Workstation)
+        {
+            e.AddComponent(Bills.New());
+        }
         return e;
     }
 

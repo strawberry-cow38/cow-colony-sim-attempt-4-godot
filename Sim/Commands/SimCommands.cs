@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using CowColonySim.Sim.Designations;
 using CowColonySim.Sim.Pathfinding;
+using CowColonySim.Sim.World.Components;
 using CowColonySim.Sim.Zones;
 
 namespace CowColonySim.Sim.Commands;
@@ -118,6 +119,20 @@ public readonly record struct SetZoneSettingsCommand(
     bool AllowSowing,
     bool AllowHarvest,
     ulong AllowedKindsMask) : ISimCommand;
+
+// Append a new bill to a workstation. Recipe must be allowed on the
+// workstation's def. No-op if not. Bills append in order; cook system
+// runs the first unsuspended bill that has ingredients.
+public readonly record struct AddBillCommand(int StructureId, string RecipeId) : ISimCommand;
+
+public readonly record struct RemoveBillCommand(int StructureId, int BillIndex) : ISimCommand;
+
+public readonly record struct ToggleBillSuspendCommand(int StructureId, int BillIndex) : ISimCommand;
+
+// Cycle Forever → DoX → UntilCount → Forever. UI calls this on a click.
+public readonly record struct CycleBillRepeatModeCommand(int StructureId, int BillIndex) : ISimCommand;
+
+public readonly record struct SetBillTargetCountCommand(int StructureId, int BillIndex, int TargetCount) : ISimCommand;
 
 public sealed class CommandBus
 {

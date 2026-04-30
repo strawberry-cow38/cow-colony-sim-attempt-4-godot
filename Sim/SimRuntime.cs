@@ -413,12 +413,28 @@ public sealed class SimRuntime : IDisposable
     {
         var query = _world.Store.Query<Structure, TilePosition>();
         var views = new StructureView[query.Count];
+        var emptyBills = System.Array.Empty<BillView>();
         var i = 0;
         foreach (var entity in query.Entities)
         {
             ref var s = ref entity.GetComponent<Structure>();
             ref var p = ref entity.GetComponent<TilePosition>();
-            views[i++] = new StructureView(entity.Id, s.DefId, p.TileX, p.TileY, s.Rotation, s.BaseLayer);
+            IReadOnlyList<BillView> bills = emptyBills;
+            if (entity.HasComponent<Bills>())
+            {
+                ref var bb = ref entity.GetComponent<Bills>();
+                if (bb.Entries is { Count: > 0 })
+                {
+                    var arr = new BillView[bb.Entries.Count];
+                    for (var k = 0; k < bb.Entries.Count; k++)
+                    {
+                        var b = bb.Entries[k];
+                        arr[k] = new BillView(b.RecipeId, b.RepeatMode, b.TargetCount, b.Suspended, b.DoneCount);
+                    }
+                    bills = arr;
+                }
+            }
+            views[i++] = new StructureView(entity.Id, s.DefId, p.TileX, p.TileY, s.Rotation, s.BaseLayer, bills);
         }
         return views;
     }

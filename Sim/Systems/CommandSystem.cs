@@ -78,7 +78,7 @@ public sealed class CommandSystem : ITickSystem
                     Apply(us);
                     break;
                 case DeconstructStructureCommand ds:
-                    ApplyDeconstruct(ds.EntityId);
+                    Apply(ds);
                     break;
                 case ForcePickupCommand fp:
                     Apply(fp);
@@ -255,11 +255,65 @@ public sealed class CommandSystem : ITickSystem
     // matching designation already exists, this cancels it (clears any
     // matching active WorkJob too). Otherwise stamps a new designation
     // for StructureWorkSystem to pick up.
-    private void Apply(UninstallStructureCommand cmd) =>
+    private void Apply(UninstallStructureCommand cmd)
+    {
+        if (cmd.Instant) { InstantRemoveStructure(cmd.EntityId, DesignationKind.Uninstall); return; }
         ToggleStructureDesignation(cmd.EntityId, DesignationKind.Uninstall, WorkKind.Uninstall);
+    }
 
-    private void ApplyDeconstruct(int structureId) =>
-        ToggleStructureDesignation(structureId, DesignationKind.Deconstruct, WorkKind.Deconstruct);
+    private void Apply(DeconstructStructureCommand cmd)
+    {
+        if (cmd.Instant) { InstantRemoveStructure(cmd.EntityId, DesignationKind.Deconstruct); return; }
+        ToggleStructureDesignation(cmd.EntityId, DesignationKind.Deconstruct, WorkKind.Deconstruct);
+    }
+
+    // God-mode shortcut: bypass the designation/worker pipeline and do
+    // exactly what StructureWorkSystem.CompleteOne would do on finish.
+    // Uninstall yields a minified thing; Deconstruct refunds 50% mats.
+    private void InstantRemoveStructure(int structureId, DesignationKind kind)
+    {
+        var ent = _world.Store.GetEntityById(structureId);
+        if (ent == default || !ent.HasComponent<Structure>() || !ent.HasComponent<TilePosition>()) return;
+        ref var s = ref ent.GetComponent<Structure>();
+        ref var pos = ref ent.GetComponent<TilePosition>();
+        var defId = s.DefId;
+        var rotation = s.Rotation;
+        var baseLayer = s.BaseLayer;
+        var tx = pos.TileX;
+        var ty = pos.TileY;
+        var def = BlueprintCatalog.Get(defId);
+        UnblockFootprintIfStructure(def, rotation, tx, ty);
+        var hadPower = ent.HasComponent<PowerNode>();
+        ent.DeleteEntity();
+        if (hadPower) _world.BumpPowerVersion();
+
+        // Clear any active workers + matching designation for this structure.
+        ClearStructureWorkers(structureId, WorkKind.Uninstall);
+        ClearStructureWorkers(structureId, WorkKind.Deconstruct);
+        foreach (var d in _world.Store.Query<Designation, TilePosition>().Entities)
+        {
+            ref var dc = ref d.GetComponent<Designation>();
+            if (dc.Kind != DesignationKind.Uninstall && dc.Kind != DesignationKind.Deconstruct) continue;
+            ref var dp = ref d.GetComponent<TilePosition>();
+            if (dp.TileX != tx || dp.TileY != ty) continue;
+            d.DeleteEntity();
+        }
+
+        if (kind == DesignationKind.Uninstall)
+        {
+            _world.SpawnMinifiedThing(defId, tx, ty, rotation, baseLayer);
+        }
+        else
+        {
+            var mats = def.MaterialsOrEmpty;
+            for (var i = 0; i < mats.Count; i++)
+            {
+                var m = mats[i];
+                var refund = m.Count / 2;
+                if (refund > 0) _world.AddOrMergeItem(tx, ty, m.Kind, refund);
+            }
+        }
+    }
 
     private void ToggleStructureDesignation(int structureId, DesignationKind dKind, WorkKind wKind)
     {

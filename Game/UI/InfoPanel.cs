@@ -19,6 +19,7 @@ public partial class InfoPanel : CanvasLayer
     private SelectionService _selection = null!;
     private SnapshotPublisher _publisher = null!;
     private CommandBus _commands = null!;
+    private BuildToolService? _tools;
 
     private VBoxContainer _colonistBox = null!;
     private Label _colonistHeader = null!;
@@ -72,6 +73,10 @@ public partial class InfoPanel : CanvasLayer
         _publisher = publisher;
         _commands = commands;
     }
+
+    public void SetBuildTools(BuildToolService tools) => _tools = tools;
+
+    private bool GodMode => _tools is not null && _tools.GodMode;
 
     public override void _Ready()
     {
@@ -343,13 +348,13 @@ public partial class InfoPanel : CanvasLayer
     private void OnUninstall()
     {
         if (_selection.SelectedStructureId is not int id) return;
-        _commands.Submit(new UninstallStructureCommand(id));
+        _commands.Submit(new UninstallStructureCommand(id, GodMode));
     }
 
     private void OnDeconstruct()
     {
         if (_selection.SelectedStructureId is not int id) return;
-        _commands.Submit(new DeconstructStructureCommand(id));
+        _commands.Submit(new DeconstructStructureCommand(id, GodMode));
     }
 
     private void ShowColonist(SimSnapshot snap, int id)

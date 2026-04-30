@@ -68,12 +68,15 @@ public readonly record struct CancelBlueprintCommand(int EntityId) : ISimCommand
 // Uninstall a built structure. For now: refunds 100% of the def's
 // materials at the structure tile and removes the structure.
 // Future: spawn a minified item that can be re-placed elsewhere.
-public readonly record struct UninstallStructureCommand(int EntityId) : ISimCommand;
+// Instant=true (god mode) removes the structure immediately and
+// drops a minified thing — same end-state as a colonist completing
+// the work, just without the worker step.
+public readonly record struct UninstallStructureCommand(int EntityId, bool Instant = false) : ISimCommand;
 
 // Deconstruct a built structure. Refunds 50% of the def's materials
 // at the structure tile and removes the structure.
 // Future: timed work job; for now applied immediately.
-public readonly record struct DeconstructStructureCommand(int EntityId) : ISimCommand;
+public readonly record struct DeconstructStructureCommand(int EntityId, bool Instant = false) : ISimCommand;
 
 // Wipes any zone/designation/blueprint-ghost entity that overlaps the
 // rect. Zones removed if any tile of their rect is inside; designations

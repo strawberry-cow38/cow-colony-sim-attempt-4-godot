@@ -28,6 +28,7 @@ public partial class Bootstrap : Node3D
     private Heightfield? _heightfield;
     private HeightfieldGenerator.Settings _genSettings;
     private ChunkedTerrainRenderer? _terrain;
+    private BuildToolService? _buildTools;
 
     public override void _Ready()
     {
@@ -102,6 +103,9 @@ public partial class Bootstrap : Node3D
         AddSelectionRing(selection, _runtime, _heightfield);
         AddPylonRangeRing(selection, _runtime, _heightfield);
         AddReservationOverlay(selection, _runtime, _heightfield);
+        _buildTools = new BuildToolService { Name = "BuildTools" };
+        AddChild(_buildTools);
+        selection.SetBuildTools(_buildTools);
         AddInfoPanel(selection, _runtime);
         AddPortraitBar(selection, _runtime);
         AddContextMenu(selection, _runtime);
@@ -516,6 +520,7 @@ public partial class Bootstrap : Node3D
     {
         var panel = new InfoPanel { Name = "InfoPanel" };
         panel.Configure(selection, runtime.Publisher, runtime.Commands);
+        if (_buildTools is not null) panel.SetBuildTools(_buildTools);
         AddChild(panel);
     }
 
@@ -550,9 +555,7 @@ public partial class Bootstrap : Node3D
 
     private void AddBuildBar(SelectionService selection)
     {
-        var tools = new BuildToolService { Name = "BuildTools" };
-        AddChild(tools);
-        selection.SetBuildTools(tools);
+        var tools = _buildTools!;
 
         var bar = new BuildBar { Name = "BuildBar" };
         bar.Configure(tools);

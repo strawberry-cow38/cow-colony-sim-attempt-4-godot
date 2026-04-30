@@ -202,7 +202,7 @@ public partial class SelectionService : Node
         }
         if (SelectedStructureId is int structId)
         {
-            _commands.Submit(new DeconstructStructureCommand(structId));
+            _commands.Submit(new DeconstructStructureCommand(structId, _tools?.GodMode == true));
             return;
         }
         if (SelectedZoneId is int zoneId)

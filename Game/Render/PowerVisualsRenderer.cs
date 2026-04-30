@@ -21,7 +21,7 @@ public partial class PowerVisualsRenderer : Node3D
     private const int CablesPerEdge = 2;
     private const float SagPerMeter = 0.08f; // mid-span dip per metre of run
     private const float CableThicknessMeters = 0.08f;
-    private const float PylonTopOffsetMeters = 3.5f; // where cable hangs off pylon (matches insulator height)
+    private const float PylonTopOffsetMeters = 3.85f; // where cable hangs off pylon (matches insulator top)
     private const float ConsumerTopOffsetMeters = 1.6f;
     private const float LayerStepMeters = 0.75f; // matches StructuresRenderer / build stack quantum
     // Insulator X-offset on the pylon model (±0.678 m from pole centre). Pylon

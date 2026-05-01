@@ -333,6 +333,9 @@ public partial class PowerPlacementPreview : Node3D
             var ideal = new Vector2I((int)MathF.Round(px), (int)MathF.Round(py));
             TryEmitWithPullback(ideal, nrx, nry, spacing);
         }
+        // Mirror CommitSpacedDrag: drop a ghost at the cursor itself so the
+        // player sees the final pylon land where they're about to release.
+        if (!lastPlaced.HasValue || end != lastPlaced.Value) TryEmitWithPullback(end, nrx, nry, spacing);
         return slots;
     }
 

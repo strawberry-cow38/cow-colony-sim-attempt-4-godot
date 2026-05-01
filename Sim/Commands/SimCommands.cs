@@ -79,6 +79,12 @@ public readonly record struct UninstallStructureCommand(int EntityId, bool Insta
 // Future: timed work job; for now applied immediately.
 public readonly record struct DeconstructStructureCommand(int EntityId, bool Instant = false) : ISimCommand;
 
+// Drag-rect deconstruct designator. Walks every structure whose footprint
+// overlaps the rect and applies the same path as DeconstructStructureCommand
+// to it: queues a Deconstruct designation in normal mode, instantly removes
+// (with refund) when Instant=true.
+public readonly record struct DeconstructInRectCommand(TileRect Rect, bool Instant = false) : ISimCommand;
+
 // Wipes any zone/designation/blueprint-ghost entity that overlaps the
 // rect. Zones removed if any tile of their rect is inside; designations
 // + blueprint ghosts removed if their tile/origin is inside. Colonists,

@@ -94,6 +94,19 @@ public partial class PlacementTool : Node
         }
 
         if (ev is not InputEventMouseButton mb) return;
+
+        // RMB while dragging cancels the in-progress drag (rect or spaced)
+        // without committing anything. RMB outside a drag falls through so
+        // the camera/context-menu path keeps working.
+        if (mb.ButtonIndex == MouseButton.Right && mb.Pressed && _dragStart is not null)
+        {
+            _dragStart = null;
+            _rectOverlay.PreviewRect = null;
+            _powerPreview?.HidePreview();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         if (mb.ButtonIndex != MouseButton.Left) return;
 
         var tile = ProjectMouseToTile(mb.Position);
@@ -253,6 +266,14 @@ public partial class PlacementTool : Node
             var name = type == ZoneType.Stockpile ? "Stockpile" : "Farm";
             _commands.Submit(new CreateZoneCommand(type.Value, rect, name));
         }
+        else if (toolId == "designate.deconstruct")
+        {
+            // Deconstruct doesn't stamp tile designations — it walks
+            // structures inside the rect and applies the same toggle/instant
+            // path as the per-entity DeconstructStructureCommand. God mode
+            // forwards Instant=true so structures vanish immediately.
+            _commands.Submit(new DeconstructInRectCommand(rect, _tools.GodMode));
+        }
         else if (toolId.StartsWith("designate."))
         {
             var kind = toolId switch
@@ -352,6 +373,9 @@ public partial class PlacementTool : Node
             var ideal = new Vector2I((int)MathF.Round(px), (int)MathF.Round(py));
             TryEmitWithPullback(ideal);
         }
+        // Mouse-release point: if it isn't already on an interval step, drop a
+        // final pylon there too. Player gets to place exactly where they let go.
+        if (end != lastPlaced) TryEmitWithPullback(end);
     }
 
     private void HandleBlueprintClick(Vector2I tile, string toolId)
@@ -585,6 +609,7 @@ public partial class PlacementTool : Node
         "designate.mine" => new Color(0.55f, 0.55f, 0.6f, 0.30f),
         "designate.harvest" => new Color(0.95f, 0.85f, 0.30f, 0.30f),
         "designate.cut_plant" => new Color(0.95f, 0.55f, 0.20f, 0.30f),
+        "designate.deconstruct" => new Color(0.55f, 0.30f, 0.85f, 0.35f),
         "edit.erase" => new Color(0.95f, 0.20f, 0.20f, 0.35f),
         _ => new Color(0.3f, 0.55f, 0.95f, 0.30f),
     };

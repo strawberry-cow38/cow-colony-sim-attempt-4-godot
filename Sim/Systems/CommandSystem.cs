@@ -81,6 +81,9 @@ public sealed class CommandSystem : ITickSystem
                 case DeconstructStructureCommand ds:
                     Apply(ds);
                     break;
+                case DeconstructInRectCommand dir:
+                    Apply(dir);
+                    break;
                 case ForcePickupCommand fp:
                     Apply(fp);
                     break;
@@ -371,6 +374,35 @@ public sealed class CommandSystem : ITickSystem
     {
         if (cmd.Instant) { InstantRemoveStructure(cmd.EntityId, DesignationKind.Deconstruct); return; }
         ToggleStructureDesignation(cmd.EntityId, DesignationKind.Deconstruct, WorkKind.Deconstruct);
+    }
+
+    // Drag-rect deconstruct. Walks every Structure entity whose footprint
+    // overlaps the rect and routes it through the same path as a single
+    // DeconstructStructureCommand: Instant=true removes immediately + refunds,
+    // otherwise toggles a Deconstruct designation. Already-designated
+    // structures get their designation toggled off, matching the per-entity
+    // command's behavior, so dragging the rect twice clears the queue.
+    private void Apply(DeconstructInRectCommand cmd)
+    {
+        var rect = ClampRect(cmd.Rect);
+        var ids = new List<int>();
+        foreach (var entity in _world.Store.Query<Structure, TilePosition>().Entities)
+        {
+            ref var s = ref entity.GetComponent<Structure>();
+            if (!BlueprintCatalog.TryGet(s.DefId, out var def) || def is null) continue;
+            ref var pos = ref entity.GetComponent<TilePosition>();
+            var (w, h) = (s.Rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+            var sMaxX = pos.TileX + w - 1;
+            var sMaxY = pos.TileY + h - 1;
+            if (sMaxX < rect.MinX || pos.TileX > rect.MaxX) continue;
+            if (sMaxY < rect.MinY || pos.TileY > rect.MaxY) continue;
+            ids.Add(entity.Id);
+        }
+        for (var i = 0; i < ids.Count; i++)
+        {
+            if (cmd.Instant) InstantRemoveStructure(ids[i], DesignationKind.Deconstruct);
+            else ToggleStructureDesignation(ids[i], DesignationKind.Deconstruct, WorkKind.Deconstruct);
+        }
     }
 
     // God-mode shortcut: bypass the designation/worker pipeline and do

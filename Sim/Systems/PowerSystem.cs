@@ -18,42 +18,52 @@ public sealed class PowerSystem : ITickSystem
     public const float CableHopTiles = 8f;
     public const float ServiceRadiusTiles = 6f;
     // Each pylon connects to at most this many nearest neighbors (within
-    // CableHopTiles). Edge requires mutual top-K: both endpoints must rank
-    // the other in their nearest set, so a pylon's degree never exceeds K
-    // even when many others rank it as a neighbour.
+    // CableHopTiles). Recency-biased greedy claim: newest pylon (highest
+    // index) picks its nearest 5 unsaturated others first; older pylons
+    // fill remaining slots. Cap is enforced per-pylon so degree never
+    // exceeds K, but the newest "power line" is guaranteed its picks
+    // even if surrounding old pylons would otherwise be saturated.
     public const int MaxPylonNeighbors = 5;
 
     // Returns unordered (i < j) pylon index pairs that should be connected.
-    // Coords are arbitrary units; hopSqr must match those units squared.
+    // Caller convention: input list ordered oldest→newest. The algorithm
+    // walks indices n-1 down to 0 so the most recently placed pylon claims
+    // its nearest neighbours before any older pylon competes for the same
+    // slots. Coords are arbitrary units; hopSqr must match those units squared.
     public static List<(int i, int j)> ComputeNeighborPairs(
         IReadOnlyList<float> px, IReadOnlyList<float> py, float hopSqr, int maxNeighbors = MaxPylonNeighbors)
     {
         var n = px.Count;
-        var nearest = new HashSet<int>[n];
+        var degree = new int[n];
+        var adj = new HashSet<long>();
+        var pairs = new List<(int i, int j)>();
         var buf = new List<(float sqr, int idx)>(n);
-        for (var i = 0; i < n; i++)
+        for (var k = n - 1; k >= 0; k--)
         {
+            if (degree[k] >= maxNeighbors) continue;
             buf.Clear();
             for (var j = 0; j < n; j++)
             {
-                if (j == i) continue;
-                var dx = px[i] - px[j];
-                var dy = py[i] - py[j];
+                if (j == k) continue;
+                if (degree[j] >= maxNeighbors) continue;
+                var dx = px[k] - px[j];
+                var dy = py[k] - py[j];
                 var sqr = dx * dx + dy * dy;
                 if (sqr > hopSqr) continue;
                 buf.Add((sqr, j));
             }
             buf.Sort((a, b) => a.sqr.CompareTo(b.sqr));
-            var take = System.Math.Min(maxNeighbors, buf.Count);
-            var set = new HashSet<int>(take);
-            for (var t = 0; t < take; t++) set.Add(buf[t].idx);
-            nearest[i] = set;
-        }
-        var pairs = new List<(int i, int j)>();
-        for (var i = 0; i < n; i++)
-        for (var j = i + 1; j < n; j++)
-        {
-            if (nearest[i].Contains(j) && nearest[j].Contains(i)) pairs.Add((i, j));
+            for (var t = 0; t < buf.Count && degree[k] < maxNeighbors; t++)
+            {
+                var j = buf[t].idx;
+                if (degree[j] >= maxNeighbors) continue;
+                var lo = System.Math.Min(k, j);
+                var hi = System.Math.Max(k, j);
+                var key = ((long)lo << 32) | (uint)hi;
+                if (!adj.Add(key)) continue;
+                degree[k]++; degree[j]++;
+                pairs.Add((lo, hi));
+            }
         }
         return pairs;
     }
@@ -88,18 +98,27 @@ public sealed class PowerSystem : ITickSystem
         _edges.Clear();
         _world.Power.Clear();
 
-        // Snapshot pylon entities + their tile coords.
-        var pylonIds = new List<int>();
-        var pylonTx = new List<int>();
-        var pylonTy = new List<int>();
+        // Snapshot pylon entities + their tile coords. ComputeNeighborPairs
+        // expects oldest→newest order so the recency-biased greedy claim
+        // walks newest pylons first — sort by entity id so newer ids land
+        // last in the list.
+        var pylonRows = new List<(int id, int tx, int ty)>();
         foreach (var entity in _world.Store.Query<PowerNode, TilePosition>().Entities)
         {
             ref var node = ref entity.GetComponent<PowerNode>();
             if (node.Kind != PowerNodeKind.Pylon) continue;
             ref var pos = ref entity.GetComponent<TilePosition>();
-            pylonIds.Add(entity.Id);
-            pylonTx.Add(pos.TileX);
-            pylonTy.Add(pos.TileY);
+            pylonRows.Add((entity.Id, pos.TileX, pos.TileY));
+        }
+        pylonRows.Sort((a, b) => a.id.CompareTo(b.id));
+        var pylonIds = new List<int>(pylonRows.Count);
+        var pylonTx = new List<int>(pylonRows.Count);
+        var pylonTy = new List<int>(pylonRows.Count);
+        for (var r = 0; r < pylonRows.Count; r++)
+        {
+            pylonIds.Add(pylonRows[r].id);
+            pylonTx.Add(pylonRows[r].tx);
+            pylonTy.Add(pylonRows[r].ty);
         }
 
         // Union-find across pylons within cable-hop range.

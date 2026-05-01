@@ -190,27 +190,32 @@ public partial class PylonsRenderer : Node3D
     // neighbors instead of all defaulting to the same yaw.
     public static Dictionary<int, Vector2> BuildSyntheticPylonFacings(SimSnapshot snap)
     {
-        var ids = new List<int>();
-        var mx = new List<float>();
-        var my = new List<float>();
+        // Collect pylon-bearing structures + ghosts, then sort by entity id
+        // so ComputeNeighborPairs sees them oldest→newest. Mirrors PowerSystem.
+        var rows = new List<(int id, float mx, float my)>();
         for (var i = 0; i < snap.Structures.Count; i++)
         {
             var s = snap.Structures[i];
             if (!BlueprintCatalog.TryGet(s.DefId, out var def) || def is null) continue;
             if (def.Power != PowerNodeKind.Pylon) continue;
-            ids.Add(s.EntityId);
-            mx.Add((s.TileX + def.FootprintW * 0.5f) * SimConstants.MetersPerTile);
-            my.Add((s.TileY + def.FootprintH * 0.5f) * SimConstants.MetersPerTile);
+            rows.Add((s.EntityId,
+                (s.TileX + def.FootprintW * 0.5f) * SimConstants.MetersPerTile,
+                (s.TileY + def.FootprintH * 0.5f) * SimConstants.MetersPerTile));
         }
         for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
         {
             var g = snap.BlueprintGhosts[i];
             if (!BlueprintCatalog.TryGet(g.DefId, out var def) || def is null) continue;
             if (def.Power != PowerNodeKind.Pylon) continue;
-            ids.Add(g.EntityId);
-            mx.Add((g.OriginTileX + def.FootprintW * 0.5f) * SimConstants.MetersPerTile);
-            my.Add((g.OriginTileY + def.FootprintH * 0.5f) * SimConstants.MetersPerTile);
+            rows.Add((g.EntityId,
+                (g.OriginTileX + def.FootprintW * 0.5f) * SimConstants.MetersPerTile,
+                (g.OriginTileY + def.FootprintH * 0.5f) * SimConstants.MetersPerTile));
         }
+        rows.Sort((a, b) => a.id.CompareTo(b.id));
+        var ids = new List<int>(rows.Count);
+        var mx = new List<float>(rows.Count);
+        var my = new List<float>(rows.Count);
+        for (var r = 0; r < rows.Count; r++) { ids.Add(rows[r].id); mx.Add(rows[r].mx); my.Add(rows[r].my); }
         var hopMeters = Sim.Systems.PowerSystem.CableHopTiles * SimConstants.MetersPerTile;
         var hopSqr = hopMeters * hopMeters;
         var sums = new Dictionary<int, Vector2>();

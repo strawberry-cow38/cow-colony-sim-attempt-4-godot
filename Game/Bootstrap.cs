@@ -581,6 +581,7 @@ public partial class Bootstrap : Node3D
         var rectOverlay = new RectDragOverlay { Name = "RectDragOverlay" };
         rectOverlay.Configure(_heightfield!);
         AddChild(rectOverlay);
+        selection.SetRectOverlay(rectOverlay);
 
         var ghostPreview = new BlueprintGhostPreview { Name = "BlueprintGhostPreview" };
         ghostPreview.Configure(_heightfield!);

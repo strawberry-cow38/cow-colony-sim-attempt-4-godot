@@ -19,13 +19,23 @@ public partial class SelectionService : Node
 {
     private const float ColonistPickRadiusUnits = 30f;
     private const int TilesPerCell = 256;
+    // LMB-press to LMB-release moves of less than this many pixels stay
+    // a click; any further and it's a drag-rect selection. Tuned by feel
+    // — too small misfires drag from camera-shake, too large breaks small
+    // rect selects. 8px works at 1080p and 1440p.
+    private const float DragThresholdPx = 8f;
+    private static readonly Color SelectionRectColor = new(0.20f, 0.85f, 0.50f, 0.30f);
 
     private SnapshotPublisher _publisher = null!;
     private CommandBus _commands = null!;
     private Heightfield _heightfield = null!;
     private BuildToolService? _tools;
     private ContextMenu? _contextMenu;
+    private RectDragOverlay? _rectOverlay;
     private float _unitsPerMeter;
+
+    private Vector2? _lmbDragStartScreen;
+    private Vector2I? _lmbDragStartTile;
 
     public int? SelectedEntityId { get; private set; }
     public int? SelectedZoneId { get; private set; }
@@ -35,6 +45,12 @@ public partial class SelectionService : Node
     public int? SelectedBlueprintId { get; private set; }
     public int? SelectedStructureId { get; private set; }
     public Vector2? SelectedGroundXZUnits { get; private set; }
+
+    // Multi-select for colonists (drag-rect, shift-click). The primary
+    // SelectedEntityId is always one of these when non-empty — info panel
+    // and context menu still target the primary, but mass commands
+    // (draft, move, prioritize) iterate the full set.
+    public HashSet<int> SelectedColonistIds { get; } = new();
 
     public event System.Action? SelectionChanged;
 
@@ -48,6 +64,8 @@ public partial class SelectionService : Node
     public void SetBuildTools(BuildToolService tools) => _tools = tools;
 
     public void SetContextMenu(ContextMenu menu) => _contextMenu = menu;
+
+    public void SetRectOverlay(RectDragOverlay overlay) => _rectOverlay = overlay;
 
     public override void _Ready()
     {
@@ -295,49 +313,252 @@ public partial class SelectionService : Node
             HandleSelectionShortcut(ke);
             return;
         }
-        if (ev is not InputEventMouseButton mb || !mb.Pressed) return;
-        if (_tools is not null && !string.IsNullOrEmpty(_tools.ActiveToolId)) return;
+
+        // A build tool grabbing input mid-drag means the player switched
+        // mid-gesture; cancel the in-progress selection drag so we don't
+        // commit a phantom rect when no tool is active again.
+        if (_tools is not null && !string.IsNullOrEmpty(_tools.ActiveToolId))
+        {
+            CancelLmbDrag();
+            return;
+        }
+
+        if (ev is InputEventMouseMotion mm)
+        {
+            UpdateSelectionDragPreview(mm.Position);
+            return;
+        }
+
+        if (ev is not InputEventMouseButton mb) return;
 
         var camera = GetViewport().GetCamera3D();
         if (camera is null) return;
 
+        if (mb.ButtonIndex == MouseButton.Left)
+        {
+            HandleLeftMouse(camera, mb);
+            return;
+        }
+        if (mb.ButtonIndex == MouseButton.Right && mb.Pressed)
+        {
+            HandleRightMouse(camera, mb);
+        }
+    }
+
+    private void HandleLeftMouse(Camera3D camera, InputEventMouseButton mb)
+    {
+        if (mb.Pressed)
+        {
+            _lmbDragStartScreen = mb.Position;
+            _lmbDragStartTile = ProjectMouseToTile(mb.Position);
+            return;
+        }
+
+        var startScreen = _lmbDragStartScreen;
+        var startTile = _lmbDragStartTile;
+        _lmbDragStartScreen = null;
+        _lmbDragStartTile = null;
+        if (_rectOverlay is not null) _rectOverlay.PreviewRect = null;
+        if (startScreen is null) return;
+
+        var dragDist = (mb.Position - startScreen.Value).Length();
+        if (dragDist >= DragThresholdPx && startTile is not null)
+        {
+            var endTile = ProjectMouseToTile(mb.Position);
+            if (endTile is not null)
+            {
+                DragRectSelectColonists(startTile.Value, endTile.Value, mb.ShiftPressed);
+                return;
+            }
+        }
+
+        // It was a click, not a drag — run the existing pick chain.
+        var groundHit = TerrainRayCast.Project(camera, mb.Position, _heightfield);
+        if (groundHit is null) return;
+        HandleLeftClickPick(camera, mb.Position, groundHit.Value, mb.ShiftPressed);
+    }
+
+    private void HandleRightMouse(Camera3D camera, InputEventMouseButton mb)
+    {
         var groundHit = TerrainRayCast.Project(camera, mb.Position, _heightfield);
         if (groundHit is null) return;
         var hit = groundHit.Value;
 
-        if (mb.ButtonIndex == MouseButton.Left)
+        if (TryOpenTreeContextMenu(camera, mb.Position)) return;
+        if (TryOpenBoulderContextMenu(camera, mb.Position)) return;
+        if (TryOpenItemContextMenu(camera, mb.Position)) return;
+        if (TryOpenBlueprintContextMenu(camera, mb.Position)) return;
+
+        // Move every selected colonist if multi-selected; fall back to
+        // the primary so single-select right-click still moves one.
+        var ids = SelectedColonistIds.Count > 0
+            ? new List<int>(SelectedColonistIds)
+            : (SelectedEntityId is int id ? new List<int> { id } : new List<int>());
+        if (ids.Count == 0) return;
+
+        var tx = Mathf.Clamp((int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
+        var ty = Mathf.Clamp((int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
+        for (var i = 0; i < ids.Count; i++)
         {
-            if (SelectColonistNearRay(camera, mb.Position)) return;
-            if (SelectTreeNearRay(camera, mb.Position)) return;
-            if (SelectBoulderNearRay(camera, mb.Position)) return;
-            if (SelectItemNearRay(camera, mb.Position)) return;
-            // Try a 3D ray-vs-AABB pick on blueprints first so clicks anywhere
-            // on a tall ghost mesh hit it, not just on its ground footprint.
-            // The ground-derived tx/ty fallback below stays as a backup for
-            // flat/zero-height blueprints + structures + zones.
-            if (SelectBlueprintNearRay(camera, mb.Position)) return;
-            var tx = (int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile);
-            var ty = (int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile);
-            if (SelectStructureAtTile(tx, ty)) return;
-            if (SelectBlueprintAtTile(tx, ty)) return;
-            SelectZoneAtTile(tx, ty);
+            _commands.Submit(new MoveCommand(ids[i], new TileCoord(tx, ty)));
         }
-        else if (mb.ButtonIndex == MouseButton.Right)
+        SimLog.Logger.Information("Move command for {N} entity(ies) -> ({TX},{TY}).", ids.Count, tx, ty);
+    }
+
+    private void HandleLeftClickPick(Camera3D camera, Vector2 mousePos, Vector3 groundHit, bool shift)
+    {
+        var colonistId = PickColonistId(camera, mousePos);
+        if (colonistId is not null)
         {
-            if (TryOpenTreeContextMenu(camera, mb.Position)) return;
-            if (TryOpenBoulderContextMenu(camera, mb.Position)) return;
-            if (TryOpenItemContextMenu(camera, mb.Position)) return;
-            if (TryOpenBlueprintContextMenu(camera, mb.Position)) return;
-            if (SelectedEntityId is int id)
+            if (shift) ToggleColonistInMulti(colonistId.Value);
+            else SetSingleColonistSelection(colonistId.Value);
+            return;
+        }
+
+        // Shift on a non-colonist target is a no-op for now — multi-select
+        // beyond colonists isn't wired and we don't want shift to silently
+        // clobber the colonist multi.
+        if (shift) return;
+
+        SelectedColonistIds.Clear();
+        if (SelectTreeNearRay(camera, mousePos)) return;
+        if (SelectBoulderNearRay(camera, mousePos)) return;
+        if (SelectItemNearRay(camera, mousePos)) return;
+        if (SelectBlueprintNearRay(camera, mousePos)) return;
+        var tx = (int)MathF.Floor(groundHit.X / SimConstants.GodotUnitsPerTile);
+        var ty = (int)MathF.Floor(groundHit.Z / SimConstants.GodotUnitsPerTile);
+        if (SelectStructureAtTile(tx, ty)) return;
+        if (SelectBlueprintAtTile(tx, ty)) return;
+        SelectZoneAtTile(tx, ty);
+    }
+
+    private int? PickColonistId(Camera3D camera, Vector2 mousePos)
+    {
+        var origin = camera.ProjectRayOrigin(mousePos);
+        var dir = camera.ProjectRayNormal(mousePos).Normalized();
+        var snap = _publisher.Current;
+        var best = -1;
+        var bestDist = float.PositiveInfinity;
+        for (var i = 0; i < snap.Colonists.Count; i++)
+        {
+            var c = snap.Colonists[i];
+            var x = c.MetersX * _unitsPerMeter;
+            var z = c.MetersY * _unitsPerMeter;
+            var y = SampleGroundUnits(c.MetersX, c.MetersY) + 24f;
+            var p = new Vector3(x, y, z);
+            var toP = p - origin;
+            var t = toP.Dot(dir);
+            if (t < 0f) continue;
+            var closest = origin + dir * t;
+            var d = closest.DistanceTo(p);
+            if (d < bestDist && d < ColonistPickRadiusUnits)
             {
-                var tx = (int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile);
-                var ty = (int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile);
-                tx = Mathf.Clamp(tx, 0, TilesPerCell - 1);
-                ty = Mathf.Clamp(ty, 0, TilesPerCell - 1);
-                _commands.Submit(new MoveCommand(id, new TileCoord(tx, ty)));
-                SimLog.Logger.Information("Move command for entity {Id} -> ({TX},{TY}).", id, tx, ty);
+                bestDist = d;
+                best = c.EntityId;
             }
         }
+        return best == -1 ? null : best;
+    }
+
+    private void SetSingleColonistSelection(int id)
+    {
+        SelectedColonistIds.Clear();
+        SelectedColonistIds.Add(id);
+        SelectedEntityId = id;
+        ClearNonColonistSelections();
+        SelectionChanged?.Invoke();
+    }
+
+    private void ToggleColonistInMulti(int id)
+    {
+        if (SelectedColonistIds.Contains(id))
+        {
+            SelectedColonistIds.Remove(id);
+            if (SelectedEntityId == id)
+            {
+                SelectedEntityId = null;
+                foreach (var remaining in SelectedColonistIds) { SelectedEntityId = remaining; break; }
+            }
+        }
+        else
+        {
+            SelectedColonistIds.Add(id);
+            SelectedEntityId = id;
+        }
+        ClearNonColonistSelections();
+        SelectionChanged?.Invoke();
+    }
+
+    private void DragRectSelectColonists(Vector2I a, Vector2I b, bool shift)
+    {
+        var rect = TileRect.FromCorners(a.X, a.Y, b.X, b.Y);
+        var snap = _publisher.Current;
+        var hits = new List<int>();
+        for (var i = 0; i < snap.Colonists.Count; i++)
+        {
+            var c = snap.Colonists[i];
+            var tx = (int)MathF.Floor(c.MetersX / SimConstants.MetersPerTile);
+            var ty = (int)MathF.Floor(c.MetersY / SimConstants.MetersPerTile);
+            if (tx < rect.MinX || tx > rect.MaxX) continue;
+            if (ty < rect.MinY || ty > rect.MaxY) continue;
+            hits.Add(c.EntityId);
+        }
+        if (hits.Count == 0)
+        {
+            // Empty rect with no shift = clear; with shift = keep prior.
+            if (!shift) ClearAll();
+            return;
+        }
+        if (!shift) SelectedColonistIds.Clear();
+        for (var i = 0; i < hits.Count; i++) SelectedColonistIds.Add(hits[i]);
+        SelectedEntityId = hits[0];
+        ClearNonColonistSelections();
+        SelectionChanged?.Invoke();
+    }
+
+    private void ClearNonColonistSelections()
+    {
+        SelectedZoneId = null;
+        SelectedTreeId = null;
+        SelectedBoulderId = null;
+        SelectedItemId = null;
+        SelectedBlueprintId = null;
+        SelectedStructureId = null;
+    }
+
+    private void UpdateSelectionDragPreview(Vector2 mousePos)
+    {
+        if (_lmbDragStartTile is null || _lmbDragStartScreen is null || _rectOverlay is null) return;
+        if ((mousePos - _lmbDragStartScreen.Value).Length() < DragThresholdPx)
+        {
+            _rectOverlay.PreviewRect = null;
+            return;
+        }
+        var hovered = ProjectMouseToTile(mousePos);
+        if (hovered is null) return;
+        _rectOverlay.QuadColor = SelectionRectColor;
+        _rectOverlay.PreviewRect = TileRect.FromCorners(
+            _lmbDragStartTile.Value.X, _lmbDragStartTile.Value.Y,
+            hovered.Value.X, hovered.Value.Y);
+    }
+
+    private void CancelLmbDrag()
+    {
+        if (_lmbDragStartScreen is null) return;
+        _lmbDragStartScreen = null;
+        _lmbDragStartTile = null;
+        if (_rectOverlay is not null) _rectOverlay.PreviewRect = null;
+    }
+
+    private Vector2I? ProjectMouseToTile(Vector2 mousePos)
+    {
+        var camera = GetViewport().GetCamera3D();
+        if (camera is null) return null;
+        var hit = TerrainRayCast.Project(camera, mousePos, _heightfield);
+        if (hit is null) return null;
+        var tx = (int)MathF.Floor(hit.Value.X / SimConstants.GodotUnitsPerTile);
+        var ty = (int)MathF.Floor(hit.Value.Z / SimConstants.GodotUnitsPerTile);
+        return new Vector2I(tx, ty);
     }
 
     private void SelectZoneAtTile(int tx, int ty)
@@ -365,6 +586,7 @@ public partial class SelectionService : Node
         if (SelectedItemId is not null) { SelectedItemId = null; changed = true; }
         if (SelectedBlueprintId is not null) { SelectedBlueprintId = null; changed = true; }
         if (SelectedStructureId is not null) { SelectedStructureId = null; changed = true; }
+        if (SelectedColonistIds.Count > 0) { SelectedColonistIds.Clear(); changed = true; }
         if (changed) SelectionChanged?.Invoke();
     }
 
@@ -372,7 +594,8 @@ public partial class SelectionService : Node
     {
         var changed = SelectedEntityId is not null || SelectedZoneId is not null
             || SelectedTreeId is not null || SelectedBoulderId is not null || SelectedItemId is not null
-            || SelectedBlueprintId is not null || SelectedStructureId is not null;
+            || SelectedBlueprintId is not null || SelectedStructureId is not null
+            || SelectedColonistIds.Count > 0;
         SelectedEntityId = null;
         SelectedZoneId = null;
         SelectedTreeId = null;
@@ -380,6 +603,7 @@ public partial class SelectionService : Node
         SelectedItemId = null;
         SelectedBlueprintId = null;
         SelectedStructureId = null;
+        SelectedColonistIds.Clear();
         if (changed) SelectionChanged?.Invoke();
     }
 
@@ -695,11 +919,13 @@ public partial class SelectionService : Node
     }
 
     // Select a colonist by entity id directly — used by the portrait bar
-    // when the player clicks a portrait. Mirrors SelectColonistNearRay's
-    // clearing behavior so other selections drop together.
+    // when the player clicks a portrait. Replaces any prior multi.
     public void SelectColonist(int entityId)
     {
-        if (SelectedEntityId == entityId) return;
+        if (SelectedEntityId == entityId && SelectedColonistIds.Count == 1
+            && SelectedColonistIds.Contains(entityId)) return;
+        SelectedColonistIds.Clear();
+        SelectedColonistIds.Add(entityId);
         SelectedEntityId = entityId;
         if (SelectedZoneId is not null) SelectedZoneId = null;
         if (SelectedTreeId is not null) SelectedTreeId = null;
@@ -708,44 +934,6 @@ public partial class SelectionService : Node
         if (SelectedBlueprintId is not null) SelectedBlueprintId = null;
         if (SelectedStructureId is not null) SelectedStructureId = null;
         SelectionChanged?.Invoke();
-    }
-
-    private bool SelectColonistNearRay(Camera3D camera, Vector2 mousePos)
-    {
-        var origin = camera.ProjectRayOrigin(mousePos);
-        var dir = camera.ProjectRayNormal(mousePos).Normalized();
-
-        var snap = _publisher.Current;
-        var best = -1;
-        var bestDist = float.PositiveInfinity;
-
-        for (var i = 0; i < snap.Colonists.Count; i++)
-        {
-            var c = snap.Colonists[i];
-            var x = c.MetersX * _unitsPerMeter;
-            var z = c.MetersY * _unitsPerMeter;
-            var y = SampleGroundUnits(c.MetersX, c.MetersY) + 24f;
-            var p = new Vector3(x, y, z);
-            var toP = p - origin;
-            var t = toP.Dot(dir);
-            if (t < 0f) continue;
-            var closest = origin + dir * t;
-            var d = closest.DistanceTo(p);
-            if (d < bestDist && d < ColonistPickRadiusUnits)
-            {
-                bestDist = d;
-                best = c.EntityId;
-            }
-        }
-
-        if (best == -1) return false;
-        SelectedEntityId = best;
-        if (SelectedZoneId is not null) SelectedZoneId = null;
-        if (SelectedTreeId is not null) SelectedTreeId = null;
-        if (SelectedBoulderId is not null) SelectedBoulderId = null;
-        if (SelectedItemId is not null) SelectedItemId = null;
-        SelectionChanged?.Invoke();
-        return true;
     }
 
     private static bool RayCylinderHit(

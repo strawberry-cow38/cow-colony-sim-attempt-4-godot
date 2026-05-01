@@ -418,48 +418,171 @@ public partial class SelectionService : Node
         }
     }
 
-    // Returns true if the click hit any pickable entity and the kind has
-    // a multi-select implementation. Colonists fully supported. Other
-    // kinds short-circuit (single-pick path stays in HandleLeftClickPick).
+    // Returns true when the click hit any kind we can select-similar on.
+    // Order mirrors the click-stack — colonist ahead of trees ahead of
+    // terrain entities — so a double-click on top of a stack picks the
+    // most-foreground kind first.
     private bool TryDoubleClickSelectSimilar(Camera3D camera, Vector2 mousePos)
     {
-        var clickedColonistId = PickColonistId(camera, mousePos);
-        if (clickedColonistId is int cid)
-        {
-            SelectAllVisibleColonists(camera, cid);
-            return true;
-        }
+        if (PickColonistId(camera, mousePos) is int cid) { SelectAllVisibleColonists(camera, cid); return true; }
+        if (PickTreeId(camera, mousePos) is int tid) { SelectAllVisibleTrees(camera, tid); return true; }
+        if (PickBoulderId(camera, mousePos) is int bid) { SelectAllVisibleBoulders(camera, bid); return true; }
+        if (PickItemId(camera, mousePos) is int iid) { SelectAllVisibleItems(camera, iid); return true; }
+        if (PickBlueprintId(camera, mousePos) is int gid) { SelectAllVisibleBlueprints(camera, gid); return true; }
 
-        // Tree / boulder / item / blueprint / structure double-click currently
-        // falls back to single-pick — multi-select for those kinds isn't wired
-        // yet. Returning false lets the normal click-pick run on release.
+        // Structures: ground-projected pick. Treat the ground hit point as
+        // the click location — gives us a tile to test against structure
+        // footprints, same path as right-click context menu.
+        var groundHit = TerrainRayCast.Project(camera, mousePos, _heightfield);
+        if (groundHit is Vector3 gh)
+        {
+            var tx = (int)MathF.Floor(gh.X / SimConstants.GodotUnitsPerTile);
+            var ty = (int)MathF.Floor(gh.Z / SimConstants.GodotUnitsPerTile);
+            if (PickStructureAtTile(tx, ty) is int sid) { SelectAllVisibleStructures(camera, sid); return true; }
+        }
         return false;
     }
 
     private void SelectAllVisibleColonists(Camera3D camera, int primaryId)
     {
         var snap = _publisher.Current;
-        var viewport = GetViewport();
-        var size = viewport?.GetVisibleRect().Size ?? new Vector2(1920f, 1080f);
-        var screenRect = new Rect2(Vector2.Zero, size);
+        var screenRect = ViewportScreenRect();
 
-        SelectedColonistIds.Clear();
+        ClearAll();
         for (var i = 0; i < snap.Colonists.Count; i++)
         {
             var c = snap.Colonists[i];
-            var x = c.MetersX * _unitsPerMeter;
-            var z = c.MetersY * _unitsPerMeter;
-            var y = SampleGroundUnits(c.MetersX, c.MetersY) + 24f;
-            var world = new Vector3(x, y, z);
+            var world = new Vector3(c.MetersX * _unitsPerMeter,
+                SampleGroundUnits(c.MetersX, c.MetersY) + 24f,
+                c.MetersY * _unitsPerMeter);
             if (camera.IsPositionBehind(world)) continue;
-            var screen = camera.UnprojectPosition(world);
-            if (!screenRect.HasPoint(screen)) continue;
+            if (!screenRect.HasPoint(camera.UnprojectPosition(world))) continue;
             SelectedColonistIds.Add(c.EntityId);
         }
         SelectedColonistIds.Add(primaryId);
         SelectedEntityId = primaryId;
-        ClearNonColonistSelections();
         SelectionChanged?.Invoke();
+    }
+
+    private void SelectAllVisibleTrees(Camera3D camera, int primaryId)
+    {
+        var snap = _publisher.Current;
+        var screenRect = ViewportScreenRect();
+        ClearAll();
+        for (var i = 0; i < snap.Trees.Count; i++)
+        {
+            var t = snap.Trees[i];
+            if (!IsTileVisible(camera, screenRect, t.TileX, t.TileY)) continue;
+            SelectedTreeIds.Add(t.EntityId);
+        }
+        SelectedTreeIds.Add(primaryId);
+        SelectedTreeId = primaryId;
+        SelectionChanged?.Invoke();
+    }
+
+    private void SelectAllVisibleBoulders(Camera3D camera, int primaryId)
+    {
+        var snap = _publisher.Current;
+        var screenRect = ViewportScreenRect();
+        ClearAll();
+        for (var i = 0; i < snap.Boulders.Count; i++)
+        {
+            var b = snap.Boulders[i];
+            if (!IsTileVisible(camera, screenRect, b.TileX, b.TileY)) continue;
+            SelectedBoulderIds.Add(b.EntityId);
+        }
+        SelectedBoulderIds.Add(primaryId);
+        SelectedBoulderId = primaryId;
+        SelectionChanged?.Invoke();
+    }
+
+    private void SelectAllVisibleItems(Camera3D camera, int primaryId)
+    {
+        var snap = _publisher.Current;
+        var screenRect = ViewportScreenRect();
+        ClearAll();
+
+        // Match the primary's kind so double-clicking a log selects every
+        // log in view, not every random item. Items are dense in stockpiles
+        // so kind-filtering keeps the result useful.
+        Sim.Items.ItemKind? primaryKind = null;
+        for (var i = 0; i < snap.Items.Count; i++)
+        {
+            if (snap.Items[i].EntityId == primaryId) { primaryKind = snap.Items[i].Kind; break; }
+        }
+        for (var i = 0; i < snap.Items.Count; i++)
+        {
+            var it = snap.Items[i];
+            if (primaryKind is not null && it.Kind != primaryKind) continue;
+            if (!IsTileVisible(camera, screenRect, it.TileX, it.TileY)) continue;
+            SelectedItemIds.Add(it.EntityId);
+        }
+        SelectedItemIds.Add(primaryId);
+        SelectedItemId = primaryId;
+        SelectionChanged?.Invoke();
+    }
+
+    private void SelectAllVisibleBlueprints(Camera3D camera, int primaryId)
+    {
+        var snap = _publisher.Current;
+        var screenRect = ViewportScreenRect();
+        ClearAll();
+
+        string? primaryDefId = null;
+        for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+        {
+            if (snap.BlueprintGhosts[i].EntityId == primaryId) { primaryDefId = snap.BlueprintGhosts[i].DefId; break; }
+        }
+        for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+        {
+            var g = snap.BlueprintGhosts[i];
+            if (primaryDefId is not null && g.DefId != primaryDefId) continue;
+            if (!IsTileVisible(camera, screenRect, g.OriginTileX, g.OriginTileY)) continue;
+            SelectedBlueprintIds.Add(g.EntityId);
+        }
+        SelectedBlueprintIds.Add(primaryId);
+        SelectedBlueprintId = primaryId;
+        SelectionChanged?.Invoke();
+    }
+
+    private void SelectAllVisibleStructures(Camera3D camera, int primaryId)
+    {
+        var snap = _publisher.Current;
+        var screenRect = ViewportScreenRect();
+        ClearAll();
+
+        string? primaryDefId = null;
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            if (snap.Structures[i].EntityId == primaryId) { primaryDefId = snap.Structures[i].DefId; break; }
+        }
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            var s = snap.Structures[i];
+            if (primaryDefId is not null && s.DefId != primaryDefId) continue;
+            if (!IsTileVisible(camera, screenRect, s.TileX, s.TileY)) continue;
+            SelectedStructureIds.Add(s.EntityId);
+        }
+        SelectedStructureIds.Add(primaryId);
+        SelectedStructureId = primaryId;
+        SelectionChanged?.Invoke();
+    }
+
+    private Rect2 ViewportScreenRect()
+    {
+        var size = GetViewport()?.GetVisibleRect().Size ?? new Vector2(1920f, 1080f);
+        return new Rect2(Vector2.Zero, size);
+    }
+
+    private bool IsTileVisible(Camera3D camera, Rect2 screenRect, int tileX, int tileY)
+    {
+        var metersX = (tileX + 0.5f) * SimConstants.MetersPerTile;
+        var metersY = (tileY + 0.5f) * SimConstants.MetersPerTile;
+        var world = new Vector3(metersX * _unitsPerMeter,
+            SampleGroundUnits(metersX, metersY) + 12f,
+            metersY * _unitsPerMeter);
+        if (camera.IsPositionBehind(world)) return false;
+        return screenRect.HasPoint(camera.UnprojectPosition(world));
     }
 
     private bool IsColonist(int entityId)

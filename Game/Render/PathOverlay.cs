@@ -16,8 +16,12 @@ namespace CowColonySim.Game.Render;
 public partial class PathOverlay : Node3D
 {
     private const float LineLiftMeters = 0.15f;
-    private const float RingInnerMeters = 0.6f;
-    private const float RingOuterMeters = 0.85f;
+    // Torus tube radius = (Outer - Inner) / 2. The 0.6/0.85 pair gave a
+    // 0.125m tube which vanishes at zoom-out — bumped to a 0.40m tube on
+    // a 1.5m ring so waypoint markers stay legible at typical play
+    // distances. Active + queued share the same dimensions.
+    private const float RingInnerMeters = 1.1f;
+    private const float RingOuterMeters = 1.5f;
 
     private SnapshotPublisher _publisher = null!;
     private Heightfield _heightfield = null!;

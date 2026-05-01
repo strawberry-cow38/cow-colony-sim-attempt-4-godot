@@ -32,7 +32,15 @@ public sealed record BlueprintDef(
     // is rejected — a 2nd pylon/furniture clicked on the same tile won't
     // auto-stack above the first. Walls/doors flip this so multi-tier
     // wall stacks still work via auto-resolved BaseLayer.
-    bool Stackable = false)
+    bool Stackable = false,
+    // Marks this def as a usable top surface — table-lamps, decor, etc.
+    // can be placed atop it. Coupled with RequiresSurface on the consumer.
+    bool IsSurface = false,
+    // When true, placement is only valid where every footprint tile has a
+    // structure/ghost flagged IsSurface ending exactly at the new BaseLayer.
+    // Auto-stacks BaseLayer onto the surface top so the player doesn't have
+    // to fiddle with Q/E.
+    bool RequiresSurface = false)
 {
     // Height converted to 0.75 m vertical quanta — matches the terrain
     // quantum + the build-layer step. Quarter wall = 1, half wall = 2,

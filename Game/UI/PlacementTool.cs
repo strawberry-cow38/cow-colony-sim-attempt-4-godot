@@ -391,7 +391,49 @@ public partial class PlacementTool : Node
         var (w, h) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
         if (baseLayer == 0 && !IsFootprintLevel(origin.X, origin.Y, w, h)) return false;
         if (IsFootprintObstructed(origin.X, origin.Y, w, h, baseLayer, def.HeightQuanta)) return false;
+        if (def.RequiresSurface && !IsFootprintCoveredBySurface(origin.X, origin.Y, w, h, baseLayer)) return false;
         return true;
+    }
+
+    // Every tile of the footprint must have a structure/ghost flagged
+    // IsSurface whose top (BaseLayer + HeightQuanta) lands exactly at
+    // the new BaseLayer. Used by table-lamp / decor placement.
+    private bool IsFootprintCoveredBySurface(int ox, int oy, int w, int h, int baseLayer)
+    {
+        for (var ty = oy; ty < oy + h; ty++)
+        {
+            for (var tx = ox; tx < ox + w; tx++)
+            {
+                if (!HasSurfaceAt(tx, ty, baseLayer)) return false;
+            }
+        }
+        return true;
+    }
+
+    private bool HasSurfaceAt(int tileX, int tileY, int requiredTopLayer)
+    {
+        var snap = _publisher.Current;
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            var s = snap.Structures[i];
+            if (!BlueprintCatalog.TryGet(s.DefId, out var sd) || sd is null) continue;
+            if (!sd.IsSurface) continue;
+            var (sw, sh) = (s.Rotation & 1) == 0 ? (sd.FootprintW, sd.FootprintH) : (sd.FootprintH, sd.FootprintW);
+            if (tileX < s.TileX || tileX >= s.TileX + sw) continue;
+            if (tileY < s.TileY || tileY >= s.TileY + sh) continue;
+            if (s.BaseLayer + sd.HeightQuanta == requiredTopLayer) return true;
+        }
+        for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+        {
+            var g = snap.BlueprintGhosts[i];
+            if (!BlueprintCatalog.TryGet(g.DefId, out var gd) || gd is null) continue;
+            if (!gd.IsSurface) continue;
+            var (gw, gh) = (g.Rotation & 1) == 0 ? (gd.FootprintW, gd.FootprintH) : (gd.FootprintH, gd.FootprintW);
+            if (tileX < g.OriginTileX || tileX >= g.OriginTileX + gw) continue;
+            if (tileY < g.OriginTileY || tileY >= g.OriginTileY + gh) continue;
+            if (g.BaseLayer + gd.HeightQuanta == requiredTopLayer) return true;
+        }
+        return false;
     }
 
     // Stack height at the cursor: top of the tallest existing ghost
@@ -403,6 +445,7 @@ public partial class PlacementTool : Node
     // existing item.
     private int ResolveBaseLayer(BlueprintDef def, int rotation, Vector2I origin)
     {
+        if (def.RequiresSurface) return ResolveSurfaceTop(def, rotation, origin);
         if (!def.Stackable) return _tools.ActiveBuildLayer;
         var (w, h) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
         var minX = origin.X; var minY = origin.Y;
@@ -421,6 +464,43 @@ public partial class PlacementTool : Node
             if (ghostTop > top) top = ghostTop;
         }
         return top + _tools.ActiveBuildLayer;
+    }
+
+    // For RequiresSurface defs: find the tallest IsSurface structure/ghost
+    // overlapping the cursor footprint and snap BaseLayer to its top.
+    // Player's ActiveBuildLayer is ignored — surface placement is automatic.
+    private int ResolveSurfaceTop(BlueprintDef def, int rotation, Vector2I origin)
+    {
+        var (w, h) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+        var minX = origin.X; var minY = origin.Y;
+        var maxX = origin.X + w - 1; var maxY = origin.Y + h - 1;
+        var snap = _publisher.Current;
+        var top = 0;
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            var s = snap.Structures[i];
+            if (!BlueprintCatalog.TryGet(s.DefId, out var sd) || sd is null) continue;
+            if (!sd.IsSurface) continue;
+            var (sw, sh) = (s.Rotation & 1) == 0 ? (sd.FootprintW, sd.FootprintH) : (sd.FootprintH, sd.FootprintW);
+            var smx = s.TileX + sw - 1;
+            var smy = s.TileY + sh - 1;
+            if (minX > smx || maxX < s.TileX || minY > smy || maxY < s.TileY) continue;
+            var t = s.BaseLayer + sd.HeightQuanta;
+            if (t > top) top = t;
+        }
+        for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+        {
+            var g = snap.BlueprintGhosts[i];
+            if (!BlueprintCatalog.TryGet(g.DefId, out var gd) || gd is null) continue;
+            if (!gd.IsSurface) continue;
+            var (gw, gh) = (g.Rotation & 1) == 0 ? (gd.FootprintW, gd.FootprintH) : (gd.FootprintH, gd.FootprintW);
+            var gmx = g.OriginTileX + gw - 1;
+            var gmy = g.OriginTileY + gh - 1;
+            if (minX > gmx || maxX < g.OriginTileX || minY > gmy || maxY < g.OriginTileY) continue;
+            var t = g.BaseLayer + gd.HeightQuanta;
+            if (t > top) top = t;
+        }
+        return top;
     }
 
     private bool IsFootprintLevel(int ox, int oy, int w, int h)

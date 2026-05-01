@@ -172,7 +172,22 @@ public static class BlueprintCatalog
                 Rotatable: false,
                 Requirements: System.Array.Empty<FootprintRequirement>(),
                 HeightMeters: 0.75f,
-                Materials: new[] { new MaterialCost(ItemKind.Wood, 12) }),
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 12) },
+                IsSurface: true),
+
+            new BlueprintDef(
+                Id: "furniture.table_lamp",
+                DisplayName: "Table Lamp",
+                Category: BlueprintCategory.Furniture,
+                Placement: PlacementMode.Footprint,
+                FootprintW: 1, FootprintH: 1,
+                Rotatable: false,
+                Requirements: System.Array.Empty<FootprintRequirement>(),
+                HeightMeters: 0.6f,
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 1) },
+                Power: PowerNodeKind.Sink,
+                DefaultDemandW: 25f,
+                RequiresSurface: true),
         };
 
         var dict = new Dictionary<string, BlueprintDef>(defs.Length);

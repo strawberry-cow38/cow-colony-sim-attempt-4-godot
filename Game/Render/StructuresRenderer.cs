@@ -43,6 +43,8 @@ public partial class StructuresRenderer : Node3D
             // Pylons are drawn by PylonsRenderer (.glb meshes); skip them here so
             // the placeholder box doesn't render on top.
             if (def.Power == PowerNodeKind.Pylon) continue;
+            // Table lamps are drawn by TableLampRenderer.
+            if (s.DefId == "furniture.table_lamp") continue;
             seen.Add(s.EntityId);
 
             if (!_boxes.TryGetValue(s.EntityId, out var box))

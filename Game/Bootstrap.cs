@@ -538,6 +538,11 @@ public partial class Bootstrap : Node3D
         var bar = new PortraitBar { Name = "PortraitBar" };
         bar.Configure(selection, runtime.Publisher, _cameraRig!);
         AddChild(bar);
+        selection.SetPortraitBar(bar);
+
+        var screenOverlay = new ScreenSelectionOverlay { Name = "ScreenSelectionOverlay" };
+        AddChild(screenOverlay);
+        selection.SetScreenOverlay(screenOverlay);
     }
 
     private void AddContextMenu(SelectionService selection, SimRuntime runtime)
@@ -581,7 +586,6 @@ public partial class Bootstrap : Node3D
         var rectOverlay = new RectDragOverlay { Name = "RectDragOverlay" };
         rectOverlay.Configure(_heightfield!);
         AddChild(rectOverlay);
-        selection.SetRectOverlay(rectOverlay);
 
         var ghostPreview = new BlueprintGhostPreview { Name = "BlueprintGhostPreview" };
         ghostPreview.Configure(_heightfield!);

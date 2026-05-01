@@ -24,18 +24,17 @@ public partial class SelectionService : Node
     // — too small misfires drag from camera-shake, too large breaks small
     // rect selects. 8px works at 1080p and 1440p.
     private const float DragThresholdPx = 8f;
-    private static readonly Color SelectionRectColor = new(0.20f, 0.85f, 0.50f, 0.30f);
 
     private SnapshotPublisher _publisher = null!;
     private CommandBus _commands = null!;
     private Heightfield _heightfield = null!;
     private BuildToolService? _tools;
     private ContextMenu? _contextMenu;
-    private RectDragOverlay? _rectOverlay;
+    private ScreenSelectionOverlay? _screenOverlay;
+    private PortraitBar? _portraitBar;
     private float _unitsPerMeter;
 
     private Vector2? _lmbDragStartScreen;
-    private Vector2I? _lmbDragStartTile;
 
     public int? SelectedEntityId { get; private set; }
     public int? SelectedZoneId { get; private set; }
@@ -65,7 +64,9 @@ public partial class SelectionService : Node
 
     public void SetContextMenu(ContextMenu menu) => _contextMenu = menu;
 
-    public void SetRectOverlay(RectDragOverlay overlay) => _rectOverlay = overlay;
+    public void SetScreenOverlay(ScreenSelectionOverlay overlay) => _screenOverlay = overlay;
+
+    public void SetPortraitBar(PortraitBar bar) => _portraitBar = bar;
 
     public override void _Ready()
     {
@@ -350,32 +351,33 @@ public partial class SelectionService : Node
         if (mb.Pressed)
         {
             _lmbDragStartScreen = mb.Position;
-            _lmbDragStartTile = ProjectMouseToTile(mb.Position);
             return;
         }
 
         var startScreen = _lmbDragStartScreen;
-        var startTile = _lmbDragStartTile;
         _lmbDragStartScreen = null;
-        _lmbDragStartTile = null;
-        if (_rectOverlay is not null) _rectOverlay.PreviewRect = null;
+        if (_screenOverlay is not null) _screenOverlay.PreviewRect = null;
         if (startScreen is null) return;
 
         var dragDist = (mb.Position - startScreen.Value).Length();
-        if (dragDist >= DragThresholdPx && startTile is not null)
+        if (dragDist >= DragThresholdPx)
         {
-            var endTile = ProjectMouseToTile(mb.Position);
-            if (endTile is not null)
-            {
-                DragRectSelectColonists(startTile.Value, endTile.Value, mb.ShiftPressed);
-                return;
-            }
+            var rect = MakeScreenRect(startScreen.Value, mb.Position);
+            DragRectSelectColonists(camera, rect, mb.ShiftPressed);
+            return;
         }
 
         // It was a click, not a drag — run the existing pick chain.
         var groundHit = TerrainRayCast.Project(camera, mb.Position, _heightfield);
         if (groundHit is null) return;
         HandleLeftClickPick(camera, mb.Position, groundHit.Value, mb.ShiftPressed);
+    }
+
+    private static Rect2 MakeScreenRect(Vector2 a, Vector2 b)
+    {
+        var min = new Vector2(MathF.Min(a.X, b.X), MathF.Min(a.Y, b.Y));
+        var max = new Vector2(MathF.Max(a.X, b.X), MathF.Max(a.Y, b.Y));
+        return new Rect2(min, max - min);
     }
 
     private void HandleRightMouse(Camera3D camera, InputEventMouseButton mb)
@@ -489,20 +491,40 @@ public partial class SelectionService : Node
         SelectionChanged?.Invoke();
     }
 
-    private void DragRectSelectColonists(Vector2I a, Vector2I b, bool shift)
+    private void DragRectSelectColonists(Camera3D camera, Rect2 screenRect, bool shift)
     {
-        var rect = TileRect.FromCorners(a.X, a.Y, b.X, b.Y);
         var snap = _publisher.Current;
         var hits = new List<int>();
+        var seen = new HashSet<int>();
+
+        // World colonists: project each to screen and test against the rect.
+        // Colonists behind the camera (Z < 0 in clip space) get a negative
+        // depth from UnprojectPosition isn't available, so we test with a
+        // ray-direction sign instead.
         for (var i = 0; i < snap.Colonists.Count; i++)
         {
             var c = snap.Colonists[i];
-            var tx = (int)MathF.Floor(c.MetersX / SimConstants.MetersPerTile);
-            var ty = (int)MathF.Floor(c.MetersY / SimConstants.MetersPerTile);
-            if (tx < rect.MinX || tx > rect.MaxX) continue;
-            if (ty < rect.MinY || ty > rect.MaxY) continue;
-            hits.Add(c.EntityId);
+            var x = c.MetersX * _unitsPerMeter;
+            var z = c.MetersY * _unitsPerMeter;
+            var y = SampleGroundUnits(c.MetersX, c.MetersY) + 24f;
+            var world = new Vector3(x, y, z);
+            if (camera.IsPositionBehind(world)) continue;
+            var screen = camera.UnprojectPosition(world);
+            if (!screenRect.HasPoint(screen)) continue;
+            if (seen.Add(c.EntityId)) hits.Add(c.EntityId);
         }
+
+        // Portrait drag: any portrait whose global rect overlaps the screen
+        // rect counts as picked, even when the colonist itself is offscreen.
+        if (_portraitBar is not null)
+        {
+            foreach (var (entityId, portraitRect) in _portraitBar.GetPortraitGlobalRects())
+            {
+                if (!screenRect.Intersects(portraitRect)) continue;
+                if (seen.Add(entityId)) hits.Add(entityId);
+            }
+        }
+
         if (hits.Count == 0)
         {
             // Empty rect with no shift = clear; with shift = keep prior.
@@ -528,37 +550,20 @@ public partial class SelectionService : Node
 
     private void UpdateSelectionDragPreview(Vector2 mousePos)
     {
-        if (_lmbDragStartTile is null || _lmbDragStartScreen is null || _rectOverlay is null) return;
+        if (_lmbDragStartScreen is null || _screenOverlay is null) return;
         if ((mousePos - _lmbDragStartScreen.Value).Length() < DragThresholdPx)
         {
-            _rectOverlay.PreviewRect = null;
+            _screenOverlay.PreviewRect = null;
             return;
         }
-        var hovered = ProjectMouseToTile(mousePos);
-        if (hovered is null) return;
-        _rectOverlay.QuadColor = SelectionRectColor;
-        _rectOverlay.PreviewRect = TileRect.FromCorners(
-            _lmbDragStartTile.Value.X, _lmbDragStartTile.Value.Y,
-            hovered.Value.X, hovered.Value.Y);
+        _screenOverlay.PreviewRect = MakeScreenRect(_lmbDragStartScreen.Value, mousePos);
     }
 
     private void CancelLmbDrag()
     {
         if (_lmbDragStartScreen is null) return;
         _lmbDragStartScreen = null;
-        _lmbDragStartTile = null;
-        if (_rectOverlay is not null) _rectOverlay.PreviewRect = null;
-    }
-
-    private Vector2I? ProjectMouseToTile(Vector2 mousePos)
-    {
-        var camera = GetViewport().GetCamera3D();
-        if (camera is null) return null;
-        var hit = TerrainRayCast.Project(camera, mousePos, _heightfield);
-        if (hit is null) return null;
-        var tx = (int)MathF.Floor(hit.Value.X / SimConstants.GodotUnitsPerTile);
-        var ty = (int)MathF.Floor(hit.Value.Z / SimConstants.GodotUnitsPerTile);
-        return new Vector2I(tx, ty);
+        if (_screenOverlay is not null) _screenOverlay.PreviewRect = null;
     }
 
     private void SelectZoneAtTile(int tx, int ty)

@@ -89,6 +89,19 @@ public partial class PortraitBar : CanvasLayer
         DriveFollow(snap);
     }
 
+    // Snapshot of every portrait button's global screen rect, paired with
+    // its colonist entity id. Used by SelectionService so a screen-space
+    // drag-rect can pick portraits the same way it picks world colonists.
+    public IEnumerable<(int EntityId, Rect2 Rect)> GetPortraitGlobalRects()
+    {
+        for (var i = 0; i < _slots.Count; i++)
+        {
+            var slot = _slots[i];
+            if (slot.Button is null) continue;
+            yield return (slot.EntityId, slot.Button.GetGlobalRect());
+        }
+    }
+
     private void DriveFollow(SimSnapshot snap)
     {
         if (_followingEntityId is not int id) return;

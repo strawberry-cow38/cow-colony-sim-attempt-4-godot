@@ -4,6 +4,7 @@ using CowColonySim.Sim.Blueprints;
 using CowColonySim.Sim.Commands;
 using CowColonySim.Sim.Designations;
 using CowColonySim.Sim.Snapshots;
+using CowColonySim.Sim.Systems;
 using CowColonySim.Sim.Terrain;
 using CowColonySim.Sim.Zones;
 using Godot;
@@ -352,6 +353,8 @@ public partial class PlacementTool : Node
         var ny = dy / dist;
         var maxPullback = spacing;
 
+        var hopSqr = PowerSystem.CableHopTiles * PowerSystem.CableHopTiles;
+
         bool TryEmitWithPullback(Vector2I ideal)
         {
             for (var back = 0; back <= maxPullback; back++)
@@ -360,6 +363,16 @@ public partial class PlacementTool : Node
                 var by = ideal.Y - ny * back;
                 var pt = new Vector2I((int)MathF.Round(bx), (int)MathF.Round(by));
                 if (lastPlaced.HasValue && pt == lastPlaced.Value) return false;
+                // Refuse to emit a pylon that lands further than CableHopTiles
+                // from the previous one — pullback on sloped terrain can push
+                // consecutive pylons out of cable range, leaving a visible gap
+                // and an islanded grid. Skip and let the next interval try.
+                if (lastPlaced.HasValue)
+                {
+                    var ddx = pt.X - lastPlaced.Value.X;
+                    var ddy = pt.Y - lastPlaced.Value.Y;
+                    if (ddx * ddx + ddy * ddy > hopSqr) continue;
+                }
                 if (TryEmit(pt)) return true;
             }
             return false;

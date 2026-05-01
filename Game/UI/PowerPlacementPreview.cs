@@ -286,6 +286,8 @@ public partial class PowerPlacementPreview : Node3D
             return true;
         }
 
+        var hopSqr = PowerSystem.CableHopTiles * PowerSystem.CableHopTiles;
+
         bool TryEmitWithPullback(Vector2I ideal, float nx, float ny, int maxPullback)
         {
             if (_placementChecker is null)
@@ -299,6 +301,15 @@ public partial class PowerPlacementPreview : Node3D
                 var pt = new Vector2I((int)MathF.Round(bx), (int)MathF.Round(by));
                 if (lastPlaced.HasValue && pt == lastPlaced.Value) return false;
                 if (emitted.Contains(pt)) continue;
+                // Mirror PlacementTool: skip candidates that would land out of
+                // cable hop range from the previous pylon so the preview only
+                // shows pylons that will actually wire up.
+                if (lastPlaced.HasValue)
+                {
+                    var ddx = pt.X - lastPlaced.Value.X;
+                    var ddy = pt.Y - lastPlaced.Value.Y;
+                    if (ddx * ddx + ddy * ddy > hopSqr) continue;
+                }
                 var (ok, _) = _placementChecker(def, pt);
                 if (!ok) continue;
                 return TryEmit(ideal, pt);

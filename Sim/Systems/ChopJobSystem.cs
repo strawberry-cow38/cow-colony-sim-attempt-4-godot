@@ -97,6 +97,9 @@ public sealed class ChopJobSystem : ITickSystem
             var f = _felled[i];
             if (!seenTrees.Add(f.TreeId)) continue;
             _grid.MarkBlocked(f.TileX, f.TileY, false);
+            // A felled tree clears a tile — anything behind it might now
+            // be pathable, so retry every blacklisted job.
+            _world.ClearUnreachableWorkTargets();
             _world.AddOrMergeItem(f.TileX, f.TileY, ItemKind.Wood, WoodPerTree);
             var tree = _world.Store.GetEntityById(f.TreeId);
             if (tree != default) tree.DeleteEntity();
@@ -124,6 +127,13 @@ public sealed class ChopJobSystem : ITickSystem
 
         if (!IsAdjacent(pos.TileX, pos.TileY, work.TargetTileX, work.TargetTileY))
         {
+            if (pf.LastPathFailed)
+            {
+                pf.LastPathFailed = false;
+                _world.UnreachableWorkTargets.Add(work.TargetEntityId);
+                ClearWork(ref work, ref pf);
+                return;
+            }
             if (pf.Tiles is null && !pf.PendingRequest)
             {
                 if (TryFindStandTile(work.TargetTileX, work.TargetTileY, pos.TileX, pos.TileY, out var stand))
@@ -140,6 +150,7 @@ public sealed class ChopJobSystem : ITickSystem
                 }
                 else
                 {
+                    _world.UnreachableWorkTargets.Add(work.TargetEntityId);
                     ClearWork(ref work, ref pf);
                 }
             }
@@ -213,6 +224,7 @@ public sealed class ChopJobSystem : ITickSystem
         {
             if (!trees.TryGetValue(key, out var treeId)) continue;
             if (claimedTrees.Contains(treeId)) continue;
+            if (_world.UnreachableWorkTargets.Contains(treeId)) continue;
             var dx = key.Item1 - pos.TileX;
             var dy = key.Item2 - pos.TileY;
             var d = dx * dx + dy * dy;

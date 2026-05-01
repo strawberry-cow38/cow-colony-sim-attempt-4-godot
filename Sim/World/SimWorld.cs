@@ -36,6 +36,14 @@ public sealed class SimWorld
 
     public PowerGridRegistry Power { get; } = new();
 
+    // Entity ids of work targets (designations, blueprints, structures
+    // pending deconstruct/uninstall) that the most recent path attempt
+    // could not reach. Job-assigner systems skip targets in this set so
+    // colonists don't ping-pong on unreachable jobs. Cleared on any path
+    // invalidation event so newly-pathable jobs become eligible again.
+    public HashSet<int> UnreachableWorkTargets { get; } = new();
+    public void ClearUnreachableWorkTargets() => UnreachableWorkTargets.Clear();
+
     private readonly List<TileCoord> _pendingTreeFalls = new();
 
     // ChopJobSystem appends here when a tree is felled; SimRuntime drains the
@@ -169,6 +177,9 @@ public sealed class SimWorld
         var e = Store.CreateEntity();
         e.AddComponent(new TilePosition(tileX, tileY, 0, 0.5f, 0.5f));
         e.AddComponent(new Designation { Kind = kind });
+        // Fresh designation could be in a previously-unreachable region;
+        // flush so colonists give it a try.
+        ClearUnreachableWorkTargets();
         return e;
     }
 
@@ -221,6 +232,7 @@ public sealed class SimWorld
             BaseLayer = baseLayer,
             BuildProgress = 0f,
         });
+        ClearUnreachableWorkTargets();
         return e;
     }
 }

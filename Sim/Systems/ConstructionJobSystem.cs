@@ -272,6 +272,8 @@ public sealed class ConstructionJobSystem : ITickSystem
             {
                 if (pf.LastPathFailed)
                 {
+                    var bpAtDrop = FindBlueprintAt(blueprints, work.DropTileX, work.DropTileY);
+                    if (bpAtDrop.HasValue) _world.UnreachableWorkTargets.Add(bpAtDrop.Value.EntityId);
                     DrainCarriedToTile(ref inv, pos.TileX, pos.TileY, work.CarryKind);
                     ClearWork(ref work, ref pf);
                     return;
@@ -295,6 +297,7 @@ public sealed class ConstructionJobSystem : ITickSystem
         {
             if (pf.LastPathFailed)
             {
+                _world.UnreachableWorkTargets.Add(work.TargetEntityId);
                 if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, items, blueprints, claimedItems, haulerWoodQuota, in inv, in caps))
                     SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
                 return;
@@ -532,7 +535,12 @@ public sealed class ConstructionJobSystem : ITickSystem
 
         if (pos.TileX != work.TargetTileX || pos.TileY != work.TargetTileY)
         {
-            if (pf.LastPathFailed) { ClearWork(ref work, ref pf); return; }
+            if (pf.LastPathFailed)
+            {
+                _world.UnreachableWorkTargets.Add(bpEnt.Id);
+                ClearWork(ref work, ref pf);
+                return;
+            }
             EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.TargetTileX, work.TargetTileY);
             return;
         }
@@ -572,6 +580,7 @@ public sealed class ConstructionJobSystem : ITickSystem
         for (var bi = 0; bi < blueprints.Count; bi++)
         {
             var bp = blueprints[bi];
+            if (_world.UnreachableWorkTargets.Contains(bp.EntityId)) continue;
             var def = BlueprintCatalog.Get(bp.DefId);
             if (!IsBuildable(def)) continue;
             var required = TotalMaterialOf(def, ItemKind.Wood);
@@ -598,6 +607,7 @@ public sealed class ConstructionJobSystem : ITickSystem
                         if (it.Kind != ItemKind.Minified || it.Forbidden) continue;
                         if (it.MinifiedDefId != bp.DefId) continue;
                         if (claimedItems.Contains(it.EntityId)) continue;
+                        if (_world.UnreachableWorkTargets.Contains(it.EntityId)) continue;
                         var idx = it.TileX - pos.TileX;
                         var idy = it.TileY - pos.TileY;
                         var d = idx * idx + idy * idy;
@@ -621,6 +631,7 @@ public sealed class ConstructionJobSystem : ITickSystem
                         var it = items[i];
                         if (it.Kind != ItemKind.Wood || it.Forbidden) continue;
                         if (claimedItems.Contains(it.EntityId)) continue;
+                        if (_world.UnreachableWorkTargets.Contains(it.EntityId)) continue;
                         var idx = it.TileX - pos.TileX;
                         var idy = it.TileY - pos.TileY;
                         var d = idx * idx + idy * idy;

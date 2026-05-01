@@ -234,6 +234,7 @@ public sealed class HaulSystem : ITickSystem
         {
             if (pf.LastPathFailed)
             {
+                _world.UnreachableWorkTargets.Add(work.TargetEntityId);
                 if (!TryChainNextPickup(entity, ref work, ref pf, ref pos, itemsByTile, stockpileTiles, acceptedKindsUnion, claimedItems, dropTileCache, loggedMisses, in inv, in caps))
                     SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
                 return;
@@ -330,6 +331,7 @@ public sealed class HaulSystem : ITickSystem
                 var it = list[i];
                 if (it.Forbidden) continue;
                 if (claimedItems.Contains(it.EntityId)) continue;
+                if (_world.UnreachableWorkTargets.Contains(it.EntityId)) continue;
                 if (StockpileAccepts(stockpileTiles, it.TileX, it.TileY, it.Kind)) continue;
                 if (!HasDropTileForKind(it.Kind, it.Count, itemsByTile, acceptedKindsUnion, dropTileCache, loggedMisses)) continue;
                 var defId = ResolveDefId(it);
@@ -488,6 +490,7 @@ public sealed class HaulSystem : ITickSystem
                 var item = list[i];
                 if (item.Forbidden) continue;
                 if (claimedItems.Contains(item.EntityId)) continue;
+                if (_world.UnreachableWorkTargets.Contains(item.EntityId)) continue;
                 if (StockpileAccepts(stockpileTiles, item.TileX, item.TileY, item.Kind)) continue;
                 // Skip items whose kind has no stockpile fit — keeps a 100-
                 // log pile from spamming N×per-tick zone scans + log lines.

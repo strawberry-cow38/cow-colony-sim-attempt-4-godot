@@ -1202,6 +1202,9 @@ public sealed class CommandSystem : ITickSystem
 
     private void Apply(InvalidatePathsInRegion region)
     {
+        // Terrain edit changed pathability — flush the unreachable-job
+        // blacklist so previously unreachable targets get retried.
+        _world.ClearUnreachableWorkTargets();
         var query = _world.Store.Query<PathFollower>();
         foreach (var entity in query.Entities)
         {

@@ -91,6 +91,7 @@ public sealed class MineJobSystem : ITickSystem
             var m = _mined[i];
             if (!seen.Add(m.BoulderId)) continue;
             _grid.MarkBlocked(m.TileX, m.TileY, false);
+            _world.ClearUnreachableWorkTargets();
             _world.AddOrMergeItem(m.TileX, m.TileY, ItemKind.Stone, StonePerBoulder);
             var boulder = _world.Store.GetEntityById(m.BoulderId);
             if (boulder != default) boulder.DeleteEntity();
@@ -117,6 +118,13 @@ public sealed class MineJobSystem : ITickSystem
 
         if (!IsAdjacent(pos.TileX, pos.TileY, work.TargetTileX, work.TargetTileY))
         {
+            if (pf.LastPathFailed)
+            {
+                pf.LastPathFailed = false;
+                _world.UnreachableWorkTargets.Add(work.TargetEntityId);
+                ClearWork(ref work, ref pf);
+                return;
+            }
             if (pf.Tiles is null && !pf.PendingRequest)
             {
                 if (TryFindStandTile(work.TargetTileX, work.TargetTileY, pos.TileX, pos.TileY, out var stand))
@@ -133,6 +141,7 @@ public sealed class MineJobSystem : ITickSystem
                 }
                 else
                 {
+                    _world.UnreachableWorkTargets.Add(work.TargetEntityId);
                     ClearWork(ref work, ref pf);
                 }
             }
@@ -206,6 +215,7 @@ public sealed class MineJobSystem : ITickSystem
         {
             if (!boulders.TryGetValue(key, out var bid)) continue;
             if (claimed.Contains(bid)) continue;
+            if (_world.UnreachableWorkTargets.Contains(bid)) continue;
             var dx = key.Item1 - pos.TileX;
             var dy = key.Item2 - pos.TileY;
             var d = dx * dx + dy * dy;

@@ -109,6 +109,7 @@ public sealed class PlantJobSystem : ITickSystem
             var f = _finished[i];
             if (!seen.Add(f.PlantId)) continue;
             if (f.WasTree) _grid.MarkBlocked(f.TileX, f.TileY, false);
+            _world.ClearUnreachableWorkTargets();
             if (f.YieldCount > 0 && f.YieldKind != ItemKind.None)
             {
                 _world.AddOrMergeItem(f.TileX, f.TileY, f.YieldKind, f.YieldCount);
@@ -144,6 +145,13 @@ public sealed class PlantJobSystem : ITickSystem
         var blocked = _grid.IsBlocked(work.TargetTileX, work.TargetTileY);
         if (!IsWithinReach(pos.TileX, pos.TileY, work.TargetTileX, work.TargetTileY, blocked))
         {
+            if (pf.LastPathFailed)
+            {
+                pf.LastPathFailed = false;
+                _world.UnreachableWorkTargets.Add(work.TargetEntityId);
+                ClearWork(ref work, ref pf);
+                return;
+            }
             if (pf.Tiles is null && !pf.PendingRequest)
             {
                 if (TryFindStandTile(work.TargetTileX, work.TargetTileY, pos.TileX, pos.TileY, blocked, out var stand))
@@ -160,6 +168,7 @@ public sealed class PlantJobSystem : ITickSystem
                 }
                 else
                 {
+                    _world.UnreachableWorkTargets.Add(work.TargetEntityId);
                     ClearWork(ref work, ref pf);
                 }
             }
@@ -205,6 +214,7 @@ public sealed class PlantJobSystem : ITickSystem
         {
             if (!plants.TryGetValue(key, out var plantId)) continue;
             if (claimed.Contains(plantId)) continue;
+            if (_world.UnreachableWorkTargets.Contains(plantId)) continue;
             var dx = key.Item1 - pos.TileX;
             var dy = key.Item2 - pos.TileY;
             var d = dx * dx + dy * dy;
@@ -219,6 +229,7 @@ public sealed class PlantJobSystem : ITickSystem
         {
             if (!plants.TryGetValue(key, out var plantId)) continue;
             if (claimed.Contains(plantId)) continue;
+            if (_world.UnreachableWorkTargets.Contains(plantId)) continue;
             var plant = _world.Store.GetEntityById(plantId);
             if (plant == default) continue;
             ref var pc = ref plant.GetComponent<Plant>();

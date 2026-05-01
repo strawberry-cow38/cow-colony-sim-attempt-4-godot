@@ -156,6 +156,13 @@ public sealed class StructureWorkSystem : ITickSystem
 
         if (!IsAdjacent(pos.TileX, pos.TileY, info.TileX, info.TileY))
         {
+            if (pf.LastPathFailed)
+            {
+                pf.LastPathFailed = false;
+                _world.UnreachableWorkTargets.Add(work.TargetEntityId);
+                ClearWork(ref work, ref pf);
+                return;
+            }
             if (pf.Tiles is null && !pf.PendingRequest)
             {
                 if (TryFindStandTile(info.TileX, info.TileY, pos.TileX, pos.TileY, out var stand))
@@ -172,6 +179,7 @@ public sealed class StructureWorkSystem : ITickSystem
                 }
                 else
                 {
+                    _world.UnreachableWorkTargets.Add(work.TargetEntityId);
                     ClearWork(ref work, ref pf);
                 }
             }
@@ -199,6 +207,7 @@ public sealed class StructureWorkSystem : ITickSystem
         {
             var j = kv.Value;
             if (claimed.Contains(j.StructureId)) continue;
+            if (_world.UnreachableWorkTargets.Contains(j.StructureId)) continue;
             var dx = j.TileX - pos.TileX;
             var dy = j.TileY - pos.TileY;
             var d = dx * dx + dy * dy;
@@ -283,6 +292,7 @@ public sealed class StructureWorkSystem : ITickSystem
                 _grid.MarkBlocked(tileX + dx, tileY + dy, false);
             }
         }
+        _world.ClearUnreachableWorkTargets();
     }
 
     private static void ClearWork(ref WorkJob work, ref PathFollower pf)

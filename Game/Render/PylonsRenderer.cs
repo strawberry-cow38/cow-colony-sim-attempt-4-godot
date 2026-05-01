@@ -247,6 +247,10 @@ public partial class PylonsRenderer : Node3D
         for (var i = 0; i < edges.Count; i++)
         {
             var e = edges[i];
+            // Sources/sinks must NOT pull pylon facing — only pylon-pylon
+            // hops contribute. Service taps were rotating pylons toward
+            // generators/lamps, which broke alignment along the cable line.
+            if (!e.IsHop) continue;
             var dx = e.ToMetersX - e.FromMetersX;
             var dz = e.ToMetersY - e.FromMetersY;
             var len = Mathf.Sqrt(dx * dx + dz * dz);

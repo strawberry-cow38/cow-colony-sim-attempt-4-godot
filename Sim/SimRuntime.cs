@@ -220,12 +220,18 @@ public sealed class SimRuntime : IDisposable
         {
             ref var pf = ref entity.GetComponent<PathFollower>();
             if (!pf.PlayerForced) continue;
-            if (pf.Tiles is null) continue;
-            var remaining = pf.Tiles.Length - pf.Index;
-            if (remaining <= 0) continue;
-            var slice = new TileCoord[remaining];
-            Array.Copy(pf.Tiles, pf.Index, slice, 0, remaining);
-            list.Add(new PathView(entity.Id, slice));
+            // Draft chains can sit "between legs" with an empty active path
+            // but a non-empty queue waiting for the planner. Surface those
+            // too so the overlay still draws the queued line.
+            var hasActive = pf.Tiles is not null && pf.Tiles.Length - pf.Index > 0;
+            var hasQueue = pf.WaypointQueue is { Count: > 0 };
+            if (!hasActive && !hasQueue) continue;
+            var slice = hasActive
+                ? new TileCoord[pf.Tiles!.Length - pf.Index]
+                : Array.Empty<TileCoord>();
+            if (hasActive) Array.Copy(pf.Tiles!, pf.Index, slice, 0, slice.Length);
+            var queue = hasQueue ? pf.WaypointQueue!.ToArray() : Array.Empty<TileCoord>();
+            list.Add(new PathView(entity.Id, slice, queue));
         }
         return list.ToArray();
     }

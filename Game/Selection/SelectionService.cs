@@ -171,15 +171,23 @@ public partial class SelectionService : Node
 
     private void ApplyDraftToggleShortcut()
     {
-        if (SelectedEntityId is not int id) return;
+        // Toggle every selected colonist together. Direction follows the
+        // primary's current state so mass-undraft fires when the primary
+        // is drafted, mass-draft otherwise. Falls back to the singular
+        // primary id when the multi-set is empty (single-pick path).
+        var ids = SelectedColonistIds.Count > 0
+            ? new List<int>(SelectedColonistIds)
+            : (SelectedEntityId is int single ? new List<int> { single } : new List<int>());
+        if (ids.Count == 0) return;
+        var primaryId = SelectedEntityId ?? ids[0];
         var snap = _publisher.Current;
+        bool? primaryDrafted = null;
         for (var i = 0; i < snap.Colonists.Count; i++)
         {
-            var c = snap.Colonists[i];
-            if (c.EntityId != id) continue;
-            _commands.Submit(new SetDraftedCommand(new[] { id }, !c.Drafted));
-            return;
+            if (snap.Colonists[i].EntityId == primaryId) { primaryDrafted = snap.Colonists[i].Drafted; break; }
         }
+        if (primaryDrafted is null) return;
+        _commands.Submit(new SetDraftedCommand(ids.ToArray(), !primaryDrafted.Value));
     }
 
     private void ApplyForbidShortcut()

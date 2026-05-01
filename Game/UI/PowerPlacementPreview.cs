@@ -31,14 +31,27 @@ public partial class PowerPlacementPreview : Node3D
     private float _unitsPerMeter;
 
     private MultiMeshInstance3D? _pylonGhosts;
+    private MultiMeshInstance3D? _pylonGhostsIdeal;
     private MultiMeshInstance3D _cables = null!;
     private MultiMeshInstance3D _ranges = null!;
+    private Func<BlueprintDef, Vector2I, (bool ok, int layer)>? _placementChecker;
 
     public void Configure(SnapshotPublisher publisher, Heightfield field)
     {
         _publisher = publisher;
         _field = field;
     }
+
+    // PlacementTool wires this so the preview can mirror CommitSpacedDrag's
+    // pullback. Without it, ideal == actual and no red "should be here"
+    // ghost ever shows.
+    public void SetPlacementChecker(PlacementCheckerFn checker) => _placementChecker = (d, p) =>
+    {
+        var ok = checker(d, p, out var layer);
+        return (ok, layer);
+    };
+
+    public delegate bool PlacementCheckerFn(BlueprintDef def, Vector2I pt, out int layer);
 
     public override void _Ready()
     {
@@ -69,6 +82,29 @@ public partial class PowerPlacementPreview : Node3D
                 },
             };
             AddChild(_pylonGhosts);
+
+            // Red "ideal" ghost — only populated for slots where the actual
+            // pylon got pulled back to a different tile, so the player sees
+            // both intent and outcome.
+            _pylonGhostsIdeal = new MultiMeshInstance3D
+            {
+                Name = "PylonGhostsIdeal",
+                Multimesh = new MultiMesh
+                {
+                    TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                    Mesh = pylonMesh,
+                    InstanceCount = 0,
+                },
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = new Color(1.0f, 0.30f, 0.30f, 0.40f),
+                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                    CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+                },
+            };
+            AddChild(_pylonGhostsIdeal);
         }
 
         var cableCyl = new CylinderMesh
@@ -130,6 +166,7 @@ public partial class PowerPlacementPreview : Node3D
     {
         Visible = false;
         if (_pylonGhosts is not null) _pylonGhosts.Multimesh.InstanceCount = 0;
+        if (_pylonGhostsIdeal is not null) _pylonGhostsIdeal.Multimesh.InstanceCount = 0;
         _cables.Multimesh.InstanceCount = 0;
         _ranges.Multimesh.InstanceCount = 0;
     }
@@ -142,14 +179,23 @@ public partial class PowerPlacementPreview : Node3D
             Hide();
             return;
         }
-        var positions = ComputeSpacedPositions(def, start, end);
-        if (positions.Count == 0) { Hide(); return; }
+        var slots = ComputeSpacedSlots(def, start, end);
+        if (slots.Count == 0) { Hide(); return; }
+
+        var actual = new List<Vector2I>(slots.Count);
+        var idealOnly = new List<Vector2I>();
+        for (var i = 0; i < slots.Count; i++)
+        {
+            actual.Add(slots[i].Actual);
+            if (slots[i].Actual != slots[i].Ideal) idealOnly.Add(slots[i].Ideal);
+        }
 
         Visible = true;
-        var facings = ComputeDragFacings(positions);
-        WritePylonGhosts(positions, facings);
-        WriteCables(positions);
-        WriteRanges(positions);
+        var facings = ComputeDragFacings(actual);
+        WritePylonGhosts(actual, facings);
+        WriteIdealGhosts(idealOnly);
+        WriteCables(actual);
+        WriteRanges(actual);
     }
 
     // Replays the synthetic-facing fold over (existing pylons ∪ drag positions),
@@ -220,28 +266,74 @@ public partial class PowerPlacementPreview : Node3D
         return result;
     }
 
-    private List<Vector2I> ComputeSpacedPositions(BlueprintDef def, Vector2I start, Vector2I end)
+    public readonly record struct PreviewSlot(Vector2I Ideal, Vector2I Actual);
+
+    // Mirrors PlacementTool.CommitSpacedDrag end-to-end: ideal tile per
+    // step + pullback search backward along the drag axis when the ideal
+    // tile cannot host the def. When no checker is wired (e.g. unit
+    // tests), Actual == Ideal for every slot.
+    private List<PreviewSlot> ComputeSpacedSlots(BlueprintDef def, Vector2I start, Vector2I end)
     {
-        // Mirrors PlacementTool.CommitSpacedDrag: ghost at start + each
-        // spacing-step the drag actually reaches. End is NOT a ghost —
-        // 2nd pylon only appears once mouse crosses spacing distance.
+        var slots = new List<PreviewSlot>();
+        var emitted = new HashSet<Vector2I>();
+        Vector2I? lastPlaced = null;
+
+        bool TryEmit(Vector2I ideal, Vector2I actual)
+        {
+            if (!emitted.Add(actual)) return false;
+            slots.Add(new PreviewSlot(ideal, actual));
+            lastPlaced = actual;
+            return true;
+        }
+
+        bool TryEmitWithPullback(Vector2I ideal, float nx, float ny, int maxPullback)
+        {
+            if (_placementChecker is null)
+            {
+                return TryEmit(ideal, ideal);
+            }
+            for (var back = 0; back <= maxPullback; back++)
+            {
+                var bx = ideal.X - nx * back;
+                var by = ideal.Y - ny * back;
+                var pt = new Vector2I((int)MathF.Round(bx), (int)MathF.Round(by));
+                if (lastPlaced.HasValue && pt == lastPlaced.Value) return false;
+                if (emitted.Contains(pt)) continue;
+                var (ok, _) = _placementChecker(def, pt);
+                if (!ok) continue;
+                return TryEmit(ideal, pt);
+            }
+            return false;
+        }
+
+        // Start tile: try as-is, then pull back toward... nowhere (no axis
+        // yet). PlacementTool just calls TryEmit(start) — we mirror that.
+        if (_placementChecker is null)
+        {
+            TryEmit(start, start);
+        }
+        else
+        {
+            var (ok, _) = _placementChecker(def, start);
+            if (ok) TryEmit(start, start);
+        }
+
         var spacing = Math.Max(1, def.DragSpacingTiles);
         var dx = end.X - start.X;
         var dy = end.Y - start.Y;
         var dist = MathF.Sqrt(dx * dx + dy * dy);
-        var positions = new List<Vector2I> { start };
-        if (dist <= 0.0001f) return positions;
-        var nx = dx / dist;
-        var ny = dy / dist;
+        if (dist <= 0.0001f) return slots;
+        var nrx = dx / dist;
+        var nry = dy / dist;
         var steps = (int)MathF.Floor(dist / spacing);
         for (var i = 1; i <= steps; i++)
         {
-            var px = start.X + nx * (spacing * i);
-            var py = start.Y + ny * (spacing * i);
-            var pt = new Vector2I((int)MathF.Round(px), (int)MathF.Round(py));
-            if (positions[^1] != pt) positions.Add(pt);
+            var px = start.X + nrx * (spacing * i);
+            var py = start.Y + nry * (spacing * i);
+            var ideal = new Vector2I((int)MathF.Round(px), (int)MathF.Round(py));
+            TryEmitWithPullback(ideal, nrx, nry, spacing);
         }
-        return positions;
+        return slots;
     }
 
     private void WritePylonGhosts(List<Vector2I> positions, Vector2[] facings)
@@ -257,6 +349,20 @@ public partial class PowerPlacementPreview : Node3D
             var dir = facings[i];
             var yaw = dir == Vector2.Zero ? 0f : Mathf.Atan2(dir.X, dir.Y);
             var basis = new Basis(Vector3.Up, yaw).Scaled(new Vector3(scale, scale, scale));
+            mm.SetInstanceTransform(i, new Transform3D(basis, new Vector3(x, baseY, z)));
+        }
+    }
+
+    private void WriteIdealGhosts(List<Vector2I> idealOnly)
+    {
+        if (_pylonGhostsIdeal is null) return;
+        var mm = _pylonGhostsIdeal.Multimesh;
+        mm.InstanceCount = idealOnly.Count;
+        var scale = _unitsPerMeter;
+        for (var i = 0; i < idealOnly.Count; i++)
+        {
+            var (x, baseY, z) = ResolveAnchor(idealOnly[i]);
+            var basis = Basis.Identity.Scaled(new Vector3(scale, scale, scale));
             mm.SetInstanceTransform(i, new Transform3D(basis, new Vector3(x, baseY, z)));
         }
     }

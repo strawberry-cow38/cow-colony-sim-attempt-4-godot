@@ -18,9 +18,9 @@ public sealed class PowerSystem : ITickSystem
     public const float CableHopTiles = 8f;
     public const float ServiceRadiusTiles = 6f;
     // Each pylon connects to at most this many nearest neighbors (within
-    // CableHopTiles). Edge is symmetric: a pair (i, j) is connected if
-    // either side ranks the other in its top-K — keeps cables from
-    // becoming an asymmetric rats' nest.
+    // CableHopTiles). Edge requires mutual top-K: both endpoints must rank
+    // the other in their nearest set, so a pylon's degree never exceeds K
+    // even when many others rank it as a neighbour.
     public const int MaxPylonNeighbors = 5;
 
     // Returns unordered (i < j) pylon index pairs that should be connected.
@@ -53,7 +53,7 @@ public sealed class PowerSystem : ITickSystem
         for (var i = 0; i < n; i++)
         for (var j = i + 1; j < n; j++)
         {
-            if (nearest[i].Contains(j) || nearest[j].Contains(i)) pairs.Add((i, j));
+            if (nearest[i].Contains(j) && nearest[j].Contains(i)) pairs.Add((i, j));
         }
         return pairs;
     }

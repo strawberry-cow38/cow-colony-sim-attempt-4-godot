@@ -50,7 +50,22 @@ public partial class PlacementTool : Node
         _publisher = publisher;
     }
 
-    public void SetPowerPreview(PowerPlacementPreview preview) => _powerPreview = preview;
+    public void SetPowerPreview(PowerPlacementPreview preview)
+    {
+        _powerPreview = preview;
+        _powerPreview.SetPlacementChecker(TryResolveSpacedPlacement);
+    }
+
+    // Used by PowerPlacementPreview to mirror CommitSpacedDrag's pullback
+    // logic so the drag-time ghost lands where the pylon will actually
+    // commit. Returns (false, 0) when the tile cannot host the def at all.
+    public bool TryResolveSpacedPlacement(BlueprintDef def, Vector2I pt, out int layer)
+    {
+        layer = 0;
+        if (!IsFootprintInBounds(def, 0, pt)) return false;
+        layer = ResolveBaseLayer(def, 0, pt);
+        return IsFootprintPlaceable(def, 0, pt, layer);
+    }
 
     public override void _Ready()
     {

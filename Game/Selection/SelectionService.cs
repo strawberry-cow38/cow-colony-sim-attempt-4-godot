@@ -39,6 +39,8 @@ public partial class SelectionService : Node
     // release in _UnhandledInput so the normal click-pick doesn't clobber
     // the multi-select we just made.
     private bool _suppressNextLeftRelease;
+    private Vector2? _rmbPressScreen;
+    private const float RmbLineDragThresholdPx = 24f;
 
     public int? SelectedEntityId { get; private set; }
     public int? SelectedZoneId { get; private set; }
@@ -420,9 +422,13 @@ public partial class SelectionService : Node
             HandleLeftClickPick(camera, mb.Position, groundHit.Value, mb.ShiftPressed);
             return;
         }
-        if (mb.ButtonIndex == MouseButton.Right && mb.Pressed)
+        if (mb.ButtonIndex == MouseButton.Right)
         {
-            HandleRightMouse(camera, mb);
+            if (mb.Pressed) { _rmbPressScreen = mb.Position; return; }
+            var pressScreen = _rmbPressScreen;
+            _rmbPressScreen = null;
+            if (pressScreen is null) return;
+            HandleRightMouseRelease(camera, pressScreen.Value, mb);
         }
     }
 
@@ -610,41 +616,66 @@ public partial class SelectionService : Node
         return new Rect2(min, max - min);
     }
 
-    private void HandleRightMouse(Camera3D camera, InputEventMouseButton mb)
+    private void HandleRightMouseRelease(Camera3D camera, Vector2 pressScreen, InputEventMouseButton mb)
     {
-        var groundHit = TerrainRayCast.Project(camera, mb.Position, _heightfield);
-        if (groundHit is null) return;
-        var hit = groundHit.Value;
+        var releaseHit = TerrainRayCast.Project(camera, mb.Position, _heightfield);
+        if (releaseHit is null) return;
+        var hit = releaseHit.Value;
 
-        // Shift-RMB on a colonist selection means "queue move waypoint" —
-        // skip the prioritize/build/haul context menus so the gesture
-        // always falls through to the move chain logic below.
         var hasColonistSelection = SelectedColonistIds.Count > 0
             || (SelectedEntityId is int candidate && IsColonist(candidate));
-        if (!(mb.ShiftPressed && hasColonistSelection))
+
+        // Drag distance in pixels decides whether this RMB gesture is a
+        // line-spread move (drag) or a normal click action (no drag).
+        var dragDist = (mb.Position - pressScreen).Length();
+        var isDrag = dragDist >= RmbLineDragThresholdPx;
+
+        // Context menu: only on a non-drag click, and not while shift-RMB
+        // queueing on colonists (that gesture stays a move).
+        if (!isDrag && !(mb.ShiftPressed && hasColonistSelection))
         {
-            if (TryOpenTreeContextMenu(camera, mb.Position)) return;
-            if (TryOpenBoulderContextMenu(camera, mb.Position)) return;
-            if (TryOpenItemContextMenu(camera, mb.Position)) return;
-            if (TryOpenBlueprintContextMenu(camera, mb.Position)) return;
+            if (TryOpenTreeContextMenu(camera, pressScreen)) return;
+            if (TryOpenBoulderContextMenu(camera, pressScreen)) return;
+            if (TryOpenItemContextMenu(camera, pressScreen)) return;
+            if (TryOpenBlueprintContextMenu(camera, pressScreen)) return;
         }
 
-        // Move every selected colonist if multi-selected; fall back to
-        // the primary so single-select right-click still moves one.
         var ids = SelectedColonistIds.Count > 0
             ? new List<int>(SelectedColonistIds)
             : (SelectedEntityId is int id ? new List<int> { id } : new List<int>());
         if (ids.Count == 0) return;
 
+        var queue = mb.ShiftPressed;
+
+        if (isDrag && ids.Count > 0)
+        {
+            var pressHit = TerrainRayCast.Project(camera, pressScreen, _heightfield);
+            if (pressHit is Vector3 ph)
+            {
+                var sx = Mathf.Clamp((int)MathF.Floor(ph.X / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
+                var sy = Mathf.Clamp((int)MathF.Floor(ph.Z / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
+                var ex = Mathf.Clamp((int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
+                var ey = Mathf.Clamp((int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
+                _commands.Submit(new MoveLineCommand(ids, new TileCoord(sx, sy), new TileCoord(ex, ey), queue));
+                SimLog.Logger.Information("MoveLine for {N} entity(ies) ({SX},{SY})->({EX},{EY}) queue={Q}.",
+                    ids.Count, sx, sy, ex, ey, queue);
+                return;
+            }
+        }
+
         var tx = Mathf.Clamp((int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
         var ty = Mathf.Clamp((int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
-        var queue = mb.ShiftPressed;
-        for (var i = 0; i < ids.Count; i++)
+        if (ids.Count > 1)
         {
-            _commands.Submit(new MoveCommand(ids[i], new TileCoord(tx, ty), queue));
+            _commands.Submit(new MoveGroupCommand(ids, new TileCoord(tx, ty), queue));
+            SimLog.Logger.Information("MoveGroup for {N} entity(ies) -> ({TX},{TY}) queue={Q}.",
+                ids.Count, tx, ty, queue);
+            return;
         }
-        SimLog.Logger.Information("Move command for {N} entity(ies) -> ({TX},{TY}) queue={Q}.",
-            ids.Count, tx, ty, queue);
+
+        _commands.Submit(new MoveCommand(ids[0], new TileCoord(tx, ty), queue));
+        SimLog.Logger.Information("Move command for entity {Id} -> ({TX},{TY}) queue={Q}.",
+            ids[0], tx, ty, queue);
     }
 
     private void HandleLeftClickPick(Camera3D camera, Vector2 mousePos, Vector3 groundHit, bool shift)

@@ -18,6 +18,20 @@ public interface ISimCommand { }
 // the queue, committing the colonist to the new order immediately.
 public readonly record struct MoveCommand(int EntityId, TileCoord Target, bool Queue = false) : ISimCommand;
 
+// Send N colonists to one click target. Sim spreads each entity onto a
+// distinct walkable tile around Target via outward BFS so the squad
+// doesn't pile onto a single tile (or try to walk into non-pathables).
+// Queue forwards to per-entity MoveCommand.Queue, so shift-RMB chains
+// work the same way as the single-target version.
+public readonly record struct MoveGroupCommand(
+    IReadOnlyList<int> EntityIds, TileCoord Target, bool Queue = false) : ISimCommand;
+
+// Drag-distribute: spread the listed entities along the line Start→End
+// (inclusive endpoints). Each computed sample snaps to the nearest
+// walkable tile. Queue forwards to per-entity MoveCommand.Queue.
+public readonly record struct MoveLineCommand(
+    IReadOnlyList<int> EntityIds, TileCoord Start, TileCoord End, bool Queue = false) : ISimCommand;
+
 // Toggle Drafted.Active on the listed colonists. Drafted colonists
 // stand still (no auto-jobs / hauls / wander) and only follow direct
 // MoveCommand orders. Undrafted colonists ignore MoveCommand orders.

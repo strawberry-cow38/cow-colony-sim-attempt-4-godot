@@ -39,6 +39,12 @@ public sealed class CommandSystem : ITickSystem
                 case MoveCommand move:
                     Apply(move);
                     break;
+                case MoveGroupCommand mg:
+                    Apply(mg);
+                    break;
+                case MoveLineCommand ml:
+                    Apply(ml);
+                    break;
                 case InvalidatePathsInRegion region:
                     Apply(region);
                     break;
@@ -1266,5 +1272,121 @@ public sealed class CommandSystem : ITickSystem
         // committed plan, and shift-RMB after this builds a fresh chain.
         pf.WaypointQueue?.Clear();
         _planner.Request(entity.Id, start, goal);
+    }
+
+    private void Apply(MoveGroupCommand cmd)
+    {
+        if (cmd.EntityIds.Count == 0) return;
+        var tiles = SpreadAround(cmd.Target, cmd.EntityIds.Count);
+        for (var i = 0; i < cmd.EntityIds.Count; i++)
+        {
+            var t = i < tiles.Count ? tiles[i] : cmd.Target;
+            Apply(new MoveCommand(cmd.EntityIds[i], t, cmd.Queue));
+        }
+    }
+
+    private void Apply(MoveLineCommand cmd)
+    {
+        if (cmd.EntityIds.Count == 0) return;
+        var n = cmd.EntityIds.Count;
+        var assigned = new HashSet<(int, int)>();
+        for (var i = 0; i < n; i++)
+        {
+            var t = n == 1 ? 0.5f : (float)i / (n - 1);
+            var rx = (int)MathF.Round(cmd.Start.X + (cmd.End.X - cmd.Start.X) * t);
+            var ry = (int)MathF.Round(cmd.Start.Y + (cmd.End.Y - cmd.Start.Y) * t);
+            var tile = NearestWalkable(rx, ry, assigned);
+            assigned.Add((tile.X, tile.Y));
+            Apply(new MoveCommand(cmd.EntityIds[i], tile, cmd.Queue));
+        }
+    }
+
+    // Outward BFS from target, collecting at most n distinct walkable
+    // tiles. Cap on radius keeps a click in a wall from chewing the whole
+    // map; if we still don't have enough tiles we fall back to the target
+    // for any leftover entities (planner will fail them gracefully).
+    private List<TileCoord> SpreadAround(TileCoord target, int n)
+    {
+        var result = new List<TileCoord>(n);
+        if (!_grid.InBounds(target)) return result;
+        var seen = new HashSet<(int, int)>();
+        var q = new Queue<(int X, int Y, int D)>();
+        q.Enqueue((target.X, target.Y, 0));
+        seen.Add((target.X, target.Y));
+        const int MaxRadius = 16;
+        while (q.Count > 0 && result.Count < n)
+        {
+            var (x, y, d) = q.Dequeue();
+            if (x >= 0 && y >= 0 && x < _grid.Width && y < _grid.Height && !_grid.IsBlocked(x, y))
+            {
+                result.Add(_grid.At(x, y));
+            }
+            if (d >= MaxRadius) continue;
+            for (var i = 0; i < SpreadDirs.Length; i++)
+            {
+                var nx = x + SpreadDirs[i].dx;
+                var ny = y + SpreadDirs[i].dy;
+                if (nx < 0 || ny < 0 || nx >= _grid.Width || ny >= _grid.Height) continue;
+                if (!seen.Add((nx, ny))) continue;
+                q.Enqueue((nx, ny, d + 1));
+            }
+        }
+        return result;
+    }
+
+    private static readonly (int dx, int dy)[] SpreadDirs =
+    {
+        (1, 0), (-1, 0), (0, 1), (0, -1),
+        (1, 1), (-1, -1), (1, -1), (-1, 1),
+    };
+
+    private static readonly (int dx, int dy)[] CardinalDirs =
+    {
+        (1, 0), (-1, 0), (0, 1), (0, -1),
+    };
+
+    // BFS for the nearest walkable tile to (x, y). `taken` lets the line
+    // distributor avoid handing the same tile to two colonists when two
+    // line samples round to the same cell or when the closest cell is
+    // already claimed by an earlier sample.
+    private TileCoord NearestWalkable(int x, int y, HashSet<(int, int)> taken)
+    {
+        var seen = new HashSet<(int, int)>();
+        var q = new Queue<(int X, int Y)>();
+        q.Enqueue((x, y));
+        seen.Add((x, y));
+        const int MaxRadius = 16;
+        var depth = 0;
+        var nextLevel = 1;
+        var thisLevel = 1;
+        while (q.Count > 0)
+        {
+            var (cx, cy) = q.Dequeue();
+            if (cx >= 0 && cy >= 0 && cx < _grid.Width && cy < _grid.Height
+                && !_grid.IsBlocked(cx, cy) && !taken.Contains((cx, cy)))
+            {
+                return _grid.At(cx, cy);
+            }
+            for (var i = 0; i < CardinalDirs.Length; i++)
+            {
+                var nx = cx + CardinalDirs[i].dx;
+                var ny = cy + CardinalDirs[i].dy;
+                if (nx < 0 || ny < 0 || nx >= _grid.Width || ny >= _grid.Height) continue;
+                if (!seen.Add((nx, ny))) continue;
+                q.Enqueue((nx, ny));
+                nextLevel++;
+            }
+            thisLevel--;
+            if (thisLevel == 0)
+            {
+                depth++;
+                if (depth > MaxRadius) break;
+                thisLevel = nextLevel - 1;
+                nextLevel = 1;
+            }
+        }
+        return _grid.At(
+            Math.Clamp(x, 0, _grid.Width - 1),
+            Math.Clamp(y, 0, _grid.Height - 1));
     }
 }

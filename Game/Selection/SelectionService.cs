@@ -307,47 +307,26 @@ public partial class SelectionService : Node
         SelectionChanged?.Invoke();
     }
 
-    public override void _UnhandledInput(InputEvent ev)
+    // _Input runs before GUI processing, so we can detect a drag-start over
+    // a portrait button before the button captures the click. We track
+    // press/motion/release here and only AcceptEvent (suppress GUI) when a
+    // real drag commits — a quick tap stays free to fire portrait clicks
+    // and the regular pick chain in _UnhandledInput.
+    public override void _Input(InputEvent ev)
     {
-        if (ev is InputEventKey ke && ke.Pressed && !ke.Echo)
-        {
-            HandleSelectionShortcut(ke);
-            return;
-        }
-
-        // A build tool grabbing input mid-drag means the player switched
-        // mid-gesture; cancel the in-progress selection drag so we don't
-        // commit a phantom rect when no tool is active again.
         if (_tools is not null && !string.IsNullOrEmpty(_tools.ActiveToolId))
         {
             CancelLmbDrag();
             return;
         }
-
         if (ev is InputEventMouseMotion mm)
         {
             UpdateSelectionDragPreview(mm.Position);
             return;
         }
-
         if (ev is not InputEventMouseButton mb) return;
+        if (mb.ButtonIndex != MouseButton.Left) return;
 
-        var camera = GetViewport().GetCamera3D();
-        if (camera is null) return;
-
-        if (mb.ButtonIndex == MouseButton.Left)
-        {
-            HandleLeftMouse(camera, mb);
-            return;
-        }
-        if (mb.ButtonIndex == MouseButton.Right && mb.Pressed)
-        {
-            HandleRightMouse(camera, mb);
-        }
-    }
-
-    private void HandleLeftMouse(Camera3D camera, InputEventMouseButton mb)
-    {
         if (mb.Pressed)
         {
             _lmbDragStartScreen = mb.Position;
@@ -360,17 +339,53 @@ public partial class SelectionService : Node
         if (startScreen is null) return;
 
         var dragDist = (mb.Position - startScreen.Value).Length();
-        if (dragDist >= DragThresholdPx)
+        if (dragDist < DragThresholdPx) return;
+
+        var camera = GetViewport().GetCamera3D();
+        if (camera is null) return;
+        var rect = MakeScreenRect(startScreen.Value, mb.Position);
+        DragRectSelectColonists(camera, rect, mb.ShiftPressed);
+        // Eat the release so the portrait button under the release point
+        // doesn't also fire a single-select.
+        GetViewport().SetInputAsHandled();
+    }
+
+    public override void _UnhandledInput(InputEvent ev)
+    {
+        if (ev is InputEventKey ke && ke.Pressed && !ke.Echo)
         {
-            var rect = MakeScreenRect(startScreen.Value, mb.Position);
-            DragRectSelectColonists(camera, rect, mb.ShiftPressed);
+            HandleSelectionShortcut(ke);
             return;
         }
+        if (_tools is not null && !string.IsNullOrEmpty(_tools.ActiveToolId)) return;
+        if (ev is not InputEventMouseButton mb) return;
 
-        // It was a click, not a drag — run the existing pick chain.
-        var groundHit = TerrainRayCast.Project(camera, mb.Position, _heightfield);
-        if (groundHit is null) return;
-        HandleLeftClickPick(camera, mb.Position, groundHit.Value, mb.ShiftPressed);
+        var camera = GetViewport().GetCamera3D();
+        if (camera is null) return;
+
+        if (mb.ButtonIndex == MouseButton.Left && !mb.Pressed)
+        {
+            // _Input already discarded the drag-start; remaining LMB releases
+            // here are taps on the world (UI didn't consume). Run the pick.
+            var groundHit = TerrainRayCast.Project(camera, mb.Position, _heightfield);
+            if (groundHit is null) return;
+            HandleLeftClickPick(camera, mb.Position, groundHit.Value, mb.ShiftPressed);
+            return;
+        }
+        if (mb.ButtonIndex == MouseButton.Right && mb.Pressed)
+        {
+            HandleRightMouse(camera, mb);
+        }
+    }
+
+    private bool IsColonist(int entityId)
+    {
+        var snap = _publisher.Current;
+        for (var i = 0; i < snap.Colonists.Count; i++)
+        {
+            if (snap.Colonists[i].EntityId == entityId) return true;
+        }
+        return false;
     }
 
     private static Rect2 MakeScreenRect(Vector2 a, Vector2 b)
@@ -386,10 +401,18 @@ public partial class SelectionService : Node
         if (groundHit is null) return;
         var hit = groundHit.Value;
 
-        if (TryOpenTreeContextMenu(camera, mb.Position)) return;
-        if (TryOpenBoulderContextMenu(camera, mb.Position)) return;
-        if (TryOpenItemContextMenu(camera, mb.Position)) return;
-        if (TryOpenBlueprintContextMenu(camera, mb.Position)) return;
+        // Shift-RMB on a colonist selection means "queue move waypoint" —
+        // skip the prioritize/build/haul context menus so the gesture
+        // always falls through to the move chain logic below.
+        var hasColonistSelection = SelectedColonistIds.Count > 0
+            || (SelectedEntityId is int candidate && IsColonist(candidate));
+        if (!(mb.ShiftPressed && hasColonistSelection))
+        {
+            if (TryOpenTreeContextMenu(camera, mb.Position)) return;
+            if (TryOpenBoulderContextMenu(camera, mb.Position)) return;
+            if (TryOpenItemContextMenu(camera, mb.Position)) return;
+            if (TryOpenBlueprintContextMenu(camera, mb.Position)) return;
+        }
 
         // Move every selected colonist if multi-selected; fall back to
         // the primary so single-select right-click still moves one.
@@ -400,11 +423,13 @@ public partial class SelectionService : Node
 
         var tx = Mathf.Clamp((int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
         var ty = Mathf.Clamp((int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
+        var queue = mb.ShiftPressed;
         for (var i = 0; i < ids.Count; i++)
         {
-            _commands.Submit(new MoveCommand(ids[i], new TileCoord(tx, ty)));
+            _commands.Submit(new MoveCommand(ids[i], new TileCoord(tx, ty), queue));
         }
-        SimLog.Logger.Information("Move command for {N} entity(ies) -> ({TX},{TY}).", ids.Count, tx, ty);
+        SimLog.Logger.Information("Move command for {N} entity(ies) -> ({TX},{TY}) queue={Q}.",
+            ids.Count, tx, ty, queue);
     }
 
     private void HandleLeftClickPick(Camera3D camera, Vector2 mousePos, Vector3 groundHit, bool shift)
@@ -470,6 +495,8 @@ public partial class SelectionService : Node
         ClearNonColonistSelections();
         SelectionChanged?.Invoke();
     }
+
+    public void ToggleColonistSelection(int id) => ToggleColonistInMulti(id);
 
     private void ToggleColonistInMulti(int id)
     {

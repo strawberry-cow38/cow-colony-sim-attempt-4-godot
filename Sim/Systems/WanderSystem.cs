@@ -49,6 +49,10 @@ public sealed class WanderSystem : ITickSystem
             else if (!result.Found)
             {
                 pf.LastPathFailed = true;
+                // Cancel the rest of any draft-move chain — better to stop
+                // than to silently skip a missing leg and pretend nothing
+                // went wrong.
+                pf.WaypointQueue?.Clear();
             }
         }
     }
@@ -69,6 +73,24 @@ public sealed class WanderSystem : ITickSystem
             {
                 pf.Tiles = null;
                 pf.PlayerForced = false;
+                // Drafted colonists with queued waypoints (shift-RMB chain):
+                // pop the head and ask the planner for the next leg before
+                // anything else considers them idle.
+                if (drafted && !pf.PendingRequest && pf.WaypointQueue is { Count: > 0 } queue)
+                {
+                    var next = queue[0];
+                    queue.RemoveAt(0);
+                    if (_grid.InBounds(next))
+                    {
+                        var qStart = _grid.At(
+                            Math.Clamp(pos.TileX, 0, _grid.Width - 1),
+                            Math.Clamp(pos.TileY, 0, _grid.Height - 1));
+                        pf.PendingRequest = true;
+                        pf.PlayerForced = true;
+                        _planner.Request(entity.Id, qStart, _grid.At(next.X, next.Y));
+                    }
+                    continue;
+                }
                 if (!drafted && !pf.PendingRequest && !job.Active && !work.Active)
                 {
                     RequestRandomPath(entity, pos);

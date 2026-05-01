@@ -271,7 +271,15 @@ public sealed class CommandSystem : ITickSystem
                     pf.Tiles = null;
                     pf.Index = 0;
                     pf.PlayerForced = false;
+                    pf.WaypointQueue?.Clear();
                 }
+            }
+            else if (entity.HasComponent<PathFollower>())
+            {
+                // Undrafting: drop any pending draft-move chain so a future
+                // re-draft starts clean rather than resuming a stale queue.
+                ref var pf = ref entity.GetComponent<PathFollower>();
+                pf.WaypointQueue?.Clear();
             }
         }
     }
@@ -1235,6 +1243,17 @@ public sealed class CommandSystem : ITickSystem
 
         ref var pos = ref entity.GetComponent<TilePosition>();
         ref var pf = ref entity.GetComponent<PathFollower>();
+
+        // Shift-RMB while colonist is mid-move (or already has a queue):
+        // append the waypoint and let WanderSystem dequeue on path completion.
+        if (move.Queue && (pf.Tiles is not null || pf.PendingRequest
+            || (pf.WaypointQueue is not null && pf.WaypointQueue.Count > 0)))
+        {
+            pf.WaypointQueue ??= new List<TileCoord>();
+            pf.WaypointQueue.Add(move.Target);
+            return;
+        }
+
         var start = _grid.At(
             Math.Clamp(pos.TileX, 0, _grid.Width - 1),
             Math.Clamp(pos.TileY, 0, _grid.Height - 1));
@@ -1243,6 +1262,9 @@ public sealed class CommandSystem : ITickSystem
         pf.Index = 0;
         pf.PendingRequest = true;
         pf.PlayerForced = true;
+        // Non-queued click wipes any existing queue — the new order is the
+        // committed plan, and shift-RMB after this builds a fresh chain.
+        pf.WaypointQueue?.Clear();
         _planner.Request(entity.Id, start, goal);
     }
 }

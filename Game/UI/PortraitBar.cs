@@ -356,6 +356,10 @@ public partial class PortraitBar : CanvasLayer
         {
             FocusAndFollow(entityId);
         }
+        else if (mb.ShiftPressed)
+        {
+            _selection.ToggleColonistSelection(entityId);
+        }
         else
         {
             _selection.SelectColonist(entityId);
@@ -379,12 +383,16 @@ public partial class PortraitBar : CanvasLayer
 
     private void UpdateHighlights()
     {
+        var multi = _selection.SelectedColonistIds;
         var sel = _selection.SelectedEntityId;
         var snap = _publisher.Current;
         for (var i = 0; i < _slots.Count; i++)
         {
-            _slots[i].SelectionRing.Visible = sel.HasValue && _slots[i].EntityId == sel.Value;
-            _slots[i].DraftBadge.Visible = IsDrafted(snap, _slots[i].EntityId);
+            var slot = _slots[i];
+            var inMulti = multi.Contains(slot.EntityId);
+            var isPrimary = sel.HasValue && slot.EntityId == sel.Value;
+            slot.SelectionRing.Visible = inMulti || isPrimary;
+            slot.DraftBadge.Visible = IsDrafted(snap, slot.EntityId);
         }
     }
 

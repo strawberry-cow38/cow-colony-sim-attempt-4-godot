@@ -12,7 +12,11 @@ namespace CowColonySim.Sim.Commands;
 // directly.
 public interface ISimCommand { }
 
-public readonly record struct MoveCommand(int EntityId, TileCoord Target) : ISimCommand;
+// Queue=true (shift-RMB on a drafted colonist) appends Target to the
+// PathFollower.WaypointQueue so the colonist routes there after their
+// current path completes. Queue=false replaces both the active path and
+// the queue, committing the colonist to the new order immediately.
+public readonly record struct MoveCommand(int EntityId, TileCoord Target, bool Queue = false) : ISimCommand;
 
 // Toggle Drafted.Active on the listed colonists. Drafted colonists
 // stand still (no auto-jobs / hauls / wander) and only follow direct

@@ -19,4 +19,10 @@ public struct PathFollower : IComponent
     // Cleared when a new request is issued. Job systems read this to
     // give up gracefully instead of re-requesting forever.
     public bool LastPathFailed;
+    // FIFO of additional draft-move waypoints set by shift-RMB. When the
+    // active path completes for a drafted colonist, the planner is asked
+    // to route to the head of this queue (and the head is popped). A
+    // non-queued MoveCommand wipes this list so the colonist commits to
+    // the fresh order. Failed paths also wipe to stop chasing dead ends.
+    public List<TileCoord>? WaypointQueue;
 }

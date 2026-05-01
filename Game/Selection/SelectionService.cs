@@ -35,6 +35,10 @@ public partial class SelectionService : Node
     private float _unitsPerMeter;
 
     private Vector2? _lmbDragStartScreen;
+    // Set when a double-click consumed the LMB press — eats the matching
+    // release in _UnhandledInput so the normal click-pick doesn't clobber
+    // the multi-select we just made.
+    private bool _suppressNextLeftRelease;
 
     public int? SelectedEntityId { get; private set; }
     public int? SelectedZoneId { get; private set; }
@@ -354,6 +358,7 @@ public partial class SelectionService : Node
                 if (dcCam is not null && TryDoubleClickSelectSimilar(dcCam, mb.Position))
                 {
                     _lmbDragStartScreen = null;
+                    _suppressNextLeftRelease = true;
                     if (_screenOverlay is not null) _screenOverlay.PreviewRect = null;
                     GetViewport().SetInputAsHandled();
                     return;
@@ -405,6 +410,9 @@ public partial class SelectionService : Node
 
         if (mb.ButtonIndex == MouseButton.Left && !mb.Pressed)
         {
+            // Double-click already wrote the multi-select — eat the
+            // matching release so the normal pick doesn't clear it.
+            if (_suppressNextLeftRelease) { _suppressNextLeftRelease = false; return; }
             // _Input already discarded the drag-start; remaining LMB releases
             // here are taps on the world (UI didn't consume). Run the pick.
             var groundHit = TerrainRayCast.Project(camera, mb.Position, _heightfield);
@@ -1223,11 +1231,21 @@ public partial class SelectionService : Node
         var snap = _publisher.Current;
         var best = -1;
         var bestDist = float.PositiveInfinity;
-        var radiusUnits = 1.0f * _unitsPerMeter;
-        var heightUnits = 6.0f * _unitsPerMeter;
+        // Cylinder fit to the pine trunk + canopy. Per-tree scale mirrors
+        // TreesRenderer (jitter from VariantSeed × growth ramp) so saplings
+        // get tiny hitboxes and full-grown trees match their canopy.
+        const float BaseRadiusMeters = 0.45f;
+        const float BaseHeightMeters = 4.5f;
         for (var i = 0; i < snap.Trees.Count; i++)
         {
             var t = snap.Trees[i];
+            var seed = t.VariantSeed == 0 ? 0xC0FFEE01u : t.VariantSeed;
+            var jitter = 0.85f + ((seed >> 10) % 30u) / 100f;
+            var growthScale = 0.15f + 0.85f * Math.Clamp(t.Growth, 0f, 100f) / 100f;
+            var scale = jitter * growthScale;
+            var radiusUnits = BaseRadiusMeters * scale * _unitsPerMeter;
+            var heightUnits = BaseHeightMeters * scale * _unitsPerMeter;
+
             var metersX = (t.TileX + 0.5f) * SimConstants.MetersPerTile;
             var metersY = (t.TileY + 0.5f) * SimConstants.MetersPerTile;
             var cx = metersX * _unitsPerMeter;

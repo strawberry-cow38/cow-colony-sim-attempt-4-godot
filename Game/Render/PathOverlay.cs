@@ -16,12 +16,14 @@ namespace CowColonySim.Game.Render;
 public partial class PathOverlay : Node3D
 {
     private const float LineLiftMeters = 0.15f;
-    // Torus tube radius = (Outer - Inner) / 2. The 0.6/0.85 pair gave a
-    // 0.125m tube which vanishes at zoom-out — bumped to a 0.40m tube on
-    // a 1.5m ring so waypoint markers stay legible at typical play
-    // distances. Active + queued share the same dimensions.
-    private const float RingInnerMeters = 1.1f;
-    private const float RingOuterMeters = 1.5f;
+    // Authored ring size at the camera. Per-instance scale stretches this
+    // up with camera distance so the ring covers a roughly constant pixel
+    // footprint instead of becoming sub-pixel and effectively invisible
+    // at zoom-out. Cap keeps the marker from ballooning at extreme zoom.
+    private const float RingInnerMeters = 0.6f;
+    private const float RingOuterMeters = 0.85f;
+    private const float MinPixelSize = 28f;
+    private const float MaxScaleMultiplier = 12f;
 
     private SnapshotPublisher _publisher = null!;
     private Heightfield _heightfield = null!;
@@ -136,6 +138,9 @@ public partial class PathOverlay : Node3D
     {
         var snap = _publisher.Current;
         var paths = snap.Paths;
+        var camera = GetViewport()?.GetCamera3D();
+        var viewport = GetViewport();
+        var viewportHeight = viewport?.GetVisibleRect().Size.Y ?? 1080f;
 
         _linesMesh.ClearSurfaces();
 
@@ -182,7 +187,8 @@ public partial class PathOverlay : Node3D
                 _linesMesh.SurfaceEnd();
 
                 var (dmx, dmy) = TileCenter(tiles[tiles.Length - 1]);
-                _rings.Multimesh.SetInstanceTransform(activeIdx++, new Transform3D(Basis.Identity, MetersToWorld(dmx, dmy, lift)));
+                var ringPos = MetersToWorld(dmx, dmy, lift);
+                _rings.Multimesh.SetInstanceTransform(activeIdx++, BuildRingTransform(camera, viewportHeight, ringPos));
             }
             else if (colonistMeters is { } cm)
             {
@@ -200,7 +206,7 @@ public partial class PathOverlay : Node3D
                 var (qmx, qmy) = TileCenter(queued[i]);
                 var qv = MetersToWorld(qmx, qmy, lift);
                 AddVertex(qv, QueuedColor);
-                _queuedRings.Multimesh.SetInstanceTransform(queuedIdx++, new Transform3D(Basis.Identity, qv));
+                _queuedRings.Multimesh.SetInstanceTransform(queuedIdx++, BuildRingTransform(camera, viewportHeight, qv));
             }
             _linesMesh.SurfaceEnd();
         }
@@ -210,6 +216,30 @@ public partial class PathOverlay : Node3D
     {
         _linesMesh.SurfaceSetColor(color);
         _linesMesh.SurfaceAddVertex(pos);
+    }
+
+    // Scale the torus instance so it covers ~MinPixelSize on screen even
+    // when the camera is far away. World-units-per-pixel at distance d for
+    // a perspective camera = 2 d tan(fov/2) / viewportHeight; multiply by
+    // MinPixelSize to get the minimum world-space radius we want, then
+    // boost the authored scale by that ratio (clamped).
+    private Transform3D BuildRingTransform(Camera3D? camera, float viewportHeight, Vector3 pos)
+    {
+        var scale = 1f;
+        if (camera is not null && viewportHeight > 0f)
+        {
+            var dist = camera.GlobalPosition.DistanceTo(pos);
+            var fovRad = Mathf.DegToRad(camera.Fov);
+            var unitsPerPixel = 2f * dist * MathF.Tan(fovRad * 0.5f) / viewportHeight;
+            var minWorldRadius = MinPixelSize * unitsPerPixel;
+            var authoredOuter = RingOuterMeters * _unitsPerMeter;
+            if (authoredOuter > 0f)
+            {
+                scale = MathF.Max(1f, MathF.Min(MaxScaleMultiplier, minWorldRadius / authoredOuter));
+            }
+        }
+        var basis = Basis.Identity.Scaled(new Vector3(scale, scale, scale));
+        return new Transform3D(basis, pos);
     }
 
     private static (float X, float Y)? TryFindColonistMeters(SimSnapshot snap, int id)

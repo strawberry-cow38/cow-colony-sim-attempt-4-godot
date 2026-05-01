@@ -6,7 +6,7 @@ using Godot;
 namespace CowColonySim.Game.Selection;
 
 // Yellow torus ring under selected entities. Pools child MeshInstance3Ds
-// so multi-select draws one ring per colonist while still showing a ring
+// so multi-select draws one ring per entity while still showing a ring
 // for tree/boulder/item single-selects. Boulders use a wider mesh at the
 // same y so the ring isn't hidden under the rock.
 public partial class SelectionRing : Node3D
@@ -61,8 +61,9 @@ public partial class SelectionRing : Node3D
         var snap = _publisher.Current;
         var used = 0;
 
-        // Multi-select rings: one ring per colonist in the bulk set. Falls
-        // back to SelectedEntityId when the bulk set is empty (single-pick).
+        // Colonists: multi-set when populated; otherwise the singular
+        // primary id picks up single-select cases the multi-set doesn't
+        // mirror (e.g. portrait click sequences).
         if (_selection.SelectedColonistIds.Count > 0)
         {
             foreach (var id in _selection.SelectedColonistIds)
@@ -75,17 +76,65 @@ public partial class SelectionRing : Node3D
             if (TryPlaceColonistRing(snap, selId, used)) used++;
         }
 
-        if (_selection.SelectedTreeId is int treeId)
+        // Trees: multi-set first; else fall back to primary id.
+        if (_selection.SelectedTreeIds.Count > 0)
+        {
+            foreach (var id in _selection.SelectedTreeIds)
+            {
+                if (TryPlaceTreeRing(snap, id, used)) used++;
+            }
+        }
+        else if (_selection.SelectedTreeId is int treeId)
         {
             if (TryPlaceTreeRing(snap, treeId, used)) used++;
         }
-        if (_selection.SelectedBoulderId is int boulderId)
+
+        if (_selection.SelectedBoulderIds.Count > 0)
+        {
+            foreach (var id in _selection.SelectedBoulderIds)
+            {
+                if (TryPlaceBoulderRing(snap, id, used)) used++;
+            }
+        }
+        else if (_selection.SelectedBoulderId is int boulderId)
         {
             if (TryPlaceBoulderRing(snap, boulderId, used)) used++;
         }
-        if (_selection.SelectedItemId is int itemId)
+
+        if (_selection.SelectedItemIds.Count > 0)
+        {
+            foreach (var id in _selection.SelectedItemIds)
+            {
+                if (TryPlaceItemRing(snap, id, used)) used++;
+            }
+        }
+        else if (_selection.SelectedItemId is int itemId)
         {
             if (TryPlaceItemRing(snap, itemId, used)) used++;
+        }
+
+        if (_selection.SelectedBlueprintIds.Count > 0)
+        {
+            foreach (var id in _selection.SelectedBlueprintIds)
+            {
+                if (TryPlaceBlueprintRing(snap, id, used)) used++;
+            }
+        }
+        else if (_selection.SelectedBlueprintId is int bpId)
+        {
+            if (TryPlaceBlueprintRing(snap, bpId, used)) used++;
+        }
+
+        if (_selection.SelectedStructureIds.Count > 0)
+        {
+            foreach (var id in _selection.SelectedStructureIds)
+            {
+                if (TryPlaceStructureRing(snap, id, used)) used++;
+            }
+        }
+        else if (_selection.SelectedStructureId is int structId)
+        {
+            if (TryPlaceStructureRing(snap, structId, used)) used++;
         }
 
         for (var i = used; i < _pool.Count; i++) _pool[i].Visible = false;
@@ -140,6 +189,46 @@ public partial class SelectionRing : Node3D
             return true;
         }
         return false;
+    }
+
+    private bool TryPlaceBlueprintRing(SimSnapshot snap, int id, int slot)
+    {
+        for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+        {
+            var g = snap.BlueprintGhosts[i];
+            if (g.EntityId != id) continue;
+            PlaceFootprintCenterRing(slot, g.OriginTileX, g.OriginTileY, g.DefId, g.Rotation);
+            return true;
+        }
+        return false;
+    }
+
+    private bool TryPlaceStructureRing(SimSnapshot snap, int id, int slot)
+    {
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            var s = snap.Structures[i];
+            if (s.EntityId != id) continue;
+            PlaceFootprintCenterRing(slot, s.TileX, s.TileY, s.DefId, s.Rotation);
+            return true;
+        }
+        return false;
+    }
+
+    private void PlaceFootprintCenterRing(int slot, int originTileX, int originTileY, string defId, int rotation)
+    {
+        var w = 1; var h = 1;
+        if (Sim.Blueprints.BlueprintCatalog.TryGet(defId, out var def) && def is not null)
+        {
+            (w, h) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+        }
+        var metersX = (originTileX + w * 0.5f) * SimConstants.MetersPerTile;
+        var metersY = (originTileY + h * 0.5f) * SimConstants.MetersPerTile;
+        var x = metersX * _unitsPerMeter;
+        var z = metersY * _unitsPerMeter;
+        var y = SampleGroundUnits(metersX, metersY) + 1f;
+        var mesh = (w > 1 || h > 1) ? _boulderMesh : _defaultMesh;
+        PlaceRing(slot, mesh, new Vector3(x, y, z));
     }
 
     private void PlaceTileCenterRing(int slot, int tileX, int tileY, Mesh mesh)

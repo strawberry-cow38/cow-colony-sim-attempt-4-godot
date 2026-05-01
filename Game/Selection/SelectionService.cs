@@ -45,11 +45,16 @@ public partial class SelectionService : Node
     public int? SelectedStructureId { get; private set; }
     public Vector2? SelectedGroundXZUnits { get; private set; }
 
-    // Multi-select for colonists (drag-rect, shift-click). The primary
-    // SelectedEntityId is always one of these when non-empty — info panel
-    // and context menu still target the primary, but mass commands
-    // (draft, move, prioritize) iterate the full set.
+    // Multi-select buckets per kind. Shift-click toggles entries in/out;
+    // drag-rect populates the colonist set (other kinds reserved for
+    // future drag-rect modes). Primary Selected*Id stays the info-panel
+    // target while mass actions iterate the full set.
     public HashSet<int> SelectedColonistIds { get; } = new();
+    public HashSet<int> SelectedTreeIds { get; } = new();
+    public HashSet<int> SelectedBoulderIds { get; } = new();
+    public HashSet<int> SelectedItemIds { get; } = new();
+    public HashSet<int> SelectedBlueprintIds { get; } = new();
+    public HashSet<int> SelectedStructureIds { get; } = new();
 
     public event System.Action? SelectionChanged;
 
@@ -329,6 +334,23 @@ public partial class SelectionService : Node
 
         if (mb.Pressed)
         {
+            // Double-click on a world entity (not a portrait) selects every
+            // entity of that kind currently visible on screen. Portraits get
+            // their own DoubleClick path via Button.GuiInput, so when the
+            // press is over a portrait we fall through and let the GUI eat
+            // it. Camera resolution can fail (no active 3D camera) — don't
+            // let that block normal recording either.
+            if (mb.DoubleClick && !IsOverPortrait(mb.Position))
+            {
+                var dcCam = GetViewport().GetCamera3D();
+                if (dcCam is not null && TryDoubleClickSelectSimilar(dcCam, mb.Position))
+                {
+                    _lmbDragStartScreen = null;
+                    if (_screenOverlay is not null) _screenOverlay.PreviewRect = null;
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+            }
             _lmbDragStartScreen = mb.Position;
             return;
         }
@@ -348,6 +370,16 @@ public partial class SelectionService : Node
         // Eat the release so the portrait button under the release point
         // doesn't also fire a single-select.
         GetViewport().SetInputAsHandled();
+    }
+
+    private bool IsOverPortrait(Vector2 mousePos)
+    {
+        if (_portraitBar is null) return false;
+        foreach (var (_, rect) in _portraitBar.GetPortraitGlobalRects())
+        {
+            if (rect.HasPoint(mousePos)) return true;
+        }
+        return false;
     }
 
     public override void _UnhandledInput(InputEvent ev)
@@ -376,6 +408,50 @@ public partial class SelectionService : Node
         {
             HandleRightMouse(camera, mb);
         }
+    }
+
+    // Returns true if the click hit any pickable entity and the kind has
+    // a multi-select implementation. Colonists fully supported. Other
+    // kinds short-circuit (single-pick path stays in HandleLeftClickPick).
+    private bool TryDoubleClickSelectSimilar(Camera3D camera, Vector2 mousePos)
+    {
+        var clickedColonistId = PickColonistId(camera, mousePos);
+        if (clickedColonistId is int cid)
+        {
+            SelectAllVisibleColonists(camera, cid);
+            return true;
+        }
+
+        // Tree / boulder / item / blueprint / structure double-click currently
+        // falls back to single-pick — multi-select for those kinds isn't wired
+        // yet. Returning false lets the normal click-pick run on release.
+        return false;
+    }
+
+    private void SelectAllVisibleColonists(Camera3D camera, int primaryId)
+    {
+        var snap = _publisher.Current;
+        var viewport = GetViewport();
+        var size = viewport?.GetVisibleRect().Size ?? new Vector2(1920f, 1080f);
+        var screenRect = new Rect2(Vector2.Zero, size);
+
+        SelectedColonistIds.Clear();
+        for (var i = 0; i < snap.Colonists.Count; i++)
+        {
+            var c = snap.Colonists[i];
+            var x = c.MetersX * _unitsPerMeter;
+            var z = c.MetersY * _unitsPerMeter;
+            var y = SampleGroundUnits(c.MetersX, c.MetersY) + 24f;
+            var world = new Vector3(x, y, z);
+            if (camera.IsPositionBehind(world)) continue;
+            var screen = camera.UnprojectPosition(world);
+            if (!screenRect.HasPoint(screen)) continue;
+            SelectedColonistIds.Add(c.EntityId);
+        }
+        SelectedColonistIds.Add(primaryId);
+        SelectedEntityId = primaryId;
+        ClearNonColonistSelections();
+        SelectionChanged?.Invoke();
     }
 
     private bool IsColonist(int entityId)
@@ -434,29 +510,230 @@ public partial class SelectionService : Node
 
     private void HandleLeftClickPick(Camera3D camera, Vector2 mousePos, Vector3 groundHit, bool shift)
     {
-        var colonistId = PickColonistId(camera, mousePos);
-        if (colonistId is not null)
+        var stack = GatherClickStack(camera, mousePos, groundHit);
+        if (stack.Count == 0)
         {
-            if (shift) ToggleColonistInMulti(colonistId.Value);
-            else SetSingleColonistSelection(colonistId.Value);
+            if (!shift)
+            {
+                ResetClickCycle();
+                ClearAll();
+            }
             return;
         }
 
-        // Shift on a non-colonist target is a no-op for now — multi-select
-        // beyond colonists isn't wired and we don't want shift to silently
-        // clobber the colonist multi.
-        if (shift) return;
+        // Shift-click toggles the *top* of the stack into the right multi-set.
+        // Cycle state is left alone so the player can still click-cycle on
+        // the same spot afterwards.
+        if (shift)
+        {
+            ToggleStackPick(stack[0]);
+            return;
+        }
 
-        SelectedColonistIds.Clear();
-        if (SelectTreeNearRay(camera, mousePos)) return;
-        if (SelectBoulderNearRay(camera, mousePos)) return;
-        if (SelectItemNearRay(camera, mousePos)) return;
-        if (SelectBlueprintNearRay(camera, mousePos)) return;
+        var nowUsec = (ulong)Godot.Time.GetTicksUsec();
+        var idx = 0;
+        if (_lastClickTimeUsec is ulong lastTime
+            && _lastClickPos is Vector2 lastPos
+            && (mousePos - lastPos).Length() <= ClickCycleRadiusPx
+            && nowUsec - lastTime <= ClickCycleWindowUsec
+            && _lastClickStack is not null
+            && StacksMatch(_lastClickStack, stack))
+        {
+            idx = (_lastClickIndex + 1) % stack.Count;
+        }
+        ApplyStackPick(stack[idx]);
+        _lastClickStack = stack;
+        _lastClickIndex = idx;
+        _lastClickPos = mousePos;
+        _lastClickTimeUsec = nowUsec;
+    }
+
+    private void ToggleStackPick((PickKind Kind, int EntityId) pick)
+    {
+        var set = MultiSetFor(pick.Kind);
+        if (set is null) return;
+        if (set.Contains(pick.EntityId))
+        {
+            set.Remove(pick.EntityId);
+            ClearPrimaryFor(pick.Kind, pick.EntityId);
+        }
+        else
+        {
+            set.Add(pick.EntityId);
+            SetPrimaryFor(pick.Kind, pick.EntityId);
+        }
+        SelectionChanged?.Invoke();
+    }
+
+    private HashSet<int>? MultiSetFor(PickKind kind) => kind switch
+    {
+        PickKind.Colonist => SelectedColonistIds,
+        PickKind.Tree => SelectedTreeIds,
+        PickKind.Boulder => SelectedBoulderIds,
+        PickKind.Item => SelectedItemIds,
+        PickKind.Blueprint => SelectedBlueprintIds,
+        PickKind.Structure => SelectedStructureIds,
+        _ => null,
+    };
+
+    private void SetPrimaryFor(PickKind kind, int id)
+    {
+        switch (kind)
+        {
+            case PickKind.Colonist: SelectedEntityId = id; break;
+            case PickKind.Tree: SelectedTreeId = id; break;
+            case PickKind.Boulder: SelectedBoulderId = id; break;
+            case PickKind.Item: SelectedItemId = id; break;
+            case PickKind.Blueprint: SelectedBlueprintId = id; break;
+            case PickKind.Structure: SelectedStructureId = id; break;
+        }
+    }
+
+    private void ClearPrimaryFor(PickKind kind, int id)
+    {
+        switch (kind)
+        {
+            case PickKind.Colonist:
+                if (SelectedEntityId == id) SelectedEntityId = PromoteFrom(SelectedColonistIds);
+                break;
+            case PickKind.Tree:
+                if (SelectedTreeId == id) SelectedTreeId = PromoteFrom(SelectedTreeIds);
+                break;
+            case PickKind.Boulder:
+                if (SelectedBoulderId == id) SelectedBoulderId = PromoteFrom(SelectedBoulderIds);
+                break;
+            case PickKind.Item:
+                if (SelectedItemId == id) SelectedItemId = PromoteFrom(SelectedItemIds);
+                break;
+            case PickKind.Blueprint:
+                if (SelectedBlueprintId == id) SelectedBlueprintId = PromoteFrom(SelectedBlueprintIds);
+                break;
+            case PickKind.Structure:
+                if (SelectedStructureId == id) SelectedStructureId = PromoteFrom(SelectedStructureIds);
+                break;
+        }
+    }
+
+    private static int? PromoteFrom(HashSet<int> set)
+    {
+        foreach (var v in set) return v;
+        return null;
+    }
+
+    private const float ClickCycleRadiusPx = 8f;
+    private const ulong ClickCycleWindowUsec = 700_000;
+
+    private List<(PickKind Kind, int EntityId)>? _lastClickStack;
+    private int _lastClickIndex;
+    private Vector2? _lastClickPos;
+    private ulong? _lastClickTimeUsec;
+
+    private enum PickKind { Colonist, Tree, Boulder, Item, Blueprint, Structure, Zone }
+
+    private void ResetClickCycle()
+    {
+        _lastClickStack = null;
+        _lastClickIndex = 0;
+        _lastClickPos = null;
+        _lastClickTimeUsec = null;
+    }
+
+    private static bool StacksMatch(
+        List<(PickKind Kind, int EntityId)> a,
+        List<(PickKind Kind, int EntityId)> b)
+    {
+        if (a.Count != b.Count) return false;
+        for (var i = 0; i < a.Count; i++)
+        {
+            if (a[i].Kind != b[i].Kind || a[i].EntityId != b[i].EntityId) return false;
+        }
+        return true;
+    }
+
+    private List<(PickKind Kind, int EntityId)> GatherClickStack(
+        Camera3D camera, Vector2 mousePos, Vector3 groundHit)
+    {
+        // Stable order: the same kinds at the same point always produce the
+        // same stack, so clicks cycle deterministically. Order roughly tracks
+        // visual prominence — colonists on top, terrain entities last.
+        var stack = new List<(PickKind, int)>();
+        if (PickColonistId(camera, mousePos) is int cid) stack.Add((PickKind.Colonist, cid));
+        if (PickTreeId(camera, mousePos) is int tid) stack.Add((PickKind.Tree, tid));
+        if (PickBoulderId(camera, mousePos) is int bid) stack.Add((PickKind.Boulder, bid));
+        if (PickItemId(camera, mousePos) is int iid) stack.Add((PickKind.Item, iid));
+        if (PickBlueprintId(camera, mousePos) is int gid) stack.Add((PickKind.Blueprint, gid));
+
         var tx = (int)MathF.Floor(groundHit.X / SimConstants.GodotUnitsPerTile);
         var ty = (int)MathF.Floor(groundHit.Z / SimConstants.GodotUnitsPerTile);
-        if (SelectStructureAtTile(tx, ty)) return;
-        if (SelectBlueprintAtTile(tx, ty)) return;
-        SelectZoneAtTile(tx, ty);
+        if (PickStructureAtTile(tx, ty) is int sid) stack.Add((PickKind.Structure, sid));
+        if (PickZoneAtTile(tx, ty) is int zid) stack.Add((PickKind.Zone, zid));
+        return stack;
+    }
+
+    private int? PickStructureAtTile(int tx, int ty)
+    {
+        var snap = _publisher.Current;
+        var bestId = 0;
+        var bestLayer = -1;
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            var s = snap.Structures[i];
+            if (!Sim.Blueprints.BlueprintCatalog.TryGet(s.DefId, out var def) || def is null) continue;
+            var (w, h) = (s.Rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+            if (tx < s.TileX || ty < s.TileY || tx >= s.TileX + w || ty >= s.TileY + h) continue;
+            if (s.BaseLayer > bestLayer) { bestLayer = s.BaseLayer; bestId = s.EntityId; }
+        }
+        return bestId == 0 ? null : bestId;
+    }
+
+    private int? PickZoneAtTile(int tx, int ty)
+    {
+        var snap = _publisher.Current;
+        for (var i = 0; i < snap.Zones.Count; i++)
+        {
+            var z = snap.Zones[i];
+            if (z.ContainsTile(tx, ty)) return z.ZoneId;
+        }
+        return null;
+    }
+
+    private void ApplyStackPick((PickKind Kind, int EntityId) pick)
+    {
+        // Single-pick = sole selection: wipe every primary and every
+        // multi-set, then seed both the matching multi-set and the
+        // primary id. Seeding the multi-set means a follow-up shift-click
+        // toggles around the *current* selection instead of dropping it.
+        if (pick.Kind == PickKind.Colonist)
+        {
+            SetSingleColonistSelection(pick.EntityId);
+            return;
+        }
+        if (pick.Kind == PickKind.Zone)
+        {
+            ClearAll();
+            SelectedZoneId = pick.EntityId;
+            SelectionChanged?.Invoke();
+            return;
+        }
+        ClearAll();
+        var set = MultiSetFor(pick.Kind);
+        set?.Add(pick.EntityId);
+        SetPrimaryFor(pick.Kind, pick.EntityId);
+        SelectionChanged?.Invoke();
+    }
+
+    private void SetSingleSelection(
+        int? treeId = null, int? boulderId = null, int? itemId = null,
+        int? blueprintId = null, int? structureId = null, int? zoneId = null)
+    {
+        SelectedEntityId = null;
+        SelectedTreeId = treeId;
+        SelectedBoulderId = boulderId;
+        SelectedItemId = itemId;
+        SelectedBlueprintId = blueprintId;
+        SelectedStructureId = structureId;
+        SelectedZoneId = zoneId;
+        SelectionChanged?.Invoke();
     }
 
     private int? PickColonistId(Camera3D camera, Vector2 mousePos)
@@ -573,6 +850,11 @@ public partial class SelectionService : Node
         SelectedItemId = null;
         SelectedBlueprintId = null;
         SelectedStructureId = null;
+        SelectedTreeIds.Clear();
+        SelectedBoulderIds.Clear();
+        SelectedItemIds.Clear();
+        SelectedBlueprintIds.Clear();
+        SelectedStructureIds.Clear();
     }
 
     private void UpdateSelectionDragPreview(Vector2 mousePos)
@@ -619,6 +901,11 @@ public partial class SelectionService : Node
         if (SelectedBlueprintId is not null) { SelectedBlueprintId = null; changed = true; }
         if (SelectedStructureId is not null) { SelectedStructureId = null; changed = true; }
         if (SelectedColonistIds.Count > 0) { SelectedColonistIds.Clear(); changed = true; }
+        if (SelectedTreeIds.Count > 0) { SelectedTreeIds.Clear(); changed = true; }
+        if (SelectedBoulderIds.Count > 0) { SelectedBoulderIds.Clear(); changed = true; }
+        if (SelectedItemIds.Count > 0) { SelectedItemIds.Clear(); changed = true; }
+        if (SelectedBlueprintIds.Count > 0) { SelectedBlueprintIds.Clear(); changed = true; }
+        if (SelectedStructureIds.Count > 0) { SelectedStructureIds.Clear(); changed = true; }
         if (changed) SelectionChanged?.Invoke();
     }
 
@@ -627,7 +914,9 @@ public partial class SelectionService : Node
         var changed = SelectedEntityId is not null || SelectedZoneId is not null
             || SelectedTreeId is not null || SelectedBoulderId is not null || SelectedItemId is not null
             || SelectedBlueprintId is not null || SelectedStructureId is not null
-            || SelectedColonistIds.Count > 0;
+            || SelectedColonistIds.Count > 0
+            || SelectedTreeIds.Count > 0 || SelectedBoulderIds.Count > 0 || SelectedItemIds.Count > 0
+            || SelectedBlueprintIds.Count > 0 || SelectedStructureIds.Count > 0;
         SelectedEntityId = null;
         SelectedZoneId = null;
         SelectedTreeId = null;
@@ -636,6 +925,11 @@ public partial class SelectionService : Node
         SelectedBlueprintId = null;
         SelectedStructureId = null;
         SelectedColonistIds.Clear();
+        SelectedTreeIds.Clear();
+        SelectedBoulderIds.Clear();
+        SelectedItemIds.Clear();
+        SelectedBlueprintIds.Clear();
+        SelectedStructureIds.Clear();
         if (changed) SelectionChanged?.Invoke();
     }
 

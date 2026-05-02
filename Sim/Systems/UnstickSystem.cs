@@ -36,6 +36,12 @@ public sealed class UnstickSystem : ITickSystem
             // Standing on a registered walkable layer (ground floor, wall
             // top, roof, ladder summit) is not stuck.
             if (_grid.HasWalkableLayer(pos.TileX, pos.TileY, pos.TileZ)) continue;
+            // Diagonal-cut / mid-step / mid-climb false alarm: while a path
+            // is active, the colonist is interpolating between two walkable
+            // waypoints and may briefly floor into a blocked corner tile or
+            // a between-layer ladder rung. They're not stuck — only treat as
+            // stuck when there's no active path consuming the position.
+            if (pf.Tiles is not null && pf.Index < pf.Tiles.Length) continue;
             // No walkable layer at current Z, but ground floor is open at
             // this tile — drop the colonist back to the ground rather than
             // teleporting them away. Covers the case where an elevated
@@ -51,11 +57,6 @@ public sealed class UnstickSystem : ITickSystem
                 pf.LastPathFailed = false;
                 continue;
             }
-            // Diagonal-cut false alarm: while a path is active, the colonist is
-            // interpolating between two walkable waypoints and may briefly floor
-            // into a blocked corner tile. They're not stuck — only treat as
-            // stuck when there's no active path consuming the position.
-            if (pf.Tiles is not null && pf.Index < pf.Tiles.Length) continue;
             if (!TryFindNearestWalkable(pos.TileX, pos.TileY, out var nx, out var ny)) continue;
             SimLog.Logger.Information(
                 "UNSTICK colonist={Cid} from=({FX},{FY}) to=({TX},{TY})",

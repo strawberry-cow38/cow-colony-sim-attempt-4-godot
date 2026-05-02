@@ -64,7 +64,7 @@ public sealed class ForcePickupSystem : ITickSystem
             if (pos.TileX != itPos.TileX || pos.TileY != itPos.TileY)
             {
                 if (pf.LastPathFailed) { ClearWork(entity, ref work); continue; }
-                EnsurePath(entity, ref pf, pos.TileX, pos.TileY, itPos.TileX, itPos.TileY);
+                EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, itPos.TileX, itPos.TileY);
                 continue;
             }
 
@@ -112,7 +112,7 @@ public sealed class ForcePickupSystem : ITickSystem
         }
     }
 
-    private void EnsurePath(Entity entity, ref PathFollower pf, int fromX, int fromY, int toX, int toY)
+    private void EnsurePath(Entity entity, ref PathFollower pf, int fromX, int fromY, int fromZ, int toX, int toY)
     {
         if (pf.PendingRequest) return;
         if (pf.Tiles is not null && pf.Index < pf.Tiles.Length)
@@ -120,9 +120,7 @@ public sealed class ForcePickupSystem : ITickSystem
             var last = pf.Tiles[pf.Tiles.Length - 1];
             if (last.X == toX && last.Y == toY) return;
         }
-        var start = _grid.At(
-            Math.Clamp(fromX, 0, _grid.Width - 1),
-            Math.Clamp(fromY, 0, _grid.Height - 1));
+        var start = _grid.NodeAtOrFloor(fromX, fromY, fromZ);
         var goal = _grid.At(toX, toY);
         if (start == goal) { pf.Tiles = null; pf.Index = 0; return; }
         pf.Tiles = null;

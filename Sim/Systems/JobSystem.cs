@@ -141,9 +141,7 @@ public sealed class JobSystem : ITickSystem
         job.TargetTileX = spot.TileX;
         job.TargetTileY = spot.TileY;
 
-        var start = _grid.At(
-            Math.Clamp(pos.TileX, 0, _grid.Width - 1),
-            Math.Clamp(pos.TileY, 0, _grid.Height - 1));
+        var start = _grid.NodeAtOrFloor(pos.TileX, pos.TileY, pos.TileZ);
         var goal = _grid.At(spot.TileX, spot.TileY);
         if (start == goal) return;
         pf.Tiles = null;

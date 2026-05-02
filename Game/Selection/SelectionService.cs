@@ -466,8 +466,9 @@ public partial class SelectionService : Node
         for (var i = 0; i < snap.Colonists.Count; i++)
         {
             var c = snap.Colonists[i];
+            var feetY = MathF.Max(SampleGroundUnits(c.MetersX, c.MetersY), c.MetersZ * _unitsPerMeter);
             var world = new Vector3(c.MetersX * _unitsPerMeter,
-                SampleGroundUnits(c.MetersX, c.MetersY) + 24f,
+                feetY + 24f,
                 c.MetersY * _unitsPerMeter);
             if (camera.IsPositionBehind(world)) continue;
             if (!screenRect.HasPoint(camera.UnprojectPosition(world))) continue;
@@ -940,7 +941,11 @@ public partial class SelectionService : Node
             var c = snap.Colonists[i];
             var x = c.MetersX * _unitsPerMeter;
             var z = c.MetersY * _unitsPerMeter;
-            var y = SampleGroundUnits(c.MetersX, c.MetersY) + 24f;
+            // Match ColonistsRenderer: take max(ground, sim Z) so wall-top /
+            // roof / ladder-summit colonists get a hitbox at their actual feet
+            // height, not the ground beneath the structure.
+            var feetY = MathF.Max(SampleGroundUnits(c.MetersX, c.MetersY), c.MetersZ * _unitsPerMeter);
+            var y = feetY + 24f;
             var p = new Vector3(x, y, z);
             var toP = p - origin;
             var t = toP.Dot(dir);
@@ -1002,7 +1007,8 @@ public partial class SelectionService : Node
             var c = snap.Colonists[i];
             var x = c.MetersX * _unitsPerMeter;
             var z = c.MetersY * _unitsPerMeter;
-            var y = SampleGroundUnits(c.MetersX, c.MetersY) + 24f;
+            var feetY = MathF.Max(SampleGroundUnits(c.MetersX, c.MetersY), c.MetersZ * _unitsPerMeter);
+            var y = feetY + 24f;
             var world = new Vector3(x, y, z);
             if (camera.IsPositionBehind(world)) continue;
             var screen = camera.UnprojectPosition(world);

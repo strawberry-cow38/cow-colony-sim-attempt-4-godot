@@ -1298,9 +1298,7 @@ public sealed class CommandSystem : ITickSystem
             return;
         }
 
-        var start = _grid.At(
-            Math.Clamp(pos.TileX, 0, _grid.Width - 1),
-            Math.Clamp(pos.TileY, 0, _grid.Height - 1));
+        var start = _grid.NodeAtOrFloor(pos.TileX, pos.TileY, pos.TileZ);
         // Honour caller-supplied Z when it names an actual walkable layer
         // at the target tile — RMB on a roof / wall top puts the desired
         // layer in Target.Z. Otherwise fall back to the ground floor.

@@ -108,9 +108,7 @@ public sealed class CookJobSystem : ITickSystem
         claimed.Add(bestStructure);
 
         if (pos.TileX == bestStandX && pos.TileY == bestStandY) return;
-        var start = _grid.At(
-            Math.Clamp(pos.TileX, 0, _grid.Width - 1),
-            Math.Clamp(pos.TileY, 0, _grid.Height - 1));
+        var start = _grid.NodeAtOrFloor(pos.TileX, pos.TileY, pos.TileZ);
         var goal = _grid.At(bestStandX, bestStandY);
         if (start == goal) return;
         pf.Tiles = null;
@@ -141,9 +139,7 @@ public sealed class CookJobSystem : ITickSystem
         {
             if (pf.Tiles is null && !pf.PendingRequest)
             {
-                var start = _grid.At(
-                    Math.Clamp(pos.TileX, 0, _grid.Width - 1),
-                    Math.Clamp(pos.TileY, 0, _grid.Height - 1));
+                var start = _grid.NodeAtOrFloor(pos.TileX, pos.TileY, pos.TileZ);
                 var goal = _grid.At(work.TargetTileX, work.TargetTileY);
                 if (start == goal) return;
                 pf.PendingRequest = true;

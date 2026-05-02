@@ -278,7 +278,7 @@ public sealed class ConstructionJobSystem : ITickSystem
                     ClearWork(ref work, ref pf);
                     return;
                 }
-                EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
+                EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, work.DropTileX, work.DropTileY);
                 return;
             }
             DrainCarriedToBlueprint(ref inv, work.DropTileX, work.DropTileY, work.CarryKind, blueprints);
@@ -302,7 +302,7 @@ public sealed class ConstructionJobSystem : ITickSystem
                     SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
                 return;
             }
-            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, item.TileX, item.TileY);
+            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, item.TileX, item.TileY);
             return;
         }
 
@@ -423,7 +423,7 @@ public sealed class ConstructionJobSystem : ITickSystem
         work.TargetTileX = bestX;
         work.TargetTileY = bestY;
         claimedItems.Add(bestId);
-        EnsurePath(entity, ref pf, pos.TileX, pos.TileY, bestX, bestY);
+        EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, bestX, bestY);
         return true;
     }
 
@@ -450,7 +450,7 @@ public sealed class ConstructionJobSystem : ITickSystem
             return;
         }
         work.TargetEntityId = 0;
-        EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
+        EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, work.DropTileX, work.DropTileY);
     }
 
     private void DrainCarriedToBlueprint(
@@ -541,7 +541,7 @@ public sealed class ConstructionJobSystem : ITickSystem
                 ClearWork(ref work, ref pf);
                 return;
             }
-            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.TargetTileX, work.TargetTileY);
+            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, work.TargetTileX, work.TargetTileY);
             return;
         }
 
@@ -715,7 +715,7 @@ public sealed class ConstructionJobSystem : ITickSystem
                 perBpReserved[bestBpId] = prev + bestProjectedPickup;
                 haulerWoodQuota[entity.Id] = bestProjectedPickup;
             }
-            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, bestItemX, bestItemY);
+            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, bestItemX, bestItemY);
         }
         else
         {
@@ -732,7 +732,7 @@ public sealed class ConstructionJobSystem : ITickSystem
             work.CarryKind = ItemKind.None;
             work.CarryCount = 0;
             constructClaimed.Add(bestBpId);
-            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, bestBpX, bestBpY);
+            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, bestBpX, bestBpY);
         }
     }
 
@@ -792,7 +792,7 @@ public sealed class ConstructionJobSystem : ITickSystem
         return (list, byEntity);
     }
 
-    private void EnsurePath(Entity entity, ref PathFollower pf, int fromX, int fromY, int toX, int toY)
+    private void EnsurePath(Entity entity, ref PathFollower pf, int fromX, int fromY, int fromZ, int toX, int toY)
     {
         if (pf.PendingRequest) return;
         if (pf.Tiles is not null && pf.Index < pf.Tiles.Length)
@@ -800,9 +800,7 @@ public sealed class ConstructionJobSystem : ITickSystem
             var last = pf.Tiles[pf.Tiles.Length - 1];
             if (last.X == toX && last.Y == toY) return;
         }
-        var start = _grid.At(
-            Math.Clamp(fromX, 0, _grid.Width - 1),
-            Math.Clamp(fromY, 0, _grid.Height - 1));
+        var start = _grid.NodeAtOrFloor(fromX, fromY, fromZ);
         var goal = _grid.At(toX, toY);
         if (start == goal) { pf.Tiles = null; pf.Index = 0; return; }
         pf.Tiles = null;

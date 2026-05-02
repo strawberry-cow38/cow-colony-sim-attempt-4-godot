@@ -52,7 +52,7 @@ public sealed class SwitchSystem : ITickSystem
             if (pos.TileX != lampPos.TileX || pos.TileY != lampPos.TileY)
             {
                 if (pf.LastPathFailed) { ClearWork(entity, ref work); continue; }
-                EnsurePath(entity, ref pf, pos.TileX, pos.TileY, lampPos.TileX, lampPos.TileY);
+                EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, lampPos.TileX, lampPos.TileY);
                 continue;
             }
 
@@ -63,7 +63,7 @@ public sealed class SwitchSystem : ITickSystem
         }
     }
 
-    private void EnsurePath(Entity entity, ref PathFollower pf, int fromX, int fromY, int toX, int toY)
+    private void EnsurePath(Entity entity, ref PathFollower pf, int fromX, int fromY, int fromZ, int toX, int toY)
     {
         if (pf.PendingRequest) return;
         if (pf.Tiles is not null && pf.Index < pf.Tiles.Length)
@@ -71,9 +71,7 @@ public sealed class SwitchSystem : ITickSystem
             var last = pf.Tiles[pf.Tiles.Length - 1];
             if (last.X == toX && last.Y == toY) return;
         }
-        var start = _grid.At(
-            System.Math.Clamp(fromX, 0, _grid.Width - 1),
-            System.Math.Clamp(fromY, 0, _grid.Height - 1));
+        var start = _grid.NodeAtOrFloor(fromX, fromY, fromZ);
         var goal = _grid.At(toX, toY);
         if (start == goal) { pf.Tiles = null; pf.Index = 0; return; }
         pf.Tiles = null;

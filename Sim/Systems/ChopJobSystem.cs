@@ -138,9 +138,7 @@ public sealed class ChopJobSystem : ITickSystem
             {
                 if (TryFindStandTile(work.TargetTileX, work.TargetTileY, pos.TileX, pos.TileY, out var stand))
                 {
-                    var start = _grid.At(
-                        Math.Clamp(pos.TileX, 0, _grid.Width - 1),
-                        Math.Clamp(pos.TileY, 0, _grid.Height - 1));
+                    var start = _grid.NodeAtOrFloor(pos.TileX, pos.TileY, pos.TileZ);
                     if (start != stand)
                     {
                         pf.PendingRequest = true;
@@ -252,9 +250,7 @@ public sealed class ChopJobSystem : ITickSystem
             ClearWork(ref work, ref pf);
             return;
         }
-        var start = _grid.At(
-            Math.Clamp(pos.TileX, 0, _grid.Width - 1),
-            Math.Clamp(pos.TileY, 0, _grid.Height - 1));
+        var start = _grid.NodeAtOrFloor(pos.TileX, pos.TileY, pos.TileZ);
         if (start == stand) return;
         pf.Tiles = null;
         pf.Index = 0;

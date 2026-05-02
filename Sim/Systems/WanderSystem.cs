@@ -83,9 +83,7 @@ public sealed class WanderSystem : ITickSystem
                     queue.RemoveAt(0);
                     if (_grid.InBounds(next))
                     {
-                        var qStart = _grid.At(
-                            Math.Clamp(pos.TileX, 0, _grid.Width - 1),
-                            Math.Clamp(pos.TileY, 0, _grid.Height - 1));
+                        var qStart = _grid.NodeAtOrFloor(pos.TileX, pos.TileY, pos.TileZ);
                         pf.PendingRequest = true;
                         pf.PlayerForced = true;
                         _planner.Request(entity.Id, qStart, _grid.At(next.X, next.Y));
@@ -162,9 +160,7 @@ public sealed class WanderSystem : ITickSystem
 
     private void RequestRandomPath(Entity entity, TilePosition pos)
     {
-        var start = _grid.At(
-            Math.Clamp(pos.TileX, 0, _grid.Width - 1),
-            Math.Clamp(pos.TileY, 0, _grid.Height - 1));
+        var start = _grid.NodeAtOrFloor(pos.TileX, pos.TileY, pos.TileZ);
 
         // Anchor on a built structure if any exist; otherwise the map centre.
         // Cows then meander inside a 20-tile box around the anchor instead of

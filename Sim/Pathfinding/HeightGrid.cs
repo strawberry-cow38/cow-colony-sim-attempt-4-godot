@@ -84,6 +84,20 @@ public sealed class HeightGrid
     public int FloorLayer(int x, int y) =>
         (int)MathF.Round(CenterQuanta(x, y) * 0.5f);
 
+    // Path-start helper for colonists that may be standing on an elevated
+    // walkable layer (wall top, roof, ladder summit). Returns (x, y, preferZ)
+    // when that layer is registered walkable here; otherwise falls back to the
+    // ground floor. Critical: without this, _grid.At(pos.TileX, pos.TileY)
+    // anchors the request at the GROUND tile beneath a wall-top colonist, A*
+    // happily horizontal-steps off the wall onto adjacent ground (same Z=0),
+    // and the colonist visibly walks off the edge.
+    public TileCoord NodeAtOrFloor(int x, int y, int preferZ)
+    {
+        var cx = Math.Clamp(x, 0, Width - 1);
+        var cy = Math.Clamp(y, 0, Height - 1);
+        return HasWalkableLayer(cx, cy, preferZ) ? new TileCoord(cx, cy, preferZ) : At(cx, cy);
+    }
+
     // How many distinct walkable surfaces exist at this tile. Ground floor
     // contributes 1 when not blocked; each registered extra (wall/roof/ladder
     // top) adds 1 more. Used by A* to enumerate candidate destination layers.

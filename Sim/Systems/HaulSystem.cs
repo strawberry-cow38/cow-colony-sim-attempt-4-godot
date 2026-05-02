@@ -201,7 +201,7 @@ public sealed class HaulSystem : ITickSystem
                     ClearWork(ref work, ref pf);
                     return;
                 }
-                EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
+                EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, work.DropTileX, work.DropTileY);
                 return;
             }
             SimLog.Logger.Information(
@@ -239,7 +239,7 @@ public sealed class HaulSystem : ITickSystem
                     SwitchToDropOrFinish(entity, ref work, ref pf, ref pos, ref inv);
                 return;
             }
-            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, item.TileX, item.TileY);
+            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, item.TileX, item.TileY);
             return;
         }
 
@@ -355,7 +355,7 @@ public sealed class HaulSystem : ITickSystem
         work.TargetTileX = bestX;
         work.TargetTileY = bestY;
         claimedItems.Add(bestId);
-        EnsurePath(entity, ref pf, pos.TileX, pos.TileY, bestX, bestY);
+        EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, bestX, bestY);
         return true;
     }
 
@@ -386,7 +386,7 @@ public sealed class HaulSystem : ITickSystem
             return;
         }
         work.TargetEntityId = 0;
-        EnsurePath(entity, ref pf, pos.TileX, pos.TileY, work.DropTileX, work.DropTileY);
+        EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, work.DropTileX, work.DropTileY);
     }
 
     // Drain only stacks matching `kind` onto the tile. Other kinds stay
@@ -429,7 +429,7 @@ public sealed class HaulSystem : ITickSystem
             work.DropTileX = nx;
             work.DropTileY = ny;
             occupiedDropTiles.Add((nx, ny));
-            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, nx, ny);
+            EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, nx, ny);
             return true;
         }
         return false;
@@ -553,7 +553,7 @@ public sealed class HaulSystem : ITickSystem
         claimedItems.Add(bestItem);
         occupiedDropTiles.Add((dropX, dropY));
 
-        EnsurePath(entity, ref pf, pos.TileX, pos.TileY, bestItemTileX, bestItemTileY);
+        EnsurePath(entity, ref pf, pos.TileX, pos.TileY, pos.TileZ, bestItemTileX, bestItemTileY);
     }
 
     // Per-tick "is there ANY stockpile that accepts this kind" check,
@@ -719,7 +719,7 @@ public sealed class HaulSystem : ITickSystem
         return sum;
     }
 
-    private void EnsurePath(Entity entity, ref PathFollower pf, int fromX, int fromY, int toX, int toY)
+    private void EnsurePath(Entity entity, ref PathFollower pf, int fromX, int fromY, int fromZ, int toX, int toY)
     {
         if (pf.PendingRequest) return;
         if (pf.Tiles is not null && pf.Index < pf.Tiles.Length)
@@ -727,9 +727,7 @@ public sealed class HaulSystem : ITickSystem
             var last = pf.Tiles[pf.Tiles.Length - 1];
             if (last.X == toX && last.Y == toY) return;
         }
-        var start = _grid.At(
-            Math.Clamp(fromX, 0, _grid.Width - 1),
-            Math.Clamp(fromY, 0, _grid.Height - 1));
+        var start = _grid.NodeAtOrFloor(fromX, fromY, fromZ);
         var goal = _grid.At(toX, toY);
         if (start == goal) { pf.Tiles = null; pf.Index = 0; return; }
         pf.Tiles = null;

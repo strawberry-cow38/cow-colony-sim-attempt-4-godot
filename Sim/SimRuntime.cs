@@ -46,6 +46,11 @@ public sealed class SimRuntime : IDisposable
     // Owns the cable edge list. Null until Bootstrap registers a PowerSystem.
     public PowerSystem? Power { get; set; }
 
+    // Set by Bootstrap right after the system is registered. The paused
+    // branch of Loop() polls it so blueprint / zone / designation commands
+    // still apply while Speed=0.
+    public CommandSystem? Commander { get; set; }
+
     // 0 = paused, otherwise tick-rate multiplier. Loop reads this each tick
     // so it can change live from the main thread.
     public int Speed
@@ -78,6 +83,10 @@ public sealed class SimRuntime : IDisposable
             var speed = Speed;
             if (speed <= 0)
             {
+                if (Commander is not null && Commander.DrainPausedCommands())
+                {
+                    PublishSnapshot(TickNumber);
+                }
                 if (token.WaitHandle.WaitOne(20))
                 {
                     return;
@@ -92,26 +101,7 @@ public sealed class SimRuntime : IDisposable
             try
             {
                 _scheduler.Tick(ctx);
-                _publisher.Publish(new SimSnapshot(
-                    TickNumber: current,
-                    ElapsedSeconds: GameClock.SecondsAt(current),
-                    EntityCount: _world.EntityCount,
-                    Colonists: BuildColonistViews(),
-                    Spots: BuildSpotViews(),
-                    Paths: BuildPathViews(),
-                    Zones: BuildZoneViews(),
-                    Designations: BuildDesignationViews(),
-                    BlueprintGhosts: BuildBlueprintGhostViews(),
-                    Trees: BuildTreeViews(),
-                    Boulders: BuildBoulderViews(),
-                    Items: BuildItemViews(),
-                    Structures: BuildStructureViews(),
-                    TreeFalls: _world.DrainTreeFalls(),
-                    Lighting: BuildLightingView(),
-                    Weather: BuildWeatherView(),
-                    PowerNodes: BuildPowerNodeViews(),
-                    PowerEdges: BuildPowerEdgeViews(),
-                    PowerGrids: BuildPowerGridViews()));
+                PublishSnapshot(current);
             }
             catch (Exception ex)
             {
@@ -148,6 +138,30 @@ public sealed class SimRuntime : IDisposable
                 nextTick = now;
             }
         }
+    }
+
+    private void PublishSnapshot(long tick)
+    {
+        _publisher.Publish(new SimSnapshot(
+            TickNumber: tick,
+            ElapsedSeconds: GameClock.SecondsAt(tick),
+            EntityCount: _world.EntityCount,
+            Colonists: BuildColonistViews(),
+            Spots: BuildSpotViews(),
+            Paths: BuildPathViews(),
+            Zones: BuildZoneViews(),
+            Designations: BuildDesignationViews(),
+            BlueprintGhosts: BuildBlueprintGhostViews(),
+            Trees: BuildTreeViews(),
+            Boulders: BuildBoulderViews(),
+            Items: BuildItemViews(),
+            Structures: BuildStructureViews(),
+            TreeFalls: _world.DrainTreeFalls(),
+            Lighting: BuildLightingView(),
+            Weather: BuildWeatherView(),
+            PowerNodes: BuildPowerNodeViews(),
+            PowerEdges: BuildPowerEdgeViews(),
+            PowerGrids: BuildPowerGridViews()));
     }
 
     private ColonistView[] BuildColonistViews()

@@ -41,8 +41,10 @@ public partial class Bootstrap : Node3D
 
         var grid = new HeightGrid(_heightfield);
         var planner = new PathPlanner(grid);
-        _runtime.Scheduler.Register(new CommandSystem(
-            _runtime.Commands, _runtime.World, planner, grid));
+        var commander = new CommandSystem(
+            _runtime.Commands, _runtime.World, planner, grid);
+        _runtime.Scheduler.Register(commander);
+        _runtime.Commander = commander;
         _runtime.Scheduler.Register(new NeedDecaySystem(_runtime.World));
         _runtime.Scheduler.Register(new UnstickSystem(_runtime.World, grid));
         _runtime.Scheduler.Register(new JobSystem(_runtime.World, planner, grid));

@@ -30,106 +30,157 @@ public sealed class CommandSystem : ITickSystem
         _grid = grid;
     }
 
+    // Subset of commands safe to apply while the sim is paused — pure
+    // designation / placement / zone / setting changes that don't advance
+    // colonist state. Lets the player blueprint, zone, designate, erase, and
+    // cancel/deconstruct while time is stopped. Movement, drafting, work
+    // toggles, force-pickup etc. stay queued until time resumes.
+    private static bool IsPausedAllowed(object command) => command is
+        PlaceBlueprintGhostCommand or
+        CreateZoneCommand or
+        SetZoneSettingsCommand or
+        StampDesignationsCommand or
+        EraseInRectCommand or
+        CancelBlueprintCommand or
+        DeconstructStructureCommand or
+        DeconstructInRectCommand or
+        UninstallStructureCommand;
+
+    // Called by SimRuntime each idle iteration of the paused branch. Drains
+    // every queued command, dispatches the paused-allowed ones, and re-submits
+    // the rest to the bus so they fire on the next real tick after un-pause.
+    // Order between re-submitted commands and concurrent producer Submits can
+    // interleave at the queue tail — fine for our commands; pause is a coarse
+    // user-driven boundary, not a hard ordering contract.
+    // Returns true if at least one paused-allowed command fired so the caller
+    // can republish the snapshot — otherwise the new ghost / zone wouldn't
+    // surface to Game until the next real tick after un-pause.
+    public bool DrainPausedCommands()
+    {
+        List<ISimCommand>? carry = null;
+        var dispatched = false;
+        while (_bus.TryDequeue(out var command))
+        {
+            if (IsPausedAllowed(command))
+            {
+                Dispatch(command);
+                dispatched = true;
+                continue;
+            }
+            (carry ??= new List<ISimCommand>()).Add(command);
+        }
+        if (carry is not null)
+        {
+            for (var i = 0; i < carry.Count; i++) _bus.Submit(carry[i]);
+        }
+        return dispatched;
+    }
+
     public void Tick(TickContext ctx)
     {
         while (_bus.TryDequeue(out var command))
         {
-            switch (command)
-            {
-                case MoveCommand move:
-                    Apply(move);
-                    break;
-                case MoveGroupCommand mg:
-                    Apply(mg);
-                    break;
-                case MoveLineCommand ml:
-                    Apply(ml);
-                    break;
-                case InvalidatePathsInRegion region:
-                    Apply(region);
-                    break;
-                case CreateZoneCommand cz:
-                    Apply(cz);
-                    break;
-                case StampDesignationsCommand sd:
-                    Apply(sd);
-                    break;
-                case PlaceBlueprintGhostCommand pb:
-                    Apply(pb);
-                    break;
-                case EraseInRectCommand er:
-                    Apply(er);
-                    break;
-                case SetZoneSettingsCommand szs:
-                    Apply(szs);
-                    break;
-                case PrioritizeChopCommand pc:
-                    Apply(pc);
-                    break;
-                case PrioritizeMineCommand pm:
-                    Apply(pm);
-                    break;
-                case PrioritizeBuildCommand pb:
-                    Apply(pb);
-                    break;
-                case PrioritizeHaulCommand ph:
-                    Apply(ph);
-                    break;
-                case SetItemForbiddenCommand sf:
-                    Apply(sf);
-                    break;
-                case CancelBlueprintCommand cb:
-                    Apply(cb);
-                    break;
-                case UninstallStructureCommand us:
-                    Apply(us);
-                    break;
-                case DeconstructStructureCommand ds:
-                    Apply(ds);
-                    break;
-                case DeconstructInRectCommand dir:
-                    Apply(dir);
-                    break;
-                case ForcePickupCommand fp:
-                    Apply(fp);
-                    break;
-                case ToggleLampCommand tl:
-                    Apply(tl);
-                    break;
-                case ForceDropFromInventoryCommand fd:
-                    Apply(fd);
-                    break;
-                case EquipFromInventoryCommand eq:
-                    Apply(eq);
-                    break;
-                case UnequipInventoryCommand uq:
-                    Apply(uq);
-                    break;
-                case SetDraftedCommand sdr:
-                    Apply(sdr);
-                    break;
-                case SetWorkPriorityCommand swp:
-                    Apply(swp);
-                    break;
-                case SetGeneratorOutputCommand sgo:
-                    Apply(sgo);
-                    break;
-                case AddBillCommand ab:
-                    Apply(ab);
-                    break;
-                case RemoveBillCommand rb:
-                    Apply(rb);
-                    break;
-                case ToggleBillSuspendCommand tb:
-                    Apply(tb);
-                    break;
-                case CycleBillRepeatModeCommand cb:
-                    Apply(cb);
-                    break;
-                case SetBillTargetCountCommand stc:
-                    Apply(stc);
-                    break;
-            }
+            Dispatch(command);
+        }
+    }
+
+    private void Dispatch(object command)
+    {
+        switch (command)
+        {
+            case MoveCommand move:
+                Apply(move);
+                break;
+            case MoveGroupCommand mg:
+                Apply(mg);
+                break;
+            case MoveLineCommand ml:
+                Apply(ml);
+                break;
+            case InvalidatePathsInRegion region:
+                Apply(region);
+                break;
+            case CreateZoneCommand cz:
+                Apply(cz);
+                break;
+            case StampDesignationsCommand sd:
+                Apply(sd);
+                break;
+            case PlaceBlueprintGhostCommand pb:
+                Apply(pb);
+                break;
+            case EraseInRectCommand er:
+                Apply(er);
+                break;
+            case SetZoneSettingsCommand szs:
+                Apply(szs);
+                break;
+            case PrioritizeChopCommand pc:
+                Apply(pc);
+                break;
+            case PrioritizeMineCommand pm:
+                Apply(pm);
+                break;
+            case PrioritizeBuildCommand pb:
+                Apply(pb);
+                break;
+            case PrioritizeHaulCommand ph:
+                Apply(ph);
+                break;
+            case SetItemForbiddenCommand sf:
+                Apply(sf);
+                break;
+            case CancelBlueprintCommand cb:
+                Apply(cb);
+                break;
+            case UninstallStructureCommand us:
+                Apply(us);
+                break;
+            case DeconstructStructureCommand ds:
+                Apply(ds);
+                break;
+            case DeconstructInRectCommand dir:
+                Apply(dir);
+                break;
+            case ForcePickupCommand fp:
+                Apply(fp);
+                break;
+            case ToggleLampCommand tl:
+                Apply(tl);
+                break;
+            case ForceDropFromInventoryCommand fd:
+                Apply(fd);
+                break;
+            case EquipFromInventoryCommand eq:
+                Apply(eq);
+                break;
+            case UnequipInventoryCommand uq:
+                Apply(uq);
+                break;
+            case SetDraftedCommand sdr:
+                Apply(sdr);
+                break;
+            case SetWorkPriorityCommand swp:
+                Apply(swp);
+                break;
+            case SetGeneratorOutputCommand sgo:
+                Apply(sgo);
+                break;
+            case AddBillCommand ab:
+                Apply(ab);
+                break;
+            case RemoveBillCommand rb:
+                Apply(rb);
+                break;
+            case ToggleBillSuspendCommand tb:
+                Apply(tb);
+                break;
+            case CycleBillRepeatModeCommand cb:
+                Apply(cb);
+                break;
+            case SetBillTargetCountCommand stc:
+                Apply(stc);
+                break;
         }
     }
 

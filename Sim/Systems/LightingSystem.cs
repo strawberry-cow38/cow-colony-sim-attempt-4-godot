@@ -1,4 +1,5 @@
 using CowColonySim.Sim.Lighting;
+using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.World;
 using CowColonySim.Sim.World.Components;
 
@@ -20,12 +21,14 @@ public sealed class LightingSystem : ITickSystem
     private const float MaxEmitterContribution = 0.5f;
 
     private readonly SimWorld _world;
+    private readonly HeightGrid _heightGrid;
     public LightGrid Grid { get; }
     public float SunFraction { get; private set; }
 
-    public LightingSystem(SimWorld world, int width, int height)
+    public LightingSystem(SimWorld world, HeightGrid heightGrid, int width, int height)
     {
         _world = world;
+        _heightGrid = heightGrid;
         Grid = new LightGrid(width, height);
     }
 
@@ -34,6 +37,16 @@ public sealed class LightingSystem : ITickSystem
         SunFraction = SunCurve.FractionAtTick(ctx.TickNumber);
         var sunByte = (byte)Math.Clamp((int)MathF.Round(SunFraction * 255f), 0, 255);
         Grid.Fill(sunByte);
+        // Roofed tiles get no sun. Player lights below still light their tile
+        // through the per-emitter pass (light passes through ceilings cheaply
+        // — fine until indoor lighting sims demand more nuance).
+        for (var y = 0; y < Grid.Height; y++)
+        {
+            for (var x = 0; x < Grid.Width; x++)
+            {
+                if (_heightGrid.IsRoofed(x, y)) Grid.Values[y * Grid.Width + x] = 0;
+            }
+        }
 
         foreach (var entity in _world.Store.Query<LightEmitter, TilePosition>().Entities)
         {

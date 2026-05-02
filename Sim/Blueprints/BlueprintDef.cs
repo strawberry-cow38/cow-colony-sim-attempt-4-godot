@@ -51,7 +51,11 @@ public sealed record BlueprintDef(
     // and either climb or step off horizontally.
     bool IsLadder = false,
     // Vertical span of the ladder in 0.75 m quanta. Ignored unless IsLadder.
-    int LadderSpanQuanta = 0)
+    int LadderSpanQuanta = 0,
+    // When true, completion registers a ceiling at the structure's top —
+    // sun light + rain stop at this footprint. Roofs use this so anything
+    // beneath stays dry and shaded.
+    bool BlocksLightAndRain = false)
 {
     // Height converted to 0.75 m vertical quanta — matches the terrain
     // quantum + the build-layer step. Quarter wall = 1, half wall = 2,

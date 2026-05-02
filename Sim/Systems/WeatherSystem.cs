@@ -1,3 +1,4 @@
+using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.Weather;
 using CowColonySim.Sim.World;
 
@@ -12,6 +13,7 @@ namespace CowColonySim.Sim.Systems;
 public sealed class WeatherSystem : ITickSystem
 {
     private readonly SimWorld _world;
+    private readonly HeightGrid _heightGrid;
     public TempGrid Temperature { get; }
     public RainGrid Rainfall { get; }
     public MapClimate Climate { get; }
@@ -23,9 +25,10 @@ public sealed class WeatherSystem : ITickSystem
     // Wind speed, m/s. Same cheap synthesized curve until biome inputs land.
     public float CurrentWindSpeed { get; private set; }
 
-    public WeatherSystem(SimWorld world, int width, int height, MapClimate climate)
+    public WeatherSystem(SimWorld world, HeightGrid heightGrid, int width, int height, MapClimate climate)
     {
         _world = world;
+        _heightGrid = heightGrid;
         Temperature = new TempGrid(width, height);
         Rainfall = new RainGrid(width, height);
         Climate = climate;
@@ -46,5 +49,15 @@ public sealed class WeatherSystem : ITickSystem
         CurrentWindSpeed = 2f + 8f * gust + 6f * CurrentRainfall;
         Temperature.Fill(CurrentCelsius);
         Rainfall.Fill(CurrentRainfall);
+        // Roof tiles dry: zero rainfall under any structure flagged
+        // BlocksLightAndRain. Temperature still tracks outside (indoor
+        // climate model lands later — heaters/coolers will paint deltas).
+        for (var y = 0; y < Rainfall.Height; y++)
+        {
+            for (var x = 0; x < Rainfall.Width; x++)
+            {
+                if (_heightGrid.IsRoofed(x, y)) Rainfall.Values[y * Rainfall.Width + x] = 0f;
+            }
+        }
     }
 }

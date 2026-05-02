@@ -65,10 +65,10 @@ public partial class Bootstrap : Node3D
         _runtime.Scheduler.Register(power);
         _runtime.Power = power;
         _runtime.Scheduler.Register(new WanderSystem(_runtime.World, planner, grid));
-        var lighting = new LightingSystem(_runtime.World, grid.Width, grid.Height);
+        var lighting = new LightingSystem(_runtime.World, grid, grid.Width, grid.Height);
         _runtime.Scheduler.Register(lighting);
         _runtime.Lighting = lighting;
-        var weather = new WeatherSystem(_runtime.World, grid.Width, grid.Height, MapClimate.Temperate);
+        var weather = new WeatherSystem(_runtime.World, grid, grid.Width, grid.Height, MapClimate.Temperate);
         _runtime.Scheduler.Register(weather);
         _runtime.Weather = weather;
         _runtime.Scheduler.Register(new PlantGrowthSystem(_runtime.World, lighting, weather));

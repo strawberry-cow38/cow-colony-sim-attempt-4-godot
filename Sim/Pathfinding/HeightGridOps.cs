@@ -26,6 +26,10 @@ public static class HeightGridOps
         {
             grid.AddWalkableLayer(x, y, baseLayer + def.HeightQuanta / 2);
         }
+        if (def.BlocksLightAndRain)
+        {
+            grid.AddRoof(x, y);
+        }
     }
 
     public static void UnregisterStructure(HeightGrid grid, BlueprintDef def, int x, int y, int baseLayer)
@@ -41,6 +45,10 @@ public static class HeightGridOps
         if (def.WalkableTop)
         {
             grid.RemoveWalkableLayer(x, y, baseLayer + def.HeightQuanta / 2);
+        }
+        if (def.BlocksLightAndRain)
+        {
+            grid.RemoveRoof(x, y);
         }
     }
 }

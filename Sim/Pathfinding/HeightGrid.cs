@@ -37,6 +37,10 @@ public sealed class HeightGrid
     // pair means "you can step from layer a to layer b at this (x,y) and back".
     // Ladders register here on completion.
     private readonly Dictionary<int, List<(int a, int b)>> _ladders = new();
+    // Per-tile count of structures overhead that block sun + rain. Rooves
+    // bump this on completion; LightingSystem + WeatherSystem multiply
+    // sun/rainfall by 0 where the count is non-zero.
+    private readonly byte[] _roofCount;
 
     public int Width { get; }
     public int Height { get; }
@@ -47,6 +51,7 @@ public sealed class HeightGrid
         Width = field.VertWidth - 1;
         Height = field.VertHeight - 1;
         _blocked = new byte[Width * Height];
+        _roofCount = new byte[Width * Height];
     }
 
     // Per-tile dynamic blocker. Trees, walls, and other tile-occupiers set
@@ -178,6 +183,26 @@ public sealed class HeightGrid
                 return;
             }
         }
+    }
+
+    public bool IsRoofed(int x, int y)
+    {
+        if ((uint)x >= (uint)Width || (uint)y >= (uint)Height) return false;
+        return _roofCount[y * Width + x] != 0;
+    }
+
+    public void AddRoof(int x, int y)
+    {
+        if ((uint)x >= (uint)Width || (uint)y >= (uint)Height) return;
+        var i = y * Width + x;
+        if (_roofCount[i] < byte.MaxValue) _roofCount[i]++;
+    }
+
+    public void RemoveRoof(int x, int y)
+    {
+        if ((uint)x >= (uint)Width || (uint)y >= (uint)Height) return;
+        var i = y * Width + x;
+        if (_roofCount[i] > 0) _roofCount[i]--;
     }
 
     public int LadderCountAt(int x, int y)

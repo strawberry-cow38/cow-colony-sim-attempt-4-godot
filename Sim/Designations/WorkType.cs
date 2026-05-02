@@ -14,11 +14,12 @@ public enum WorkType
     Plants = 4,
     StructureWork = 5,
     Cooking = 6,
+    Switch = 7,
 }
 
 public static class WorkTypes
 {
-    public const int Count = 7;
+    public const int Count = 8;
 
     public static readonly WorkType[] All =
     {
@@ -29,6 +30,7 @@ public static class WorkTypes
         WorkType.Plants,
         WorkType.StructureWork,
         WorkType.Cooking,
+        WorkType.Switch,
     };
 
     public static readonly string[] DisplayNames =
@@ -40,6 +42,7 @@ public static class WorkTypes
         "Plants",
         "Tear",
         "Cook",
+        "Switch",
     };
 
     public static string DisplayName(WorkType t) => DisplayNames[(int)t];
@@ -76,6 +79,9 @@ public static class WorkTypes
                 return true;
             case WorkKind.Cook:
                 type = WorkType.Cooking;
+                return true;
+            case WorkKind.SwitchLamp:
+                type = WorkType.Switch;
                 return true;
             default:
                 type = default;

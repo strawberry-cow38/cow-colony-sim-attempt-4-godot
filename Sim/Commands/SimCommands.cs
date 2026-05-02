@@ -135,6 +135,10 @@ public readonly record struct SetWorkPriorityCommand(int ColonistId, WorkType Wo
 // totals on the next tick.
 public readonly record struct SetGeneratorOutputCommand(int EntityId, float Watts, bool IsOn) : ISimCommand;
 
+// Pin a colonist to walk to a switchable structure (lamp) and flip its
+// LampSwitch.On. Instant on arrival — no progress timer.
+public readonly record struct ToggleLampCommand(int ColonistId, int LampEntityId) : ISimCommand;
+
 public readonly record struct SetZoneSettingsCommand(
     int ZoneId,
     string Name,

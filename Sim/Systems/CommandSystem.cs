@@ -93,6 +93,9 @@ public sealed class CommandSystem : ITickSystem
                 case ForcePickupCommand fp:
                     Apply(fp);
                     break;
+                case ToggleLampCommand tl:
+                    Apply(tl);
+                    break;
                 case ForceDropFromInventoryCommand fd:
                     Apply(fd);
                     break;
@@ -330,6 +333,41 @@ public sealed class CommandSystem : ITickSystem
         work.CarryKind = ItemKind.None;
         work.CarryCount = 0;
         work.CarryMinifiedDefId = null;
+        pf.Tiles = null;
+        pf.Index = 0;
+    }
+
+    private void Apply(ToggleLampCommand cmd)
+    {
+        var colonist = _world.Store.GetEntityById(cmd.ColonistId);
+        if (colonist == default) return;
+        if (!colonist.HasComponent<WorkJob>() || !colonist.HasComponent<PathFollower>()
+            || !colonist.HasComponent<TilePosition>()) return;
+
+        var lamp = _world.Store.GetEntityById(cmd.LampEntityId);
+        if (lamp == default || !lamp.HasComponent<LampSwitch>() || !lamp.HasComponent<TilePosition>()) return;
+        ref var lampPos = ref lamp.GetComponent<TilePosition>();
+
+        // Drop any other colonist already heading to flip this same switch
+        // — single-flip race avoidance, same as PrioritizeChop pattern.
+        foreach (var other in _world.Store.Query<Colonist, WorkJob, PathFollower>().Entities)
+        {
+            if (other.Id == cmd.ColonistId) continue;
+            ref var ow = ref other.GetComponent<WorkJob>();
+            if (!ow.Active || ow.Kind != WorkKind.SwitchLamp || ow.TargetEntityId != cmd.LampEntityId) continue;
+            ref var opf = ref other.GetComponent<PathFollower>();
+            ResetWorkJob(ref ow, ref opf);
+        }
+
+        ref var work = ref colonist.GetComponent<WorkJob>();
+        ref var pf = ref colonist.GetComponent<PathFollower>();
+        work.Active = true;
+        work.Kind = WorkKind.SwitchLamp;
+        work.TargetEntityId = cmd.LampEntityId;
+        work.TargetTileX = lampPos.TileX;
+        work.TargetTileY = lampPos.TileY;
+        work.Progress = 0f;
+        work.Forced = true;
         pf.Tiles = null;
         pf.Index = 0;
     }

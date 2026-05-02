@@ -55,7 +55,11 @@ public sealed record BlueprintDef(
     // When true, completion registers a ceiling at the structure's top —
     // sun light + rain stop at this footprint. Roofs use this so anything
     // beneath stays dry and shaded.
-    bool BlocksLightAndRain = false)
+    bool BlocksLightAndRain = false,
+    // When true, SpawnStructure attaches a LampSwitch{On=true}. PowerSystem
+    // skips this sink's demand + forces IsPowered=false while On is false.
+    // Toggled via WorkKind.SwitchLamp jobs.
+    bool Switchable = false)
 {
     // Height converted to 0.75 m vertical quanta — matches the terrain
     // quantum + the build-layer step. Quarter wall = 1, half wall = 2,

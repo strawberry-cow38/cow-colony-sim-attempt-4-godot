@@ -231,9 +231,14 @@ public sealed class PowerSystem : ITickSystem
             if (node.Kind == PowerNodeKind.Source && node.IsActive) g.TotalSupplyW += node.SupplyW;
             // Sinks count as demand. Pylons with built-in load (lamp pylon)
             // also draw their DemandW from the grid even though their Kind
-            // stays Pylon for topology purposes.
-            if (node.Kind == PowerNodeKind.Sink) g.TotalDemandW += node.DemandW;
-            else if (node.Kind == PowerNodeKind.Pylon && node.DemandW > 0f) g.TotalDemandW += node.DemandW;
+            // stays Pylon for topology purposes. A switched-off lamp draws
+            // nothing — the grid still shows online for everyone else.
+            var switchedOff = entity.HasComponent<LampSwitch>() && !entity.GetComponent<LampSwitch>().On;
+            if (!switchedOff)
+            {
+                if (node.Kind == PowerNodeKind.Sink) g.TotalDemandW += node.DemandW;
+                else if (node.Kind == PowerNodeKind.Pylon && node.DemandW > 0f) g.TotalDemandW += node.DemandW;
+            }
             grids[node.GridId] = g;
         }
 
@@ -259,6 +264,9 @@ public sealed class PowerSystem : ITickSystem
                 continue;
             }
             node.IsPowered = g.Status != GridStatus.Blackout;
+            // Switched-off lamp stays dark even on a healthy grid.
+            if (entity.HasComponent<LampSwitch>() && !entity.GetComponent<LampSwitch>().On)
+                node.IsPowered = false;
         }
     }
 }

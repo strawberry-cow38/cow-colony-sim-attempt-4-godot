@@ -52,6 +52,7 @@ public partial class Bootstrap : Node3D
         _runtime.Scheduler.Register(new FarmAutoDesignateSystem(_runtime.World));
         _runtime.Scheduler.Register(new SowJobSystem(_runtime.World, planner, grid));
         _runtime.Scheduler.Register(new ForcePickupSystem(_runtime.World, planner, grid));
+        _runtime.Scheduler.Register(new SwitchSystem(_runtime.World, planner, grid));
         // Construction runs before haul: a wood-hungry blueprint should
         // claim an idle colonist before generic stockpile-haul would
         // ship the same wood somewhere else.

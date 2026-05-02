@@ -162,6 +162,40 @@ public partial class ContextMenu : CanvasLayer
         Show(screenPos);
     }
 
+    public void OpenForStructure(int structureId, Vector2 screenPos)
+    {
+        var snap = _publisher.Current;
+        StructureView? structure = null;
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            if (snap.Structures[i].EntityId != structureId) continue;
+            structure = snap.Structures[i];
+            break;
+        }
+        if (structure is null) return;
+        var view = structure.Value;
+        var colonistId = _selection.SelectedEntityId ?? 0;
+
+        ClearItems();
+        if (view.SwitchOn is bool on)
+        {
+            if (colonistId != 0)
+            {
+                var label = on
+                    ? $"turn off (colonist #{colonistId})"
+                    : $"turn on (colonist #{colonistId})";
+                AddOption(label,
+                    () => _commands.Submit(new ToggleLampCommand(colonistId, structureId)));
+            }
+            else
+            {
+                AddDisabled(on ? "turn off (no colonist selected)" : "turn on (no colonist selected)");
+            }
+        }
+        if (_items.GetChildCount() == 0) return;
+        Show(screenPos);
+    }
+
     public void OpenForItem(int itemId, Vector2 screenPos)
     {
         var snap = _publisher.Current;

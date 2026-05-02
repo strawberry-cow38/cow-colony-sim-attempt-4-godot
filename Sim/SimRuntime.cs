@@ -440,7 +440,10 @@ public sealed class SimRuntime : IDisposable
                     bills = arr;
                 }
             }
-            views[i++] = new StructureView(entity.Id, s.DefId, p.TileX, p.TileY, s.Rotation, s.BaseLayer, bills);
+            bool? switchOn = entity.HasComponent<LampSwitch>()
+                ? entity.GetComponent<LampSwitch>().On
+                : null;
+            views[i++] = new StructureView(entity.Id, s.DefId, p.TileX, p.TileY, s.Rotation, s.BaseLayer, bills, switchOn);
         }
         return views;
     }

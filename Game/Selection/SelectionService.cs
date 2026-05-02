@@ -638,6 +638,7 @@ public partial class SelectionService : Node
             if (TryOpenBoulderContextMenu(camera, pressScreen)) return;
             if (TryOpenItemContextMenu(camera, pressScreen)) return;
             if (TryOpenBlueprintContextMenu(camera, pressScreen)) return;
+            if (TryOpenStructureContextMenu(camera, pressScreen, hit)) return;
         }
 
         var ids = SelectedColonistIds.Count > 0
@@ -1353,6 +1354,29 @@ public partial class SelectionService : Node
         var id = PickBlueprintId(camera, mousePos);
         if (id is null) return false;
         _contextMenu.OpenForBlueprint(id.Value, mousePos);
+        return true;
+    }
+
+    private bool TryOpenStructureContextMenu(Camera3D camera, Vector2 mousePos, Vector3 groundHit)
+    {
+        if (_contextMenu is null) return false;
+        var tx = (int)MathF.Floor(groundHit.X / SimConstants.GodotUnitsPerTile);
+        var ty = (int)MathF.Floor(groundHit.Z / SimConstants.GodotUnitsPerTile);
+        var id = PickStructureAtTile(tx, ty);
+        if (id is null) return false;
+        // OpenForStructure no-ops (returns hidden) when the structure has
+        // nothing actionable — caller treats that as "menu didn't open" by
+        // returning false so the RMB can still fall through to a move.
+        var snap = _publisher.Current;
+        var hasAction = false;
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            if (snap.Structures[i].EntityId != id) continue;
+            if (snap.Structures[i].SwitchOn.HasValue) hasAction = true;
+            break;
+        }
+        if (!hasAction) return false;
+        _contextMenu.OpenForStructure(id.Value, mousePos);
         return true;
     }
 

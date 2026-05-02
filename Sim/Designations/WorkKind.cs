@@ -29,4 +29,7 @@ public enum WorkKind
     // Walk to a workstation's interaction tile and tick a recipe to
     // completion. Active bill on the workstation drives the loop.
     Cook = 12,
+    // Walk to a switchable structure (lamp) and flip its LampSwitch.On.
+    // Instant on arrival — no progress timer.
+    SwitchLamp = 13,
 }

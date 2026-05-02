@@ -192,7 +192,8 @@ public static class BlueprintCatalog
                 HeightMeters: 2.25f,
                 Materials: new[] { new MaterialCost(ItemKind.Wood, 2) },
                 Power: PowerNodeKind.Sink,
-                DefaultDemandW: 50f),
+                DefaultDemandW: 50f,
+                Switchable: true),
 
             new BlueprintDef(
                 Id: "furniture.table",
@@ -218,7 +219,8 @@ public static class BlueprintCatalog
                 Materials: new[] { new MaterialCost(ItemKind.Wood, 1) },
                 Power: PowerNodeKind.Sink,
                 DefaultDemandW: 25f,
-                RequiresSurface: true),
+                RequiresSurface: true,
+                Switchable: true),
         };
 
         var dict = new Dictionary<string, BlueprintDef>(defs.Length);

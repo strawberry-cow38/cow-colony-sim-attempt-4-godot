@@ -209,6 +209,9 @@ public sealed class SimWorld
                 IsActive = def.Power.Value != PowerNodeKind.Source, // sources start off until player flips slider
                 GridId = -1,
             });
+            // Lamps get a player-toggleable switch. Default On so a fresh
+            // lamp lights up the moment its grid powers on.
+            if (def.Switchable) e.AddComponent(new LampSwitch { On = true });
             BumpPowerVersion();
         }
         if (def.Category == BlueprintCategory.Workstation)

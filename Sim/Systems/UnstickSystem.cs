@@ -33,6 +33,10 @@ public sealed class UnstickSystem : ITickSystem
             ref var pos = ref entity.GetComponent<TilePosition>();
             ref var pf = ref entity.GetComponent<PathFollower>();
             if (!InBounds(pos.TileX, pos.TileY)) continue;
+            // Colonist standing on a wall top / roof / ladder summit has a
+            // walkable layer at their current Z even though the ground tile
+            // beneath is blocked. Treat that as not-stuck.
+            if (_grid.HasWalkableLayer(pos.TileX, pos.TileY, pos.TileZ)) continue;
             if (!_grid.IsBlocked(pos.TileX, pos.TileY)) continue;
             // Diagonal-cut false alarm: while a path is active, the colonist is
             // interpolating between two walkable waypoints and may briefly floor

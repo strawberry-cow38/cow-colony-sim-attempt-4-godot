@@ -650,7 +650,11 @@ public partial class PlacementTool : Node
     {
         var camera = GetViewport().GetCamera3D();
         if (camera is null) return null;
-        var hit = TerrainRayCast.Project(camera, mousePos, _field);
+        // Pass walkable-top lookup so placement preview snaps to wall tops /
+        // roofs / ladder summits. Without this the ghost lands on the floor
+        // tile behind the wall when hovering near the wall top.
+        var elevated = WalkableTopLookup.Build(_publisher.Current);
+        var hit = TerrainRayCast.Project(camera, mousePos, _field, elevated);
         if (hit is null) return null;
         var tx = (int)Mathf.Floor(hit.Value.X / SimConstants.GodotUnitsPerTile);
         var ty = (int)Mathf.Floor(hit.Value.Z / SimConstants.GodotUnitsPerTile);

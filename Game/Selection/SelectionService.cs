@@ -697,33 +697,8 @@ public partial class SelectionService : Node
     // clicks on a roof land on the roof instead of punching through to
     // ground. Returns 0 (= "no elevated surface, use ground heightfield")
     // for tiles with nothing on them.
-    // Ghosts intentionally excluded — pathing can't walk on them until
-    // construction completes, so picking up an unfinished roof would just
-    // produce an unreachable goal.
-    private Func<int, int, float> BuildElevatedTopLookup()
-    {
-        var snap = _publisher.Current;
-        var lookup = new Dictionary<long, float>();
-        for (var i = 0; i < snap.Structures.Count; i++)
-        {
-            var st = snap.Structures[i];
-            if (!CowColonySim.Sim.Blueprints.BlueprintCatalog.TryGet(st.DefId, out var sd) || sd is null) continue;
-            if (!sd.WalkableTop) continue;
-            var (sw, sh) = (st.Rotation & 1) == 0 ? (sd.FootprintW, sd.FootprintH) : (sd.FootprintH, sd.FootprintW);
-            var topMetres = (st.BaseLayer + sd.HeightQuanta) * 0.75f;
-            for (var dy = 0; dy < sh; dy++)
-            for (var dx = 0; dx < sw; dx++)
-            {
-                var key = ((long)(st.TileX + dx) << 32) | (uint)(st.TileY + dy);
-                if (!lookup.TryGetValue(key, out var prev) || topMetres > prev) lookup[key] = topMetres;
-            }
-        }
-        return (tx, ty) =>
-        {
-            var key = ((long)tx << 32) | (uint)ty;
-            return lookup.TryGetValue(key, out var v) ? v : 0f;
-        };
-    }
+    private Func<int, int, float> BuildElevatedTopLookup() =>
+        WalkableTopLookup.Build(_publisher.Current);
 
     private void HandleLeftClickPick(Camera3D camera, Vector2 mousePos, Vector3 groundHit, bool shift)
     {

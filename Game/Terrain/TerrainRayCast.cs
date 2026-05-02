@@ -58,6 +58,13 @@ public static class TerrainRayCast
         return null;
     }
 
+    // Inflate wall/roof tops outward into neighbouring tiles by this fraction
+    // so clicking near (but not perfectly on) a wall top still snaps to the
+    // wall. Without this, the ray skims past the wall top and lands on the
+    // ground tile behind it — wall-top targeting becomes pixel-precise misery.
+    // 0.35 of a tile ≈ 0.5m of forgiveness on each edge.
+    private const float ElevatedInflate = 0.35f;
+
     private static float Surface(
         Heightfield field, Vector3 p, float unitsPerMeter, Func<int, int, float>? elevatedTopMetres)
     {
@@ -68,6 +75,28 @@ public static class TerrainRayCast
         var tx = (int)MathF.Floor(tilesX);
         var ty = (int)MathF.Floor(tilesY);
         var elevatedUnits = elevatedTopMetres(tx, ty) * unitsPerMeter;
+        var fracX = tilesX - tx;
+        var fracY = tilesY - ty;
+        if (fracX < ElevatedInflate)
+        {
+            var n = elevatedTopMetres(tx - 1, ty) * unitsPerMeter;
+            if (n > elevatedUnits) elevatedUnits = n;
+        }
+        if (fracX > 1f - ElevatedInflate)
+        {
+            var n = elevatedTopMetres(tx + 1, ty) * unitsPerMeter;
+            if (n > elevatedUnits) elevatedUnits = n;
+        }
+        if (fracY < ElevatedInflate)
+        {
+            var n = elevatedTopMetres(tx, ty - 1) * unitsPerMeter;
+            if (n > elevatedUnits) elevatedUnits = n;
+        }
+        if (fracY > 1f - ElevatedInflate)
+        {
+            var n = elevatedTopMetres(tx, ty + 1) * unitsPerMeter;
+            if (n > elevatedUnits) elevatedUnits = n;
+        }
         return elevatedUnits > groundUnits ? elevatedUnits : groundUnits;
     }
 }

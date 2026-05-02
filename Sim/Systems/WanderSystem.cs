@@ -12,6 +12,7 @@ namespace CowColonySim.Sim.Systems;
 public sealed class WanderSystem : ITickSystem
 {
     private const float SpeedMps = 0.9f;
+    private const float ClimbMps = 1.0f;
     private const float WaypointReachedMeters = 0.05f;
 
     private readonly SimWorld _world;
@@ -101,6 +102,33 @@ public sealed class WanderSystem : ITickSystem
             }
 
             var target = pf.Tiles[pf.Index];
+
+            // Same-tile vertical step = ladder climb. Animate SubZ at ClimbMps
+            // so the colonist visibly ascends instead of teleporting.
+            if (target.X == pos.TileX && target.Y == pos.TileY && target.Z != pos.TileZ)
+            {
+                var targetMz = target.Z * SimConstants.MetersPerTile;
+                var dz = targetMz - pos.MetersZ;
+                var distZ = MathF.Abs(dz);
+                if (distZ <= WaypointReachedMeters)
+                {
+                    SnapZ(ref pos, target.Z);
+                    pf.Index++;
+                    continue;
+                }
+                var climbStep = ClimbMps * dt;
+                if (climbStep >= distZ)
+                {
+                    SnapZ(ref pos, target.Z);
+                    pf.Index++;
+                }
+                else
+                {
+                    WriteMetersZ(ref pos, pos.MetersZ + MathF.Sign(dz) * climbStep);
+                }
+                continue;
+            }
+
             var targetMx = (target.X + 0.5f) * SimConstants.MetersPerTile;
             var targetMy = (target.Y + 0.5f) * SimConstants.MetersPerTile;
             var dx = targetMx - pos.MetersX;
@@ -190,6 +218,20 @@ public sealed class WanderSystem : ITickSystem
         p.TileY = ty;
         p.SubX = (float)(tilesX - tx);
         p.SubY = (float)(tilesY - ty);
+    }
+
+    private static void WriteMetersZ(ref TilePosition p, float metersZ)
+    {
+        var tilesZ = metersZ / SimConstants.MetersPerTile;
+        var tz = (int)MathF.Floor(tilesZ);
+        p.TileZ = tz;
+        p.SubZ = tilesZ - tz;
+    }
+
+    private static void SnapZ(ref TilePosition p, int z)
+    {
+        p.TileZ = z;
+        p.SubZ = 0f;
     }
 
     private uint NextU32()

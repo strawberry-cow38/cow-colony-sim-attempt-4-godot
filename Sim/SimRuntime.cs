@@ -203,7 +203,7 @@ public sealed class SimRuntime : IDisposable
                 }
             }
             views[i++] = new ColonistView(
-                entity.Id, p.MetersX, p.MetersY,
+                entity.Id, p.MetersX, p.MetersY, p.MetersZ,
                 n.Hunger, n.Thirst, n.Energy,
                 j.Active, j.NeedKind,
                 w.Active, w.Kind, w.Carrying, w.CarryKind, w.CarryCount,

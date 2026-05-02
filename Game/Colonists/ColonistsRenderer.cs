@@ -1,3 +1,4 @@
+using System;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Terrain;
@@ -65,8 +66,13 @@ public partial class ColonistsRenderer : MultiMeshInstance3D
             var c = colonists[i];
             var x = c.MetersX * _unitsPerMeter;
             var z = c.MetersY * _unitsPerMeter;
+            // Use the higher of (terrain ground, sim-tracked vertical) so
+            // wall-top + ladder climbs ride the structure, while open ground
+            // still hugs the heightfield even when MetersZ is 0.
             var groundY = SampleGround(c.MetersX, c.MetersY);
-            var pos = new Vector3(x, groundY + halfHeightUnits, z);
+            var simY = c.MetersZ * _unitsPerMeter;
+            var feetY = MathF.Max(groundY, simY);
+            var pos = new Vector3(x, feetY + halfHeightUnits, z);
             Multimesh.SetInstanceTransform(i, new Transform3D(Basis.Identity, pos));
         }
     }

@@ -5,12 +5,13 @@ using CowColonySim.Sim.World.Components;
 namespace CowColonySim.Sim.Snapshots;
 
 // Per-colonist row in the snapshot. EntityId lets the game side address
-// commands back to the same entity. Ground-plane metres only — vertical
-// (Y in Godot) is sampled from the heightfield by the renderer.
+// commands back to the same entity. MetersZ carries the colonist's vertical
+// position so wall-top + ladder-climb visuals don't snap back to terrain.
 public readonly record struct ColonistView(
     int EntityId,
     float MetersX,
     float MetersY,
+    float MetersZ,
     float Hunger,
     float Thirst,
     float Energy,

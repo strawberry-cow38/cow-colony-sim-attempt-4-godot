@@ -62,6 +62,7 @@ public partial class ColonistsRenderer : MultiMeshInstance3D
         }
 
         var halfHeightUnits = CapsuleHeightMeters * 0.5f * _unitsPerMeter;
+        var topLookup = WalkableTopLookup.Build(snap);
         for (var i = 0; i < colonists.Count; i++)
         {
             var c = colonists[i];
@@ -71,7 +72,7 @@ public partial class ColonistsRenderer : MultiMeshInstance3D
             // hugs the heightfield when sim-Z just rounded a layer above
             // the actual terrain (otherwise colonists float at the end of
             // a ladder descent or after walking onto an uneven tile).
-            var feetY = WalkableFloor.FeetUnits(_heightfield, _unitsPerMeter, c.MetersX, c.MetersY, c.MetersZ);
+            var feetY = WalkableFloor.FeetUnits(_heightfield, _unitsPerMeter, c.MetersX, c.MetersY, c.MetersZ, topLookup);
             var pos = new Vector3(x, feetY + halfHeightUnits, z);
             Multimesh.SetInstanceTransform(i, new Transform3D(Basis.Identity, pos));
         }

@@ -33,11 +33,24 @@ public sealed class UnstickSystem : ITickSystem
             ref var pos = ref entity.GetComponent<TilePosition>();
             ref var pf = ref entity.GetComponent<PathFollower>();
             if (!InBounds(pos.TileX, pos.TileY)) continue;
-            // Colonist standing on a wall top / roof / ladder summit has a
-            // walkable layer at their current Z even though the ground tile
-            // beneath is blocked. Treat that as not-stuck.
+            // Standing on a registered walkable layer (ground floor, wall
+            // top, roof, ladder summit) is not stuck.
             if (_grid.HasWalkableLayer(pos.TileX, pos.TileY, pos.TileZ)) continue;
-            if (!_grid.IsBlocked(pos.TileX, pos.TileY)) continue;
+            // No walkable layer at current Z, but ground floor is open at
+            // this tile — drop the colonist back to the ground rather than
+            // teleporting them away. Covers the case where an elevated
+            // surface vanished (roof deconstructed, wall removed) leaving
+            // them floating mid-air.
+            if (!_grid.IsBlocked(pos.TileX, pos.TileY))
+            {
+                pos.TileZ = _grid.FloorLayer(pos.TileX, pos.TileY);
+                pos.SubZ = 0f;
+                pf.Tiles = null;
+                pf.Index = 0;
+                pf.PendingRequest = false;
+                pf.LastPathFailed = false;
+                continue;
+            }
             // Diagonal-cut false alarm: while a path is active, the colonist is
             // interpolating between two walkable waypoints and may briefly floor
             // into a blocked corner tile. They're not stuck — only treat as

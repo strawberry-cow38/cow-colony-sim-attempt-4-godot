@@ -36,6 +36,7 @@ public partial class PowerVisualsRenderer : Node3D
     private MultiMesh _multiMesh = null!;
     private readonly Dictionary<int, OmniLight3D> _sinkLights = new();
     private long _lastEdgeSig = -1;
+    private long _lastLampSig = -1;
 
     public void Configure(SnapshotPublisher publisher, Heightfield heightfield)
     {
@@ -227,6 +228,10 @@ public partial class PowerVisualsRenderer : Node3D
 
     private void UpdateLamps(SimSnapshot snap)
     {
+        var sig = ComputeLampSig(snap);
+        if (sig == _lastLampSig) return;
+        _lastLampSig = sig;
+
         var seen = new HashSet<int>();
         for (var i = 0; i < snap.PowerNodes.Count; i++)
         {
@@ -264,5 +269,29 @@ public partial class PowerVisualsRenderer : Node3D
         var stale = new List<int>();
         foreach (var kv in _sinkLights) if (!seen.Contains(kv.Key)) stale.Add(kv.Key);
         foreach (var id in stale) { _sinkLights[id].QueueFree(); _sinkLights.Remove(id); }
+    }
+
+    // Hash over the inputs UpdateLamps reads. Includes IsPowered + DemandW so
+    // a blackout or generator toggle invalidates and forces a relight pass.
+    private static long ComputeLampSig(SimSnapshot snap)
+    {
+        unchecked
+        {
+            var h = 1469598103934665603L;
+            var nodes = snap.PowerNodes;
+            for (var i = 0; i < nodes.Count; i++)
+            {
+                var n = nodes[i];
+                var isLamp = (n.Kind == PowerNodeKind.Sink) || (n.Kind == PowerNodeKind.Pylon && n.DemandW > 0f);
+                if (!isLamp) continue;
+                h = (h ^ n.EntityId) * 1099511628211L;
+                h = (h ^ (int)n.Kind) * 1099511628211L;
+                h = (h ^ n.BaseLayer) * 1099511628211L;
+                h = (h ^ BitConverter.SingleToInt32Bits(n.MetersX)) * 1099511628211L;
+                h = (h ^ BitConverter.SingleToInt32Bits(n.MetersY)) * 1099511628211L;
+                h = (h ^ (n.IsPowered ? 1 : 0)) * 1099511628211L;
+            }
+            return h;
+        }
     }
 }

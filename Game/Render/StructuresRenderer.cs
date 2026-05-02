@@ -18,6 +18,7 @@ public partial class StructuresRenderer : Node3D
     private Heightfield _heightfield = null!;
     private float _unitsPerMeter;
     private readonly Dictionary<int, MeshInstance3D> _boxes = new();
+    private long _lastSig = -1;
 
     public void Configure(SnapshotPublisher publisher, Heightfield heightfield)
     {
@@ -33,6 +34,10 @@ public partial class StructuresRenderer : Node3D
     public override void _Process(double delta)
     {
         var snap = _publisher.Current;
+        var sig = ComputeStructureSig(snap);
+        if (sig == _lastSig) return;
+        _lastSig = sig;
+
         var structures = snap.Structures;
         var seen = new HashSet<int>();
 
@@ -106,5 +111,31 @@ public partial class StructuresRenderer : Node3D
     private float SampleGround(float tileCenterX, float tileCenterY)
     {
         return _heightfield.SurfaceMetresAt(tileCenterX, tileCenterY) * _unitsPerMeter;
+    }
+
+    // Hash over the StructureViews this renderer actually draws (skipping
+    // pylons + table lamps since other renderers own them). Frames where
+    // nothing relevant changed early-return and skip the loop.
+    private static long ComputeStructureSig(SimSnapshot snap)
+    {
+        unchecked
+        {
+            var h = 1469598103934665603L;
+            var structs = snap.Structures;
+            for (var i = 0; i < structs.Count; i++)
+            {
+                var s = structs[i];
+                if (!BlueprintCatalog.TryGet(s.DefId, out var def) || def is null) continue;
+                if (def.Power == PowerNodeKind.Pylon) continue;
+                if (s.DefId == "furniture.table_lamp") continue;
+                h = (h ^ s.EntityId) * 1099511628211L;
+                h = (h ^ s.TileX) * 1099511628211L;
+                h = (h ^ s.TileY) * 1099511628211L;
+                h = (h ^ s.Rotation) * 1099511628211L;
+                h = (h ^ s.BaseLayer) * 1099511628211L;
+                h = (h ^ s.DefId.GetHashCode()) * 1099511628211L;
+            }
+            return h;
+        }
     }
 }

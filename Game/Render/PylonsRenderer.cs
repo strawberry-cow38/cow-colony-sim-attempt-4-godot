@@ -29,6 +29,10 @@ public partial class PylonsRenderer : Node3D
     private MultiMeshInstance3D? _defaultBucket;
     private MultiMeshInstance3D? _boxBucket;
     private MultiMeshInstance3D? _lampBucket;
+    private long _lastSig = -1;
+    private readonly System.Collections.Generic.List<Transform3D> _defaultXforms = new();
+    private readonly System.Collections.Generic.List<Transform3D> _boxXforms = new();
+    private readonly System.Collections.Generic.List<Transform3D> _lampXforms = new();
 
     public void Configure(SnapshotPublisher publisher, Heightfield heightfield)
     {
@@ -133,12 +137,16 @@ public partial class PylonsRenderer : Node3D
         if (_defaultBucket is null || _boxBucket is null || _lampBucket is null) return;
 
         var snap = _publisher.Current;
+        var sig = ComputePylonSig(snap);
+        if (sig == _lastSig) return;
+        _lastSig = sig;
+
         var structures = snap.Structures;
         var facings = BuildPylonFacings(snap);
 
-        var defaultXforms = new System.Collections.Generic.List<Transform3D>();
-        var boxXforms = new System.Collections.Generic.List<Transform3D>();
-        var lampXforms = new System.Collections.Generic.List<Transform3D>();
+        _defaultXforms.Clear();
+        _boxXforms.Clear();
+        _lampXforms.Clear();
 
         for (var i = 0; i < structures.Count; i++)
         {
@@ -162,24 +170,57 @@ public partial class PylonsRenderer : Node3D
             var isLamp = def.DefaultDemandW > 0f;
             if (isLamp)
             {
-                defaultXforms.Add(poleXform);
+                _defaultXforms.Add(poleXform);
                 var lampOffsetY = LampArmHeightMeters * _unitsPerMeter;
                 var lampXform = new Transform3D(basis, new Vector3(x, baseY + lampOffsetY, z));
-                lampXforms.Add(lampXform);
+                _lampXforms.Add(lampXform);
             }
             else if (IsBoxVariant(s.EntityId))
             {
-                boxXforms.Add(poleXform);
+                _boxXforms.Add(poleXform);
             }
             else
             {
-                defaultXforms.Add(poleXform);
+                _defaultXforms.Add(poleXform);
             }
         }
 
-        WriteBucket(_defaultBucket, defaultXforms);
-        WriteBucket(_boxBucket, boxXforms);
-        WriteBucket(_lampBucket, lampXforms);
+        WriteBucket(_defaultBucket, _defaultXforms);
+        WriteBucket(_boxBucket, _boxXforms);
+        WriteBucket(_lampBucket, _lampXforms);
+    }
+
+    // Hash over inputs to _Process so repeated frames with identical
+    // structures + edge topology skip the full rebuild. Mirrors the
+    // ComputeEdgeSig pattern in PowerVisualsRenderer.UpdateCables.
+    private static long ComputePylonSig(SimSnapshot snap)
+    {
+        unchecked
+        {
+            var h = 1469598103934665603L;
+            var structs = snap.Structures;
+            for (var i = 0; i < structs.Count; i++)
+            {
+                var s = structs[i];
+                if (!BlueprintCatalog.TryGet(s.DefId, out var def) || def is null) continue;
+                if (def.Power != PowerNodeKind.Pylon) continue;
+                h = (h ^ s.EntityId) * 1099511628211L;
+                h = (h ^ s.TileX) * 1099511628211L;
+                h = (h ^ s.TileY) * 1099511628211L;
+                h = (h ^ s.Rotation) * 1099511628211L;
+                h = (h ^ s.BaseLayer) * 1099511628211L;
+                h = (h ^ s.DefId.GetHashCode()) * 1099511628211L;
+            }
+            var edges = snap.PowerEdges;
+            for (var i = 0; i < edges.Count; i++)
+            {
+                var e = edges[i];
+                if (!e.IsHop) continue;
+                h = (h ^ e.FromEntityId) * 1099511628211L;
+                h = (h ^ e.ToEntityId) * 1099511628211L;
+            }
+            return h;
+        }
     }
 
     // Synthetic facings for pylons that don't have PowerEdges yet — i.e.

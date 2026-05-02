@@ -73,7 +73,8 @@ public static class BlueprintCatalog
                 Materials: new[] { new MaterialCost(ItemKind.Wood, 2) },
                 Stackable: true,
                 WalkableTop: true,
-                BlocksLightAndRain: true),
+                BlocksLightAndRain: true,
+                StackOnNearbyWalkableTop: true),
 
             new BlueprintDef(
                 Id: "structure.ladder",

@@ -444,6 +444,7 @@ public partial class PlacementTool : Node
         if (baseLayer == 0 && !IsFootprintLevel(origin.X, origin.Y, w, h)) return false;
         if (IsFootprintObstructed(origin.X, origin.Y, w, h, baseLayer, def.HeightQuanta)) return false;
         if (def.RequiresSurface && !IsFootprintCoveredBySurface(origin.X, origin.Y, w, h, baseLayer)) return false;
+        if (def.StackOnNearbyWalkableTop && baseLayer == 0) return false;
         return true;
     }
 
@@ -498,6 +499,11 @@ public partial class PlacementTool : Node
     private int ResolveBaseLayer(BlueprintDef def, int rotation, Vector2I origin)
     {
         if (def.RequiresSurface) return ResolveSurfaceTop(def, rotation, origin);
+        if (def.StackOnNearbyWalkableTop)
+        {
+            var roofTop = ResolveNearbyWalkableTop(def, rotation, origin);
+            if (roofTop > 0) return roofTop;
+        }
         if (!def.Stackable) return _tools.ActiveBuildLayer;
         var (w, h) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
         var minX = origin.X; var minY = origin.Y;
@@ -545,6 +551,43 @@ public partial class PlacementTool : Node
             var g = snap.BlueprintGhosts[i];
             if (!BlueprintCatalog.TryGet(g.DefId, out var gd) || gd is null) continue;
             if (!gd.IsSurface) continue;
+            var (gw, gh) = (g.Rotation & 1) == 0 ? (gd.FootprintW, gd.FootprintH) : (gd.FootprintH, gd.FootprintW);
+            var gmx = g.OriginTileX + gw - 1;
+            var gmy = g.OriginTileY + gh - 1;
+            if (minX > gmx || maxX < g.OriginTileX || minY > gmy || maxY < g.OriginTileY) continue;
+            var t = g.BaseLayer + gd.HeightQuanta;
+            if (t > top) top = t;
+        }
+        return top;
+    }
+
+    // Roof / overhead-stack helper: scan footprint expanded by 1 tile margin
+    // for the tallest WalkableTop structure/ghost top. Returns 0 if nothing
+    // nearby — caller falls back to other logic / rejects placement.
+    private int ResolveNearbyWalkableTop(BlueprintDef def, int rotation, Vector2I origin)
+    {
+        var (w, h) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
+        var minX = origin.X - 1; var minY = origin.Y - 1;
+        var maxX = origin.X + w; var maxY = origin.Y + h;
+        var snap = _publisher.Current;
+        var top = 0;
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            var s = snap.Structures[i];
+            if (!BlueprintCatalog.TryGet(s.DefId, out var sd) || sd is null) continue;
+            if (!sd.WalkableTop) continue;
+            var (sw, sh) = (s.Rotation & 1) == 0 ? (sd.FootprintW, sd.FootprintH) : (sd.FootprintH, sd.FootprintW);
+            var smx = s.TileX + sw - 1;
+            var smy = s.TileY + sh - 1;
+            if (minX > smx || maxX < s.TileX || minY > smy || maxY < s.TileY) continue;
+            var t = s.BaseLayer + sd.HeightQuanta;
+            if (t > top) top = t;
+        }
+        for (var i = 0; i < snap.BlueprintGhosts.Count; i++)
+        {
+            var g = snap.BlueprintGhosts[i];
+            if (!BlueprintCatalog.TryGet(g.DefId, out var gd) || gd is null) continue;
+            if (!gd.WalkableTop) continue;
             var (gw, gh) = (g.Rotation & 1) == 0 ? (gd.FootprintW, gd.FootprintH) : (gd.FootprintH, gd.FootprintW);
             var gmx = g.OriginTileX + gw - 1;
             var gmy = g.OriginTileY + gh - 1;

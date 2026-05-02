@@ -1301,7 +1301,12 @@ public sealed class CommandSystem : ITickSystem
         var start = _grid.At(
             Math.Clamp(pos.TileX, 0, _grid.Width - 1),
             Math.Clamp(pos.TileY, 0, _grid.Height - 1));
-        var goal = _grid.At(move.Target.X, move.Target.Y);
+        // Honour caller-supplied Z when it names an actual walkable layer
+        // at the target tile — RMB on a roof / wall top puts the desired
+        // layer in Target.Z. Otherwise fall back to the ground floor.
+        var goal = _grid.HasWalkableLayer(move.Target.X, move.Target.Y, move.Target.Z)
+            ? new TileCoord(move.Target.X, move.Target.Y, move.Target.Z)
+            : _grid.At(move.Target.X, move.Target.Y);
         pf.Tiles = null;
         pf.Index = 0;
         pf.PendingRequest = true;

@@ -59,7 +59,13 @@ public sealed record BlueprintDef(
     // When true, SpawnStructure attaches a LampSwitch{On=true}. PowerSystem
     // skips this sink's demand + forces IsPowered=false while On is false.
     // Toggled via WorkKind.SwitchLamp jobs.
-    bool Switchable = false)
+    bool Switchable = false,
+    // When true, placement auto-snaps BaseLayer to the tallest WalkableTop
+    // structure/ghost top found within the footprint or its 1-tile margin.
+    // Used by roofs so a row dragged between walls lifts to wall-top height
+    // automatically — no Q/E fiddling. Placement at ground (BaseLayer=0) is
+    // rejected when no nearby walkable top exists.
+    bool StackOnNearbyWalkableTop = false)
 {
     // Height converted to 0.75 m vertical quanta — matches the terrain
     // quantum + the build-layer step. Quarter wall = 1, half wall = 2,

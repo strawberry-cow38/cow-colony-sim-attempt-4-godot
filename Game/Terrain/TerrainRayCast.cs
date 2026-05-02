@@ -1,3 +1,4 @@
+using System;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Terrain;
 using Godot;
@@ -9,13 +10,22 @@ namespace CowColonySim.Game.Terrain;
 // the visible peak). This walks the camera ray in coarse steps, finds
 // the first segment where the ray drops below the heightfield surface,
 // then bisects to refine.
+//
+// elevatedTopMetres (optional): per-tile additional surface height in
+// metres that overrides the heightfield where higher (wall tops, roofs).
+// Used by RMB pathing so clicks on a roof land on the roof, not the
+// ground beneath.
 public static class TerrainRayCast
 {
     private const int BisectIterations = 14;
     private const float MaxRayUnits = 5000f;
     private const float CoarseStepFraction = 0.4f;
 
-    public static Vector3? Project(Camera3D camera, Vector2 mousePos, Heightfield field)
+    public static Vector3? Project(
+        Camera3D camera,
+        Vector2 mousePos,
+        Heightfield field,
+        Func<int, int, float>? elevatedTopMetres = null)
     {
         var origin = camera.ProjectRayOrigin(mousePos);
         var dir = camera.ProjectRayNormal(mousePos).Normalized();
@@ -23,12 +33,12 @@ public static class TerrainRayCast
         var stepUnits = SimConstants.GodotUnitsPerTile * CoarseStepFraction;
 
         var prevT = 0f;
-        var prevAbove = origin.Y > Surface(field, origin, unitsPerMeter);
+        var prevAbove = origin.Y > Surface(field, origin, unitsPerMeter, elevatedTopMetres);
 
         for (var t = stepUnits; t < MaxRayUnits; t += stepUnits)
         {
             var p = origin + dir * t;
-            var above = p.Y > Surface(field, p, unitsPerMeter);
+            var above = p.Y > Surface(field, p, unitsPerMeter, elevatedTopMetres);
             if (prevAbove && !above)
             {
                 var lo = prevT;
@@ -37,7 +47,7 @@ public static class TerrainRayCast
                 {
                     var mid = (lo + hi) * 0.5f;
                     var pm = origin + dir * mid;
-                    if (pm.Y > Surface(field, pm, unitsPerMeter)) lo = mid;
+                    if (pm.Y > Surface(field, pm, unitsPerMeter, elevatedTopMetres)) lo = mid;
                     else hi = mid;
                 }
                 return origin + dir * ((lo + hi) * 0.5f);
@@ -48,10 +58,16 @@ public static class TerrainRayCast
         return null;
     }
 
-    private static float Surface(Heightfield field, Vector3 p, float unitsPerMeter)
+    private static float Surface(
+        Heightfield field, Vector3 p, float unitsPerMeter, Func<int, int, float>? elevatedTopMetres)
     {
         var tilesX = p.X / SimConstants.GodotUnitsPerTile;
         var tilesY = p.Z / SimConstants.GodotUnitsPerTile;
-        return field.SurfaceMetresAt(tilesX, tilesY) * unitsPerMeter;
+        var groundUnits = field.SurfaceMetresAt(tilesX, tilesY) * unitsPerMeter;
+        if (elevatedTopMetres is null) return groundUnits;
+        var tx = (int)MathF.Floor(tilesX);
+        var ty = (int)MathF.Floor(tilesY);
+        var elevatedUnits = elevatedTopMetres(tx, ty) * unitsPerMeter;
+        return elevatedUnits > groundUnits ? elevatedUnits : groundUnits;
     }
 }

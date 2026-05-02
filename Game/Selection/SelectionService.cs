@@ -618,7 +618,8 @@ public partial class SelectionService : Node
 
     private void HandleRightMouseRelease(Camera3D camera, Vector2 pressScreen, InputEventMouseButton mb)
     {
-        var releaseHit = TerrainRayCast.Project(camera, mb.Position, _heightfield);
+        var elevated = BuildElevatedTopLookup();
+        var releaseHit = TerrainRayCast.Project(camera, mb.Position, _heightfield, elevated);
         if (releaseHit is null) return;
         var hit = releaseHit.Value;
 
@@ -650,14 +651,16 @@ public partial class SelectionService : Node
 
         if (isDrag && ids.Count > 0)
         {
-            var pressHit = TerrainRayCast.Project(camera, pressScreen, _heightfield);
+            var pressHit = TerrainRayCast.Project(camera, pressScreen, _heightfield, elevated);
             if (pressHit is Vector3 ph)
             {
                 var sx = Mathf.Clamp((int)MathF.Floor(ph.X / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
                 var sy = Mathf.Clamp((int)MathF.Floor(ph.Z / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
+                var sz = ZLayerFromHitY(ph.Y);
                 var ex = Mathf.Clamp((int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
                 var ey = Mathf.Clamp((int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
-                _commands.Submit(new MoveLineCommand(ids, new TileCoord(sx, sy), new TileCoord(ex, ey), queue));
+                var ez = ZLayerFromHitY(hit.Y);
+                _commands.Submit(new MoveLineCommand(ids, new TileCoord(sx, sy, sz), new TileCoord(ex, ey, ez), queue));
                 SimLog.Logger.Information("MoveLine for {N} entity(ies) ({SX},{SY})->({EX},{EY}) queue={Q}.",
                     ids.Count, sx, sy, ex, ey, queue);
                 return;
@@ -666,17 +669,60 @@ public partial class SelectionService : Node
 
         var tx = Mathf.Clamp((int)MathF.Floor(hit.X / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
         var ty = Mathf.Clamp((int)MathF.Floor(hit.Z / SimConstants.GodotUnitsPerTile), 0, TilesPerCell - 1);
+        var tz = ZLayerFromHitY(hit.Y);
         if (ids.Count > 1)
         {
-            _commands.Submit(new MoveGroupCommand(ids, new TileCoord(tx, ty), queue));
-            SimLog.Logger.Information("MoveGroup for {N} entity(ies) -> ({TX},{TY}) queue={Q}.",
-                ids.Count, tx, ty, queue);
+            _commands.Submit(new MoveGroupCommand(ids, new TileCoord(tx, ty, tz), queue));
+            SimLog.Logger.Information("MoveGroup for {N} entity(ies) -> ({TX},{TY},{TZ}) queue={Q}.",
+                ids.Count, tx, ty, tz, queue);
             return;
         }
 
-        _commands.Submit(new MoveCommand(ids[0], new TileCoord(tx, ty), queue));
-        SimLog.Logger.Information("Move command for entity {Id} -> ({TX},{TY}) queue={Q}.",
-            ids[0], tx, ty, queue);
+        _commands.Submit(new MoveCommand(ids[0], new TileCoord(tx, ty, tz), queue));
+        SimLog.Logger.Information("Move command for entity {Id} -> ({TX},{TY},{TZ}) queue={Q}.",
+            ids[0], tx, ty, tz, queue);
+    }
+
+    // Convert world-Y in Godot units to a layer index (1.5 m steps).
+    // Used by RMB to carry the clicked surface's Z into MoveCommand so
+    // the path goal lands on a wall top / roof instead of the ground.
+    private static int ZLayerFromHitY(float worldY)
+    {
+        var metresY = worldY * SimConstants.MetersPerTile / SimConstants.GodotUnitsPerTile;
+        return (int)MathF.Round(metresY / SimConstants.MetersPerTile);
+    }
+
+    // Per-tile elevated walkable top in metres, derived from snapshot
+    // structures + ghosts flagged WalkableTop. RMB raycast uses this so
+    // clicks on a roof land on the roof instead of punching through to
+    // ground. Returns 0 (= "no elevated surface, use ground heightfield")
+    // for tiles with nothing on them.
+    // Ghosts intentionally excluded — pathing can't walk on them until
+    // construction completes, so picking up an unfinished roof would just
+    // produce an unreachable goal.
+    private Func<int, int, float> BuildElevatedTopLookup()
+    {
+        var snap = _publisher.Current;
+        var lookup = new Dictionary<long, float>();
+        for (var i = 0; i < snap.Structures.Count; i++)
+        {
+            var st = snap.Structures[i];
+            if (!CowColonySim.Sim.Blueprints.BlueprintCatalog.TryGet(st.DefId, out var sd) || sd is null) continue;
+            if (!sd.WalkableTop) continue;
+            var (sw, sh) = (st.Rotation & 1) == 0 ? (sd.FootprintW, sd.FootprintH) : (sd.FootprintH, sd.FootprintW);
+            var topMetres = (st.BaseLayer + sd.HeightQuanta) * 0.75f;
+            for (var dy = 0; dy < sh; dy++)
+            for (var dx = 0; dx < sw; dx++)
+            {
+                var key = ((long)(st.TileX + dx) << 32) | (uint)(st.TileY + dy);
+                if (!lookup.TryGetValue(key, out var prev) || topMetres > prev) lookup[key] = topMetres;
+            }
+        }
+        return (tx, ty) =>
+        {
+            var key = ((long)tx << 32) | (uint)ty;
+            return lookup.TryGetValue(key, out var v) ? v : 0f;
+        };
     }
 
     private void HandleLeftClickPick(Camera3D camera, Vector2 mousePos, Vector3 groundHit, bool shift)

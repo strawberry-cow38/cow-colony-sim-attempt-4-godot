@@ -148,7 +148,8 @@ public partial class SelectionRing : Node3D
             var x = c.MetersX * _unitsPerMeter;
             var z = c.MetersY * _unitsPerMeter;
             var topLookup = WalkableTopLookup.Build(snap);
-            var y = WalkableFloor.FeetUnits(_heightfield, _unitsPerMeter, c.MetersX, c.MetersY, c.MetersZ, topLookup) + 1f;
+            var ladderLookup = LadderTileLookup.Build(snap);
+            var y = WalkableFloor.FeetUnits(_heightfield, _unitsPerMeter, c.MetersX, c.MetersY, c.MetersZ, topLookup, ladderLookup) + 1f;
             PlaceRing(slot, new Vector3(x, y, z), ColonistRadiusMeters);
             return true;
         }

@@ -136,6 +136,7 @@ public partial class PathOverlay : Node3D
     }
 
     private Func<int, int, float>? _topLookup;
+    private Func<int, int, bool>? _ladderLookup;
 
     public override void _Process(double delta)
     {
@@ -145,6 +146,7 @@ public partial class PathOverlay : Node3D
         var viewport = GetViewport();
         var viewportHeight = viewport?.GetVisibleRect().Size.Y ?? 1080f;
         _topLookup = WalkableTopLookup.Build(snap);
+        _ladderLookup = LadderTileLookup.Build(snap);
 
         _linesMesh.ClearSurfaces();
 
@@ -267,7 +269,7 @@ public partial class PathOverlay : Node3D
         // Same rule the colonist renderer uses — sim-Z within one quantum
         // of terrain hugs the heightfield, otherwise it rides the elevated
         // layer (wall top, mid-ladder, structure deck).
-        var y = WalkableFloor.FeetUnits(_heightfield, _unitsPerMeter, metersX, metersY, metersZ, _topLookup) + liftUnits;
+        var y = WalkableFloor.FeetUnits(_heightfield, _unitsPerMeter, metersX, metersY, metersZ, _topLookup, _ladderLookup) + liftUnits;
         return new Vector3(x, y, z);
     }
 }

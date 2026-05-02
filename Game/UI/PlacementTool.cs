@@ -563,7 +563,9 @@ public partial class PlacementTool : Node
 
     // Roof / overhead-stack helper: scan footprint expanded by 1 tile margin
     // for the tallest WalkableTop structure/ghost top. Returns 0 if nothing
-    // nearby — caller falls back to other logic / rejects placement.
+    // nearby — caller falls back to other logic / rejects placement. Defs
+    // that themselves StackOnNearbyWalkableTop (other roofs) are excluded
+    // so a roof row doesn't keep stair-stepping higher each click.
     private int ResolveNearbyWalkableTop(BlueprintDef def, int rotation, Vector2I origin)
     {
         var (w, h) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
@@ -576,6 +578,7 @@ public partial class PlacementTool : Node
             var s = snap.Structures[i];
             if (!BlueprintCatalog.TryGet(s.DefId, out var sd) || sd is null) continue;
             if (!sd.WalkableTop) continue;
+            if (sd.StackOnNearbyWalkableTop) continue;
             var (sw, sh) = (s.Rotation & 1) == 0 ? (sd.FootprintW, sd.FootprintH) : (sd.FootprintH, sd.FootprintW);
             var smx = s.TileX + sw - 1;
             var smy = s.TileY + sh - 1;
@@ -588,6 +591,7 @@ public partial class PlacementTool : Node
             var g = snap.BlueprintGhosts[i];
             if (!BlueprintCatalog.TryGet(g.DefId, out var gd) || gd is null) continue;
             if (!gd.WalkableTop) continue;
+            if (gd.StackOnNearbyWalkableTop) continue;
             var (gw, gh) = (g.Rotation & 1) == 0 ? (gd.FootprintW, gd.FootprintH) : (gd.FootprintH, gd.FootprintW);
             var gmx = g.OriginTileX + gw - 1;
             var gmy = g.OriginTileY + gh - 1;

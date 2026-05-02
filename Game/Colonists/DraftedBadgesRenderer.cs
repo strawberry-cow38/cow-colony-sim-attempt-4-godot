@@ -1,3 +1,4 @@
+using CowColonySim.Game.Terrain;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Terrain;
@@ -10,7 +11,11 @@ namespace CowColonySim.Game.Colonists;
 // the snapshot. Unshaded so it pops at night.
 public partial class DraftedBadgesRenderer : MultiMeshInstance3D
 {
-    private const float HeadOffsetMeters = 2.1f;
+    // Capsule + head clearance — kept in sync with ColonistsRenderer's
+    // 1.7m capsule so the badge floats just above the colonist's head no
+    // matter how high they're standing (wall top, mid-climb, ladder top).
+    private const float CapsuleHeightMeters = 1.7f;
+    private const float HeadGapMeters = 0.4f;
     private const float BadgeSizeMeters = 0.45f;
 
     private SnapshotPublisher _publisher = null!;
@@ -60,7 +65,7 @@ public partial class DraftedBadgesRenderer : MultiMeshInstance3D
         if (Multimesh.InstanceCount != draftCount) Multimesh.InstanceCount = draftCount;
         if (draftCount == 0) return;
 
-        var headOffsetUnits = HeadOffsetMeters * _unitsPerMeter;
+        var headOffsetUnits = (CapsuleHeightMeters + HeadGapMeters) * _unitsPerMeter;
         var slot = 0;
         for (var i = 0; i < colonists.Count; i++)
         {
@@ -68,16 +73,9 @@ public partial class DraftedBadgesRenderer : MultiMeshInstance3D
             if (!c.Drafted) continue;
             var x = c.MetersX * _unitsPerMeter;
             var z = c.MetersY * _unitsPerMeter;
-            var groundY = SampleGround(c.MetersX, c.MetersY);
-            var pos = new Vector3(x, groundY + headOffsetUnits, z);
+            var feetY = WalkableFloor.FeetUnits(_heightfield, _unitsPerMeter, c.MetersX, c.MetersY, c.MetersZ);
+            var pos = new Vector3(x, feetY + headOffsetUnits, z);
             Multimesh.SetInstanceTransform(slot++, new Transform3D(Basis.Identity, pos));
         }
-    }
-
-    private float SampleGround(float metersX, float metersY)
-    {
-        var tilesX = metersX / SimConstants.MetersPerTile;
-        var tilesY = metersY / SimConstants.MetersPerTile;
-        return _heightfield.SurfaceMetresAt(tilesX, tilesY) * _unitsPerMeter;
     }
 }

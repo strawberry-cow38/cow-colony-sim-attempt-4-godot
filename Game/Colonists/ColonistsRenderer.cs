@@ -1,4 +1,5 @@
 using System;
+using CowColonySim.Game.Terrain;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Snapshots;
 using CowColonySim.Sim.Terrain;
@@ -66,12 +67,11 @@ public partial class ColonistsRenderer : MultiMeshInstance3D
             var c = colonists[i];
             var x = c.MetersX * _unitsPerMeter;
             var z = c.MetersY * _unitsPerMeter;
-            // Use the higher of (terrain ground, sim-tracked vertical) so
-            // wall-top + ladder climbs ride the structure, while open ground
-            // still hugs the heightfield even when MetersZ is 0.
-            var groundY = SampleGround(c.MetersX, c.MetersY);
-            var simY = c.MetersZ * _unitsPerMeter;
-            var feetY = MathF.Max(groundY, simY);
+            // WalkableFloor handles the wall-top / ladder-summit case AND
+            // hugs the heightfield when sim-Z just rounded a layer above
+            // the actual terrain (otherwise colonists float at the end of
+            // a ladder descent or after walking onto an uneven tile).
+            var feetY = WalkableFloor.FeetUnits(_heightfield, _unitsPerMeter, c.MetersX, c.MetersY, c.MetersZ);
             var pos = new Vector3(x, feetY + halfHeightUnits, z);
             Multimesh.SetInstanceTransform(i, new Transform3D(Basis.Identity, pos));
         }

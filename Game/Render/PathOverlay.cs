@@ -1,3 +1,4 @@
+using CowColonySim.Game.Terrain;
 using CowColonySim.Sim;
 using CowColonySim.Sim.Pathfinding;
 using CowColonySim.Sim.Snapshots;
@@ -164,7 +165,7 @@ public partial class PathOverlay : Node3D
             var view = paths[p];
             var tiles = view.RemainingTiles;
             var queued = view.QueuedTiles;
-            var colonistMeters = TryFindColonistMeters(snap, view.EntityId);
+            var colonist = TryFindColonist(snap, view.EntityId);
 
             // Active strip: colonist → next waypoint → ... → leg dest.
             // Vector3 we end the active strip at also seeds the queued
@@ -173,28 +174,28 @@ public partial class PathOverlay : Node3D
             if (tiles is { Length: > 0 })
             {
                 _linesMesh.SurfaceBegin(Mesh.PrimitiveType.LineStrip);
-                if (colonistMeters is { } cm)
+                if (colonist is { } c0)
                 {
-                    AddVertex(MetersToWorld(cm.X, cm.Y, lift), ActiveColor);
+                    AddVertex(MetersToWorld(c0.MetersX, c0.MetersY, c0.MetersZ, lift), ActiveColor);
                 }
                 for (var i = 0; i < tiles.Length; i++)
                 {
-                    var (mx, my) = TileCenter(tiles[i]);
-                    var v = MetersToWorld(mx, my, lift);
+                    var (mx, my, mz) = TileCenter(tiles[i]);
+                    var v = MetersToWorld(mx, my, mz, lift);
                     AddVertex(v, ActiveColor);
                     if (i == tiles.Length - 1) jointPos = v;
                 }
                 _linesMesh.SurfaceEnd();
 
-                var (dmx, dmy) = TileCenter(tiles[tiles.Length - 1]);
-                var ringPos = MetersToWorld(dmx, dmy, lift);
+                var (dmx, dmy, dmz) = TileCenter(tiles[tiles.Length - 1]);
+                var ringPos = MetersToWorld(dmx, dmy, dmz, lift);
                 _rings.Multimesh.SetInstanceTransform(activeIdx++, BuildRingTransform(camera, viewportHeight, ringPos));
             }
-            else if (colonistMeters is { } cm)
+            else if (colonist is { } c1)
             {
                 // Active leg between planner requests — anchor the queued
                 // strip at the colonist so it doesn't dangle in space.
-                jointPos = MetersToWorld(cm.X, cm.Y, lift);
+                jointPos = MetersToWorld(c1.MetersX, c1.MetersY, c1.MetersZ, lift);
             }
 
             if (queued is null || queued.Length == 0) continue;
@@ -203,8 +204,8 @@ public partial class PathOverlay : Node3D
             if (jointPos is Vector3 jp) AddVertex(jp, QueuedColor);
             for (var i = 0; i < queued.Length; i++)
             {
-                var (qmx, qmy) = TileCenter(queued[i]);
-                var qv = MetersToWorld(qmx, qmy, lift);
+                var (qmx, qmy, qmz) = TileCenter(queued[i]);
+                var qv = MetersToWorld(qmx, qmy, qmz, lift);
                 AddVertex(qv, QueuedColor);
                 _queuedRings.Multimesh.SetInstanceTransform(queuedIdx++, BuildRingTransform(camera, viewportHeight, qv));
             }
@@ -242,36 +243,28 @@ public partial class PathOverlay : Node3D
         return new Transform3D(basis, pos);
     }
 
-    private static (float X, float Y)? TryFindColonistMeters(SimSnapshot snap, int id)
+    private static ColonistView? TryFindColonist(SimSnapshot snap, int id)
     {
         for (var i = 0; i < snap.Colonists.Count; i++)
         {
-            if (snap.Colonists[i].EntityId == id)
-            {
-                return (snap.Colonists[i].MetersX, snap.Colonists[i].MetersY);
-            }
+            if (snap.Colonists[i].EntityId == id) return snap.Colonists[i];
         }
         return null;
     }
 
-    private static (float X, float Y) TileCenter(TileCoord t) =>
+    private static (float X, float Y, float Z) TileCenter(TileCoord t) =>
         ((t.X + 0.5f) * SimConstants.MetersPerTile,
-         (t.Y + 0.5f) * SimConstants.MetersPerTile);
+         (t.Y + 0.5f) * SimConstants.MetersPerTile,
+         t.Z * SimConstants.MetersPerTile);
 
-    private Vector3 MetersToWorld(float metersX, float metersY, float liftUnits)
+    private Vector3 MetersToWorld(float metersX, float metersY, float metersZ, float liftUnits)
     {
         var x = metersX * _unitsPerMeter;
         var z = metersY * _unitsPerMeter;
-        var y = SampleTileFloorY(metersX, metersY) + liftUnits;
+        // Same rule the colonist renderer uses — sim-Z within one quantum
+        // of terrain hugs the heightfield, otherwise it rides the elevated
+        // layer (wall top, mid-ladder, structure deck).
+        var y = WalkableFloor.FeetUnits(_heightfield, _unitsPerMeter, metersX, metersY, metersZ) + liftUnits;
         return new Vector3(x, y, z);
-    }
-
-    // When TileCoord becomes 3D and PathView carries Z, this becomes
-    // coord.Z * VerticalQuantumMetres instead of a surface sample.
-    private float SampleTileFloorY(float metersX, float metersY)
-    {
-        var tilesX = metersX / SimConstants.MetersPerTile;
-        var tilesY = metersY / SimConstants.MetersPerTile;
-        return _heightfield.SurfaceMetresAt(tilesX, tilesY) * _unitsPerMeter;
     }
 }

@@ -67,7 +67,6 @@ public partial class DraftedBadgesRenderer : MultiMeshInstance3D
 
         var headOffsetUnits = (CapsuleHeightMeters + HeadGapMeters) * _unitsPerMeter;
         var topLookup = WalkableTopLookup.Build(snap);
-        var ladderLookup = LadderTileLookup.Build(snap);
         var slot = 0;
         for (var i = 0; i < colonists.Count; i++)
         {
@@ -75,7 +74,7 @@ public partial class DraftedBadgesRenderer : MultiMeshInstance3D
             if (!c.Drafted) continue;
             var x = c.MetersX * _unitsPerMeter;
             var z = c.MetersY * _unitsPerMeter;
-            var feetY = WalkableFloor.FeetUnits(_heightfield, _unitsPerMeter, c.MetersX, c.MetersY, c.MetersZ, topLookup, ladderLookup);
+            var feetY = WalkableFloor.FeetUnits(_heightfield, _unitsPerMeter, c.MetersX, c.MetersY, c.MetersZ, topLookup);
             var pos = new Vector3(x, feetY + headOffsetUnits, z);
             Multimesh.SetInstanceTransform(slot++, new Transform3D(Basis.Identity, pos));
         }

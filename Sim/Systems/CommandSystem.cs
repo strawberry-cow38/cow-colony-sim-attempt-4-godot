@@ -434,7 +434,7 @@ public sealed class CommandSystem : ITickSystem
         var tx = pos.TileX;
         var ty = pos.TileY;
         var def = BlueprintCatalog.Get(defId);
-        UnblockFootprintIfStructure(def, rotation, tx, ty);
+        UnblockFootprintIfStructure(def, rotation, tx, ty, baseLayer);
         var hadPower = ent.HasComponent<PowerNode>();
         ent.DeleteEntity();
         if (hadPower) _world.BumpPowerVersion();
@@ -501,7 +501,7 @@ public sealed class CommandSystem : ITickSystem
         }
     }
 
-    private void UnblockFootprintIfStructure(BlueprintDef def, int rotation, int tileX, int tileY)
+    private void UnblockFootprintIfStructure(BlueprintDef def, int rotation, int tileX, int tileY, int baseLayer)
     {
         if (def.Category != BlueprintCategory.Structure) return;
         var (footW, footH) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
@@ -509,7 +509,7 @@ public sealed class CommandSystem : ITickSystem
         {
             for (var dx = 0; dx < footW; dx++)
             {
-                _grid.MarkBlocked(tileX + dx, tileY + dy, false);
+                HeightGridOps.UnregisterStructure(_grid, def, tileX + dx, tileY + dy, baseLayer);
             }
         }
     }
@@ -1134,7 +1134,7 @@ public sealed class CommandSystem : ITickSystem
                 {
                     for (var dx = 0; dx < footW; dx++)
                     {
-                        _grid.MarkBlocked(cmd.OriginTileX + dx, cmd.OriginTileY + dy, true);
+                        HeightGridOps.RegisterStructure(_grid, def, cmd.OriginTileX + dx, cmd.OriginTileY + dy, cmd.BaseLayer);
                     }
                 }
             }

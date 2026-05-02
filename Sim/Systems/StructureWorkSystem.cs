@@ -109,7 +109,7 @@ public sealed class StructureWorkSystem : ITickSystem
             var tx = pos.TileX;
             var ty = pos.TileY;
             var def = BlueprintCatalog.Get(defId);
-            UnblockFootprint(def, rotation, tx, ty);
+            UnblockFootprint(def, rotation, tx, ty, baseLayer);
 
             // Power-bearing structure leaves stale grid edges + cached grid
             // membership behind if topology rebuild isn't kicked.
@@ -281,7 +281,7 @@ public sealed class StructureWorkSystem : ITickSystem
         return found;
     }
 
-    private void UnblockFootprint(BlueprintDef def, int rotation, int tileX, int tileY)
+    private void UnblockFootprint(BlueprintDef def, int rotation, int tileX, int tileY, int baseLayer)
     {
         if (def.Category != BlueprintCategory.Structure) return;
         var (footW, footH) = (rotation & 1) == 0 ? (def.FootprintW, def.FootprintH) : (def.FootprintH, def.FootprintW);
@@ -289,7 +289,7 @@ public sealed class StructureWorkSystem : ITickSystem
         {
             for (var dx = 0; dx < footW; dx++)
             {
-                _grid.MarkBlocked(tileX + dx, tileY + dy, false);
+                HeightGridOps.UnregisterStructure(_grid, def, tileX + dx, tileY + dy, baseLayer);
             }
         }
         _world.ClearUnreachableWorkTargets();

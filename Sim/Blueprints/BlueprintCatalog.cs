@@ -32,7 +32,8 @@ public static class BlueprintCatalog
                 Requirements: System.Array.Empty<FootprintRequirement>(),
                 HeightMeters: 3.0f,
                 Materials: new[] { new MaterialCost(ItemKind.Wood, 5) },
-                Stackable: true),
+                Stackable: true,
+                WalkableTop: true),
 
             new BlueprintDef(
                 Id: "structure.wall_half",
@@ -44,7 +45,8 @@ public static class BlueprintCatalog
                 Requirements: System.Array.Empty<FootprintRequirement>(),
                 HeightMeters: 1.5f,
                 Materials: new[] { new MaterialCost(ItemKind.Wood, 2) },
-                Stackable: true),
+                Stackable: true,
+                WalkableTop: true),
 
             new BlueprintDef(
                 Id: "structure.wall_quarter",
@@ -56,7 +58,22 @@ public static class BlueprintCatalog
                 Requirements: System.Array.Empty<FootprintRequirement>(),
                 HeightMeters: 0.75f,
                 Materials: new[] { new MaterialCost(ItemKind.Wood, 1) },
-                Stackable: true),
+                Stackable: true,
+                WalkableTop: true),
+
+            new BlueprintDef(
+                Id: "structure.ladder",
+                DisplayName: "Ladder",
+                Category: BlueprintCategory.Structure,
+                Placement: PlacementMode.Single,
+                FootprintW: 1, FootprintH: 1,
+                Rotatable: false,
+                Requirements: System.Array.Empty<FootprintRequirement>(),
+                HeightMeters: 3.0f,
+                Materials: new[] { new MaterialCost(ItemKind.Wood, 3) },
+                Stackable: true,
+                IsLadder: true,
+                LadderSpanQuanta: 4),
 
             new BlueprintDef(
                 Id: "structure.door",

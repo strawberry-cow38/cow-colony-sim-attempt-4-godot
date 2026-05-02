@@ -102,6 +102,62 @@ public class AStarTests
     }
 
     [Fact]
+    public void Climbs_ladder_to_reach_wall_top()
+    {
+        var field = new Heightfield(6, 1);
+        var grid = new HeightGrid(field);
+        // Wall at (2,0): blocks ground, walkable top at z=2.
+        grid.MarkBlocked(2, 0, true);
+        grid.AddWalkableLayer(2, 0, 2);
+        // Ladder at (1,0): spans z=0..z=2, ground stays walkable, top is dismountable.
+        grid.AddLadder(1, 0, 0, 2);
+        grid.AddWalkableLayer(1, 0, 2);
+
+        var path = new List<TileCoord>();
+        var ok = AStar.TryFind(grid, new TileCoord(0, 0, 0), new TileCoord(2, 0, 2), path);
+
+        Assert.True(ok);
+        Assert.Equal(new TileCoord(0, 0, 0), path[0]);
+        Assert.Equal(new TileCoord(2, 0, 2), path[^1]);
+        Assert.Contains(new TileCoord(1, 0, 0), path);
+        Assert.Contains(new TileCoord(1, 0, 2), path);
+    }
+
+    [Fact]
+    public void Cannot_reach_wall_top_without_ladder()
+    {
+        var field = new Heightfield(6, 1);
+        var grid = new HeightGrid(field);
+        grid.MarkBlocked(2, 0, true);
+        grid.AddWalkableLayer(2, 0, 2);
+
+        var path = new List<TileCoord>();
+        var ok = AStar.TryFind(grid, new TileCoord(0, 0, 0), new TileCoord(2, 0, 2), path);
+
+        Assert.False(ok);
+    }
+
+    [Fact]
+    public void Routes_over_wall_via_paired_ladders()
+    {
+        var field = new Heightfield(6, 1);
+        var grid = new HeightGrid(field);
+        // 1-tall corridor: only path is over the wall via ladders.
+        grid.MarkBlocked(2, 0, true);
+        grid.AddWalkableLayer(2, 0, 2);
+        grid.AddLadder(1, 0, 0, 2);
+        grid.AddWalkableLayer(1, 0, 2);
+        grid.AddLadder(3, 0, 0, 2);
+        grid.AddWalkableLayer(3, 0, 2);
+
+        var path = new List<TileCoord>();
+        var ok = AStar.TryFind(grid, new TileCoord(0, 0, 0), new TileCoord(4, 0, 0), path);
+
+        Assert.True(ok);
+        Assert.Contains(new TileCoord(2, 0, 2), path);
+    }
+
+    [Fact]
     public void Returns_false_when_goal_unreachable()
     {
         var field = new Heightfield(6, 6);

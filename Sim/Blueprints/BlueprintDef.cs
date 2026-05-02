@@ -40,7 +40,18 @@ public sealed record BlueprintDef(
     // structure/ghost flagged IsSurface ending exactly at the new BaseLayer.
     // Auto-stacks BaseLayer onto the surface top so the player doesn't have
     // to fiddle with Q/E.
-    bool RequiresSurface = false)
+    bool RequiresSurface = false,
+    // When true, completion registers a walkable surface at this structure's
+    // top (BaseLayer + HeightQuanta/2). Walls + roofs use this so colonists
+    // can walk on top once a ladder gets them up there.
+    bool WalkableTop = false,
+    // When true, completion registers a vertical ladder edge at the structure
+    // tile spanning BaseLayer ↔ BaseLayer + LadderSpanQuanta/2. Does NOT
+    // mark the ground tile blocked — colonists can stand on the ladder tile
+    // and either climb or step off horizontally.
+    bool IsLadder = false,
+    // Vertical span of the ladder in 0.75 m quanta. Ignored unless IsLadder.
+    int LadderSpanQuanta = 0)
 {
     // Height converted to 0.75 m vertical quanta — matches the terrain
     // quantum + the build-layer step. Quarter wall = 1, half wall = 2,

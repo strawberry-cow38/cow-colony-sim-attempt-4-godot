@@ -246,7 +246,7 @@ public sealed class ConstructionJobSystem : ITickSystem
             {
                 for (var dx = 0; dx < footW; dx++)
                 {
-                    _grid.MarkBlocked(pos.TileX + dx, pos.TileY + dy, true);
+                    HeightGridOps.RegisterStructure(_grid, def, pos.TileX + dx, pos.TileY + dy, g.BaseLayer);
                 }
             }
         }

@@ -70,6 +70,26 @@ public static class AStar
                     }
                 }
             }
+
+            // Same-tile vertical traversal (ladders). Enumerate registered
+            // ladder edges at the current tile and try the partner layer.
+            var ladderCount = grid.LadderCountAt(current.X, current.Y);
+            for (var li = 0; li < ladderCount; li++)
+            {
+                var partner = grid.LadderPartnerAt(current.X, current.Y, current.Z, li);
+                if (partner < 0) continue;
+                var next = new TileCoord(current.X, current.Y, partner);
+                if (!grid.CanStep(current, next)) continue;
+                if (visited.Contains(next)) continue;
+                var tentative = currentG + grid.StepCost(current, next);
+                if (!gScore.TryGetValue(next, out var existing) || tentative < existing)
+                {
+                    gScore[next] = tentative;
+                    came[next] = current;
+                    var f = tentative + HeightGrid.OctileHeuristic(next, goal);
+                    open.Enqueue(next, f);
+                }
+            }
         }
         return false;
     }

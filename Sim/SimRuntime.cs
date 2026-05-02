@@ -176,29 +176,6 @@ public sealed class SimRuntime : IDisposable
             ref var j = ref entity.GetComponent<Job>();
             ref var w = ref entity.GetComponent<WorkJob>();
 
-            // Display-only Z fix: during a horizontal step, sim TileZ stays
-            // pinned to the source layer until step end. When walking off a
-            // higher tile onto a lower one, that leaves displayed MetersZ a
-            // full layer above the actual terrain partway through the step,
-            // so the renderer's terrain-hug threshold trips and the
-            // colonist visibly bobs UP. Pre-snap displayed Z to the lower
-            // of (current layer, next-waypoint layer) so the renderer
-            // always hugs the falling heightfield.
-            var displayMetersZ = p.MetersZ;
-            if (entity.HasComponent<PathFollower>())
-            {
-                ref var pf = ref entity.GetComponent<PathFollower>();
-                if (pf.Tiles is { Length: > 0 } tiles && pf.Index < tiles.Length)
-                {
-                    var nextZ = tiles[pf.Index].Z;
-                    if (nextZ < p.TileZ)
-                    {
-                        var lowerLayer = nextZ * SimConstants.MetersPerTile;
-                        if (lowerLayer < displayMetersZ) displayMetersZ = lowerLayer;
-                    }
-                }
-            }
-
             var invView = Array.Empty<InventoryStackView>();
             var carryWeight = 0f;
             var maxWeight = 0f;
@@ -240,7 +217,7 @@ public sealed class SimRuntime : IDisposable
                 }
             }
             views[i++] = new ColonistView(
-                entity.Id, p.MetersX, p.MetersY, displayMetersZ,
+                entity.Id, p.MetersX, p.MetersY, p.MetersZ,
                 n.Hunger, n.Thirst, n.Energy,
                 j.Active, j.NeedKind,
                 w.Active, w.Kind, w.Carrying, w.CarryKind, w.CarryCount,

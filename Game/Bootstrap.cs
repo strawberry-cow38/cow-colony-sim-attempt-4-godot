@@ -131,6 +131,32 @@ public partial class Bootstrap : Node3D
             "Heightfield {VW}x{VH} verts (rev {Rev}).",
             SimConstants.TickRateHz, _runtime.World.EntityCount,
             _heightfield.VertWidth, _heightfield.VertHeight, _heightfield.Version);
+
+        MaybeAutoScreenshot();
+    }
+
+    private void MaybeAutoScreenshot()
+    {
+        if (System.Environment.GetEnvironmentVariable("COW_SCREENSHOT") != "1") return;
+        var path = System.Environment.GetEnvironmentVariable("COW_SCREENSHOT_PATH")
+            ?? "user://auto_shot.png";
+        var delaySec = double.TryParse(
+            System.Environment.GetEnvironmentVariable("COW_SCREENSHOT_DELAY"),
+            out var d) ? d : 6.0;
+        var timer = GetTree().CreateTimer(delaySec);
+        timer.Timeout += () =>
+        {
+            var vp = GetViewport();
+            var img = vp.GetTexture().GetImage();
+            if (img != null)
+            {
+                var abs = path.StartsWith("user://") || path.StartsWith("res://")
+                    ? ProjectSettings.GlobalizePath(path) : path;
+                img.SavePng(abs);
+                SimLog.Logger.Information("Auto-screenshot saved to {Path}", abs);
+            }
+            GetTree().Quit();
+        };
     }
 
     private static void SpawnColonists(SimRuntime runtime)

@@ -5,7 +5,7 @@ using Godot;
 
 namespace CowColonySim.Game.Render;
 
-// Loads pine.glb at runtime via GltfDocument so the renderer works
+// Loads maple.glb at runtime via GltfDocument so the renderer works
 // without a .glb.import file (CLI build pipelines + freshly cloned
 // machines never have those). Every MeshInstance3D under the imported
 // scene is merged into one ArrayMesh so a single MultiMeshInstance3D
@@ -34,16 +34,16 @@ public partial class TreesRenderer : Node3D
     {
         _unitsPerMeter = SimConstants.GodotUnitsPerTile / SimConstants.MetersPerTile;
 
-        var mesh = LoadMergedMesh("res://assets/models/pine.glb");
+        var mesh = LoadMergedMesh("res://assets/models/maple.glb");
         if (mesh is null)
         {
-            GD.PushError("TreesRenderer: failed to load pine.glb");
+            GD.PushError("TreesRenderer: failed to load maple.glb");
             return;
         }
 
         _bucket = new MultiMeshInstance3D
         {
-            Name = "PineBucket",
+            Name = "MapleBucket",
             Multimesh = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,

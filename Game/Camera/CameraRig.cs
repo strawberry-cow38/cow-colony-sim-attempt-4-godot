@@ -67,6 +67,16 @@ public partial class CameraRig : Node3D
         Position = new Vector3(startCenter.X, 0f, startCenter.Y);
     }
 
+    // Force pivot + zoom to a specific spot. Used by env-gated screenshot mode
+    // so SSH captures frame a fixed viewpoint regardless of player input.
+    public void OverrideView(Vector3 pivot, float distance)
+    {
+        Position = pivot;
+        _distance = Mathf.Clamp(distance, MinDistance, _maxDistance);
+        _distanceTarget = _distance;
+        if (_camera is not null) _camera.Position = new Vector3(0f, 0f, _distance);
+    }
+
     public override void _Ready()
     {
         _pitchPivot = new Node3D { Name = "Pitch" };

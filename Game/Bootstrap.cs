@@ -142,7 +142,24 @@ public partial class Bootstrap : Node3D
             ?? "user://auto_shot.png";
         var delaySec = double.TryParse(
             System.Environment.GetEnvironmentVariable("COW_SCREENSHOT_DELAY"),
-            out var d) ? d : 6.0;
+            out var d) ? d : 25.0;
+
+        // crank sim speed so the day cycle advances to roughly noon
+        // before the screenshot fires
+        if (_runtime is not null) _runtime.Speed = 16;
+
+        // override camera to a tree-dense spot offset from center
+        if (_cameraRig is not null)
+        {
+            var offsetTiles = 50;
+            var span = PreviewTileCount * SimConstants.GodotUnitsPerTile;
+            var pivot = new Vector3(
+                span * 0.5f + offsetTiles * SimConstants.GodotUnitsPerTile,
+                0f,
+                span * 0.5f + offsetTiles * SimConstants.GodotUnitsPerTile);
+            _cameraRig.OverrideView(pivot, distance: 350f);
+        }
+
         var timer = GetTree().CreateTimer(delaySec);
         timer.Timeout += () =>
         {
